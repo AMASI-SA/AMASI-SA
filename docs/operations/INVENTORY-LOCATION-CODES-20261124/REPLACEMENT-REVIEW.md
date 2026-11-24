@@ -1,5 +1,11 @@
 # Cabinet replacement review — 24 November 2026
 
+> Historical read-only assessment. The owner's later instruction restricts the
+> active work to numbering in cabinet → column → row order. The owner will create
+> a cabinet later; possible deletion of the old one is deferred. The unresolved
+> fourth-coordinate question and replacement next steps below are superseded.
+> See [STATUS.md](STATUS.md) for current scope and verified implementation.
+
 ## Scope and result
 
 The owner requests replacement of current unused cabinets with short cabinet and location names. The user-facing warehouse view showed one cabinet, three shelves, three compartments per shelf, nine readable locations, and all nine marked empty. No stock, warehouse, cabinet or location write was performed.

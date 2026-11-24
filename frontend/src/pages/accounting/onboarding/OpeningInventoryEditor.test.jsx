@@ -48,6 +48,17 @@ test("absent placement permits financial draft; supplied optional placement is v
     expect(validateOpeningInventoryRows([{ ...located, allocations: [{ ...located.allocations[0], quantity: "1", scanned_location_barcode: "wrong" }] }], context).map(e => e.message).join(" ")).toMatch(/الباركود.*مجموع/);
     render([located]); expect(field("الخانة 1-1").textContent).toContain("AMBIGUOUS"); click("حذف التوزيع"); expect(field("الخانة 1-1")).toBeNull();
 });
+test("location selectors prefer short labels while retaining warehouse context, IDs and full scanner validation", () => {
+    const located = { ...row(), allocations: [{ location_id: "l1", quantity: "2", scanned_location_barcode: "LOC-1" }] };
+    const ctx = { ...context, locations: [{ ...context.locations[0], display_code: "121" }, { id: "legacy", code: "OLD-009", warehouse_name: "الفرعي" }] };
+    render([located], ctx);
+    expect(field("الخانة 1-1").querySelector('option[value="l1"]').textContent).toBe("الرئيسي / 121 · AMBIGUOUS");
+    expect(field("الخانة 1-1").querySelector('option[value="legacy"]').textContent).toBe("الفرعي / OLD-009 · AMBIGUOUS");
+    expect(field("الخانة 1-1").value).toBe("l1");expect(field("باركود الخانة 1-1").value).toBe("LOC-1");
+    expect(validateOpeningInventoryRows([located], ctx)).toEqual([]);
+    expect(validateOpeningInventoryRows([{ ...located, allocations: [{ ...located.allocations[0], scanned_location_barcode: "121" }] }], ctx).some(error => error.field.includes("الباركود"))).toBe(true);
+    value("الخانة 1-1", "legacy");expect(field("الخانة 1-1").value).toBe("legacy");expect(field("باركود الخانة 1-1").value).toBe("");
+});
 test("each error includes item, field and one reason without duplicate quantity errors", () => {
     const errors = validateOpeningInventoryRows([{ ...row(), opening_quantity: "-0.5" }], context);
     expect(errors.filter(e => e.field === "opening_quantity")).toHaveLength(1); expect(errors[0].message).toContain("البند 1 (عباية) — الكمية:");

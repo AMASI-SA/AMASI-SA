@@ -1,69 +1,96 @@
 # INVENTORY-LOCATION-CODES-20261124
 
-## Status
+## Status and controlling owner decision
 
-**Replacement scope reviewed; no deletion or implementation performed.**
-Production changed: **no**. No application source, configuration, stored location, inventory quantity, barcode or deployment changes were made. The owner now requests deleting the existing unused cabinets and creating replacements with short names. This is authorization for that bounded replacement, not a warehouse-wide reset.
+**Numbering-only implementation verified locally; production changed: no.**
+The owner settled the order as **cabinet → column → row**, then explicitly said they will create the cabinet themselves and asked the assistant to change numbering only. Live cabinet creation and possible removal of the old cabinet are deferred by the owner. Do not resume the earlier replacement plan.
 
-The live warehouse UI showed one cabinet with a 3-by-3 grid and all nine locations marked empty. That is current UI occupancy evidence, not proof that receipts, reservations, purchasing, stocktakes or archived history contain no references. The existing API has no cabinet-specific delete/rename operation; its reset operation permanently deletes the entire owner's warehouse hierarchy, events and counters and is outside this request.
+No live cabinet, warehouse, location, inventory quantity, historical record, barcode or financial record was created, changed or deleted. No publication, Release Guard lease, prepare or prepublish was performed for this feature.
 
-An independent source review and the root inspection agree that recreating a cabinet under a legacy warehouse retains legacy numbering. A cabinet name alone does not change location codes. See [REPLACEMENT-REVIEW.md](REPLACEMENT-REVIEW.md).
+## Source boundary
 
-The authorized host's Release Guard status returned active=false. A bounded read-only query using the existing backend interpreter found zero matches for the live target in the host-configured local database. That database was therefore not accepted as the live data target, and no write or wider database search followed. Production reference counts remain unverified.
+- Repository: `AMASI-SA/AMASI-SA`.
+- Production baseline: `80341983cf7e89145e4101b408ab68bb45f379cf`.
+- Baseline tree: `51e06077c65d99db02088ab441e1908118feb1d1`.
+- Task branch: `codex/inventory-location-short-codes-20261124`.
+- Prior read-only checkpoint: `b3111de5716709c354521580bfdda4cfe4d06099`.
+- The implementation checkpoint and PR are recorded in this task's bounded Issue #1006 section after the commit is created.
 
-The owner requests shorter storage names in inventory selectors. The supplied example is cabinet 1 / column 2 / row 2 / bin 1 -> 1221, replacing a long location label such as RUH-WH001-S01-C01-001. The follow-up asks how Odoo and established warehouse systems number locations and requests a similar approach.
+Production still matched the baseline on the fresh pre-checkpoint read. Prior PR2097 is complete and unrelated. Concurrent balance-recovery work, other workspaces and leases remain outside this task.
 
-## Verified source boundary
+## Implemented behavior
 
-Repository: AMASI-SA/AMASI-SA.
-Baseline: 80341983cf7e89145e4101b408ab68bb45f379cf.
-Baseline tree: 51e06077c65d99db02088ab441e1908118feb1d1.
-Task branch: codex/inventory-location-short-codes-20261124.
+| Coordinates | Display label |
+| --- | --- |
+| Cabinet 1, column 1, row 1 | `111` |
+| Cabinet 1, column 2, row 1 | `121` |
+| Cabinet 1, column 2, row 3 | `123` |
+| Cabinet 2, column 3, row 1 | `231` |
+| Cabinet 1, column 12, row 3 | `1-12-3` |
+| Cabinet 11, column 2, row 3 | `11-2-3` |
 
-The prior inventory-side-options release PR2097 is already complete and remains separate. This task must not repeat that publication or take over the concurrent balance-recovery work.
+- New policy: `cabinet-column-row`. Concatenate three single-digit coordinates; separate all three with hyphens if any coordinate is 10 or greater.
+- The routed UI explicitly requests this policy for new warehouses and cabinets, including cabinets inside an existing legacy warehouse. The warehouse record is not rewritten.
+- Dimensions remain the owner's choice. Original defaults of four rows and six columns remain. The earlier mention of one row is not forced on future creations; the form now names rows and columns clearly.
+- All new direct and section cabinets allocate from one owner/warehouse counter. Atomic `$max` then `$inc` reserve above both valid existing cabinet numbers across all sections/statuses and the existing shared counter. Old section counters and records are not reset or rewritten.
+- With old cabinet 1 retained, a next cabinet numbered 2 has `211`, `221`, `231` for one row and three columns. Do not promise restarting at 1.
+- A named partial unique index protects the new policy without imposing a new constraint on legacy duplicate section numbers or dropping an installed global unique/sparse index.
+- Missing old cabinet numbers are not invented from codes. Present malformed numbers/counters return a conflict instead of silent repair. Seeding fails closed above the explicit 20,000-numbered-cabinet read bound.
+- Existing `legacy` and `cabinet-row-slot` display semantics remain compatible. There is no migration or read-time relabeling of old locations.
+- Short labels reach map, list, search, details, printing and relevant location selectors. Purchase options include warehouse context; opening-catalog provenance remains unchanged.
+- Location IDs, `code`, `barcode_value`, `qr_value`, scan validation and frozen document labels retain their meanings. Printing prefers the actual barcode, then actual code, then the established full-code fallback for delegates without occupancy access. Short labels never become scanner identities.
 
-## Direct code findings
+## Changed surfaces
 
-- `backend/warehouse_location_routes.py::generate_location_rows` constructs a two-dimensional `length * width` cabinet grid. Each location has row, column, grid_x, grid_y and a row-major sequential number.
-- `backend/warehouse_location_v2_routes.py` supplies cabinet_number and preserves code, barcode_value and QR identity.
-- No independent nested-bin coordinate exists inside a row/column intersection in that model.
-- `backend/warehouse_location_labels.py::location_label_fields` already provides an opt-in `cabinet-row-slot` display code in cabinet-row-column order, such as 1-2-2. It leaves scanner identities unchanged.
-- `backend/operational_purchase_metadata.py::locations` already prefers stored display_code, then name/code. Legacy locations without display_code retain long labels.
-- `frontend/src/pages/operational/StandaloneInventoryEntry.jsx` displays the catalog location name plus warehouse context.
-- `frontend/src/pages/WarehouseHierarchyWorkspace.jsx` contains short grid labels and print-label behavior for the opt-in scheme.
+- Backend: `warehouse_location_labels.py`, new `warehouse_cabinet_numbering.py`, V2 direct/section creation routes, and display-field passthrough in `purchase_invoices_routes.py`, `product_inventory_receipt_routes.py`, `accounting_onboarding_domains.py`.
+- Frontend: `WarehouseHierarchyWorkspace.jsx`, and location options in `StockPreparationOrders.jsx` and `OpeningInventoryEditor.jsx`.
+- Focused tests cover these behaviors, full scanner values, no-write cancellation, actual Mongo indexes and concurrent allocation.
+- No deletion/replacement API or UI, global reset modification, stocktake, reservation or financial write change.
 
-The existing sequential location number is not a fourth independent physical coordinate. Do not append a fabricated bin number or infer coordinates by blindly truncating the long code.
+## Verification
 
-## Primary-source research
+### Backend: 56 passed, exit 0 (4.68 seconds)
 
-Odoo supports a recognizable location name, a parent location hierarchy, and a location barcode. Its documentation does not prescribe one universal numeric format. Example hierarchy: WH/Stock/Zone A/Refrigerator 1.
+```bash
+env -u MONGO_URL -u MONGODB_URI PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests /workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python -B -m pytest --noconftest -q -p no:cacheprovider backend/tests/test_warehouse_short_codes.py backend/tests/test_warehouse_location_routes.py backend/tests/test_product_inventory_receipt_routes.py backend/tests/test_accounting_onboarding_domains.py
+```
+
+Feature tests failed against the old implementation, then passed. Added catalog tests reproduced missing display-code and warehouse-context fields before their fixes. The final selection covers coordinate order, non-square grids, multi-digit labels, legacy compatibility, tenant scope, counter floors, malformed values, stored-record preservation, catalog DTOs and full-barcode scans.
+
+### Real MongoDB 7.0.14: 10 passed, exit 0 (7.50 seconds)
+
+```bash
+env -u MONGO_URL -u MONGODB_URI -u DEMAND_READ_TEST_MONGO_URI DEMAND_READ_TEST_MONGOD=/workspace/scratch/021675d08c11/location-codes-testenv/mongo/mongodb-linux-x86_64-ubuntu2204-7.0.14/bin/mongod PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=backend:backend/tests /workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python -B -m pytest --noconftest -p pytest_asyncio.plugin -q -o cache_dir=/workspace/scratch/021675d08c11/location-codes-testenv/pytest-cache-numbering --basetemp=/workspace/scratch/021675d08c11/location-codes-testenv/numbering-pytest backend/tests/test_warehouse_cabinet_numbering_mongo.py
+```
+
+The fixture creates/cleans its owned loopback replica and rejects a supplied database URI. Tests cover 24 simultaneous allocations each with absent, zero, stale and higher counters; all statuses/sections; owner/warehouse isolation; the exact old unique+sparse index alongside the new partial index; legacy duplicate numbers without the old global index; both route index initializers and both HTTP creation paths. Existing rows remained unchanged.
+
+Partial-index creation over pre-existing duplicates is tested on real Mongo because mongomock does not implement that index-creation case faithfully. An extra broader operational metadata test attempt required an absent local Mongo on port 27305 and was stopped; it is not claimed as passed or required for this narrowed scope.
+
+### Frontend: 39 passed in four suites, exit 0
+
+```bash
+CI=true XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache PYTHONDONTWRITEBYTECODE=1 python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/WarehouseHierarchyWorkspace.test.jsx src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx src/pages/InventoryReceivingWorkspace.readPolicy.test.jsx src/services/mezanInventoryReceiving.test.js
+```
+
+Governed Node 22.23.2 / Yarn 1.22.22. Tests cover map/list/search/details/printing, actual-code fallback, delegated printing, explicit override inside a legacy warehouse, user-chosen dimensions, unchanged IDs/full scanner values, warehouse context, and no mutation when opening/cancelling creation. Three consumer assertions failed before the corresponding fixes, then passed.
+
+`git diff --check`: clean. Independent source review resolved missing opening-catalog passthrough, purchase warehouse context and stored-code print fallback. No source-review blocker remained. Source-only build/PR/CI state will be appended after the durable implementation checkpoint.
+
+## Deferred deletion and historical research
+
+[REPLACEMENT-REVIEW.md](REPLACEMENT-REVIEW.md) is a historical read-only assessment, not an instruction to execute replacement. The live UI previously showed one 3-by-3 cabinet with nine empty/readable locations. Production historical reference counts were not established. A host-local database without the matching target was rejected as production evidence and not mutated.
+
+If the owner later requests deletion, evaluate the exact cabinet and its references in authenticated production. Current emptiness alone does not prove safe deletion. Do not use the global warehouse reset.
+
+Odoo documents recognizable location names, parent hierarchy and barcodes, not a universal digit format. SAP documents coordinate examples. The owner's final three-coordinate decision supersedes the original four-part example and the earlier fourth-coordinate clarification.
 
 - https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/inventory/warehouses_storage/inventory_management/use_locations.html
 - https://www.odoo.com/documentation/20.0/applications/inventory_and_mrp/inventory/warehouses_storage/inventory_management/use_locations.html
-
-SAP EWM documents coordinate-based location names, e.g. 01-02-03 for aisle/stack/level, with letters/numbers aligned to warehouse structure.
-
 - https://help.sap.com/docs/SAP_SUPPLY_CHAIN_MANAGEMENT/7a6fc3d598d140b0988065937035fff6/55c8cb53ad377114e10000000a174cb4.html?version=7.0.3
 
-These are naming/design references, not a claim that Mezan implements Odoo or SAP.
+## Next safe action
 
-## Proposed behavior, not yet applied
+Push the verified source checkpoint, update only this task's marked Issue #1006 section, run the documented source-only Vite build from a fixed checkout, and open a reviewable PR against `hotfix/prod-snap-meta-final`. A source-only build is not a deployment artifact or release approval.
 
-- Human-facing labels use short, separated coordinates scoped by warehouse/section context.
-- Preserve actual location IDs, stored historical relationships, barcode/QR values and scan validation.
-- For one final compartment per intersection, a cabinet-column-row code is sufficient, e.g. 1-2-2.
-- If separate numbered boxes exist inside an intersection, the requested fourth level is meaningful, e.g. 1-2-2-1; implement it explicitly rather than inventing coordinates for old rows.
-- Numeric concatenation is ambiguous for multi-digit coordinates: 1/12/2/1 and 11/2/2/1 both become 11221.
-- Final display order must follow the owner's decision; the existing opt-in order is cabinet-row-column, which differs from the owner's example order.
-
-## Required clarification and next safe action
-
-Ask whether each cabinet row/column intersection is the final storage compartment, or contains independently numbered bins/boxes. This changes the data model and cannot be decided from a display example alone.
-
-The later instruction to replace the unused cabinets changes the data-operation scope but does not establish a fourth physical coordinate. Use the observed 3-by-3 dimensions as the preservation baseline unless the owner requests a new layout. Do not fabricate a fourth coordinate, silently replace deletion with renaming, or use the global reset endpoint.
-
-Next: settle the physical layout/naming contract and prepare a cabinet-scoped replacement path with referential checks, an exact target preview and a recoverable record of the original rows. Run the checks against the authenticated production scope before any replacement. The current host-local database does not prove access to those production records.
-
-After the answer, implement the smallest consistent change across catalog labels, entry/purchase/receiving selectors, warehouse map and print labels as applicable. Preserve frozen document labels and underlying IDs. Use targeted validation for coordinate correctness, multi-digit values, cross-warehouse duplicates, legacy fallback and unchanged write payload identities. No tests were executed for this research-only milestone, and no deployment claim is made.
-
-Before implementation, refresh the production/task refs and applicable instructions; do not assume another release remains idle.
+Publication is a separately authorized Protocol v5 action. No release intent has been created for this feature. Before a later release, refresh refs and original guard status and preserve other conversations' leases/workspaces.

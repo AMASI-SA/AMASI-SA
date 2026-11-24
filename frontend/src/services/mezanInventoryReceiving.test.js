@@ -30,12 +30,14 @@ describe("Mezan inventory receiving API", () => {
     });
 
     test("loads the governed purchase receiving catalog", async () => {
-        api.get.mockResolvedValueOnce({ data: { purchase_invoices: [] } });
+        const data = { purchase_invoices: [], locations: [{ id: "loc-1", display_code: "121", code: "WH01-S01-C01-002", barcode_value: "SCAN-002" }] };
+        api.get.mockResolvedValueOnce({ data });
 
         const result = await loadInventoryReceivingCatalog();
 
         expect(api.get).toHaveBeenCalledWith("/inventory-v2/purchase-receiving/catalog");
-        expect(result).toEqual({ purchase_invoices: [] });
+        expect(result).toBe(data);
+        expect(result.locations[0]).toEqual({ id: "loc-1", display_code: "121", code: "WH01-S01-C01-002", barcode_value: "SCAN-002" });
     });
 
     test("posts one idempotent receipt payload", async () => {
