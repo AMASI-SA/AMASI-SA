@@ -124,7 +124,13 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
             and a.get("obligation_id") in (obligation_key, "credit:" + obligation_key)
             for a in m.get("allocations", [])) for m in state.get("movements", [])):
         raise InitialCaptureHold("settled_provider_requires_review")
-    if state.get("movements"):
+    provider_opening_in_scope = any(
+        isinstance(row, dict) and row.get("party_type") == "provider"
+        and row.get("party_id") in {None, "", provider}
+        and row.get("currency") in {None, "", currency}
+        for row in state.get("openings", {}).values()
+    )
+    if state.get("movements") or provider_opening_in_scope:
         # Use the EXACT canonical provider history/pooled payout gate used by
         # operational_balance_engine.reconcile. An incoming aggregate payout
         # with incomplete allocation can already contain this order's funds.
