@@ -51,6 +51,7 @@ ALLOWED_REASONS = frozenset({
     "paid_page_provider_projection_unverified",
     "paid_page_reference_conflict",
     "paid_page_reference_reused",
+    "paid_page_original_capture_date_required",
     "salla_payment_rail_unverified",
 })
 ALLOWED_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan", "paypal", "unknown"})
