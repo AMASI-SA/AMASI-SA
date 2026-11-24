@@ -65,6 +65,12 @@ class CanonicalEvidenceReconciliationTests(unittest.TestCase):
         s=state(evidence=observed(status="conflict"))
         self.assertEqual(reconcile_staged_payment_evidence(s)["conflict"],1)
 
+    def test_old_conflict_cannot_silently_clear_after_fact_matches(self):
+        s = state(evidence=observed(status="conflict"),
+                  facts={"capture:tx-1":{"order_id":"o1","provider":"tabby","amount":"300.00"}})
+        self.assertEqual(reconcile_staged_payment_evidence(s)["conflict"], 1)
+        self.assertEqual(s["payment_event_evidence_inbox"]["hash-1"]["status"], "conflict")
+
     def test_bad_inbox_rejected(self):
         s=state()
         s["payment_event_evidence_inbox"]=[]
