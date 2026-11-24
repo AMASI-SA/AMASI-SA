@@ -2,7 +2,7 @@
 
 ## Current state
 
-**FROZEN A/B — source and immutable release-packet review passed; PR #2120 is Ready; one final CI job is still running.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**MERGED — PR #2120 passed every applicable final-head gate and merged normally; post-merge gates and guarded rehearsal are pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -73,7 +73,7 @@ The new workflow checks the actual PR head, uses a checksum-pinned owned Mongo b
 
 ## Next safe action
 
-Finish the remaining applicable final-head CI job and independently review the new guarded operator, then merge normally with expected B and verify tree-equivalent D. Complete the original release protocol from the reviewed immutable packet. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
+Complete applicable exact-D CI and independent review of the guarded operator. D is already merged and verified tree-equivalent to B. Complete the original release protocol from the reviewed immutable packet. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
 
 ## Release checkpoint E1 — 2026-11-24 21:01 UTC
 
@@ -94,3 +94,11 @@ Independent immutable-packet review passed: all 3,137 governed source records an
 Fresh read-only host inspection showed tracked-clean J, /app available space 422,457,344 bytes, and /tmp available space 236,544,008,192 bytes. Use an independently reviewed operator with owned staging under /tmp and measured space checks; preserve all foreign files/worktrees. The operator is still being prepared. Original guard status must be read again before host mutation/rehearsal. No /app source, service, database, lease, or live warehouse mutation has been made by this task.
 
 Next: remaining CI, reviewed operator, normal merge and D/tree verification, clean original adapter rehearsal, original prepare/prepublish for authorized publication, explicit new Deployment Succeeded, original three-probe verification and closed lease, then archive only d1 through the manager UI if the live reference guards allow it.
+
+## Release checkpoint E3 — merged, unpublished
+
+Root independently read all 64 final B checks: **54 success and 10 conditional skips**, zero running, queued, neutral or failed. PR #2120 was Ready, mergeable and clean, with exact head B and base J; production ref was still J. Root used normal merge with expected B. Resulting D is `f199a471f8bc6e05b475bb9b65a12107cbdc946b`, tree `74946da23e059283f49de2b04baf9860c8ee972d`, parents J then B. API comparison confirms A is an ancestor and A..D changes exactly the intent file. The immutable source, runtime identity, artifact, metadata and proof remain those in E2. See `merge-D.json` and `ci-head-B-final.json` for the retained records.
+
+Post-merge D CI is running. A fresh host read showed HEAD J, clean tracked files, 432 nonignored untracked entries, and regular platform runtime metadata. Free space was 421,769,216 bytes at /app and 237,201,190,912 bytes at /tmp. No /app source or services have changed, no lease has been created, and no production publication or cabinet mutation has occurred. The independently reviewed operator must use owned /tmp staging and recheck all host facts before action.
+
+Next: complete exact-D gates, finish operator review and immutable envelope, retain that evidence remotely, then run the original clean adapter rehearsal and /app adapter under the original guard operation lock. Prepare/prepublish and publication remain later steps; do not archive d1 before successful publication and original three-probe verification.

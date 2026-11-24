@@ -1,0 +1,20 @@
+{
+  "pr": 2120,
+  "merge_method": "merge",
+  "expected_head": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+  "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "tree": "74946da23e059283f49de2b04baf9860c8ee972d",
+  "parents": [
+    "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "bdebc069ea5fa980cd16725e422ca70e79dadd17"
+  ],
+  "source_A": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+  "source_ancestor": true,
+  "post_A_files": [
+    "release/release-intent-v5.json"
+  ],
+  "production_published": false,
+  "host_mutated": false,
+  "live_cabinet_mutated": false,
+  "post_merge_ci_pending": true
+}
