@@ -1,0 +1,139 @@
+{
+  "status": "DRAFT_ONLY_NOT_EXECUTABLE_NOT_APPROVED_FOR_HOST",
+  "recorded_at": "2026-11-24T22:14:21.339810+00:00",
+  "reference_operator": {
+    "bytes": 43560,
+    "sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+    "all_859_lines_read": true
+  },
+  "reference_envelope": {
+    "bytes": 1366,
+    "sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5"
+  },
+  "known": {
+    "J": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "A": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+  },
+  "unknown_placeholders": {
+    "B": "DRAFT_UNSET_INTENT_SHA_FOR_PR2123",
+    "D": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
+    "TREE": "DRAFT_UNSET_TREE_FOR_PR2123",
+    "RELEASE_ID": "DRAFT_UNSET_RELEASE_ID_FOR_PR2123"
+  },
+  "edits": {
+    "operator_literal_replacements": 9,
+    "operator_replacements": [
+      {
+        "old": "Cabinet archive release:",
+        "new": "PR2123 DRAFT release (DO NOT EXECUTE):"
+      },
+      {
+        "old": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+        "new": "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+      },
+      {
+        "old": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+        "new": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+      },
+      {
+        "old": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+        "new": "DRAFT_UNSET_INTENT_SHA_FOR_PR2123"
+      },
+      {
+        "old": "74946da23e059283f49de2b04baf9860c8ee972d",
+        "new": "DRAFT_UNSET_TREE_FOR_PR2123"
+      },
+      {
+        "old": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+        "new": "DRAFT_UNSET_RELEASE_ID_FOR_PR2123"
+      },
+      {
+        "old": "cabinet_archive_owned_clone_and_app_rehearsal",
+        "new": "pr2123_owned_clone_and_app_rehearsal"
+      },
+      {
+        "old": "mezan-cabinet-archive-release-live-",
+        "new": "mezan-pr2123-release-live-"
+      },
+      {
+        "old": "cabinet_archive_original_release_guard",
+        "new": "pr2123_original_release_guard"
+      }
+    ],
+    "envelope_keys_changed": [
+      "source_sha",
+      "source_base_sha",
+      "intent_sha",
+      "deployment_sha",
+      "tree",
+      "release_id",
+      "initial_head"
+    ]
+  },
+  "static_checks": {
+    "python_ast_parse": true,
+    "complete_ast_equal_after_normalizing_only_declared_literals": true,
+    "envelope_schema_unchanged": true,
+    "live_foreign_scope_exactly_preserved": true,
+    "untracked_count_432_preserved": true,
+    "append_policy_preserved": true,
+    "sha_fields_rejected_by_original_validator": [
+      "intent_sha",
+      "deployment_sha",
+      "tree"
+    ],
+    "first_failure_with_draft_envelope": "ENVELOPE_SHA_INVALID",
+    "validation_precedes_app_and_subprocess_checks": true,
+    "any_valid_envelope_still_cannot_match_invalid_B_or_TREE_constants": true,
+    "helper_imported_or_executed": false
+  },
+  "preserved_controls": [
+    "original public status and original operation lock",
+    "no lease or incomplete lease directory",
+    "original guard byte equality at J",
+    "J..A ancestry and intent unchanged; intent-only A..D and unchanged release controls",
+    "owned clone rehearsal before /app FF",
+    "live process/executable/directory/root identity and no live dbpath descendant access",
+    "exact foreign scope plus explicit append-only metadata/log policies",
+    "four generated targets backed up and reverified before original adapter",
+    "fresh capacity and inode checks; no capacity cleanup",
+    "original adapter, frontend/package/full-proof verification",
+    "no publish, service changes, restart, recalculation, rollback or stage cleanup"
+  ],
+  "root_prerequisites": [
+    "Finalize and independently verify B, normal-merge D, tree and RID before preparing a reviewed non-draft pair.",
+    "Require successful exact-D CI, as the reference deliberately treats this as an external operator precondition.",
+    "Refresh host observation: inactive original guard; exact J/branch and clean tracked tree; 432 nonignored entries; protected live PID/start/executable/root/log identities. Local E7 bytes do not prove these remain current.",
+    "If host identities, source base or foreign scope differ, stop for root decision; do not update policy or bypass checks automatically."
+  ],
+  "concrete_code_blocker_found": false,
+  "artifacts": {
+    "pr2123-operator-DRAFT.py": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-operator-DRAFT.py",
+      "bytes": 43492,
+      "sha256": "ff5c8895488533e209d4177bbd0d66bcf92b5af6357852c63598fc9eec553f22",
+      "mode": "0600"
+    },
+    "pr2123-envelope-DRAFT.json": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-envelope-DRAFT.json",
+      "bytes": 1308,
+      "sha256": "ec07237ff88a0a653150b611a6d4ce2b6d8bdfa64820ac33ea33d94ba6db9451",
+      "mode": "0600"
+    },
+    "pr2123-operator-DRAFT.diff": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-operator-DRAFT.diff",
+      "bytes": 2704,
+      "sha256": "4f069e0268119ce4566504af8cd5e41d3efd774aa98dcbf645d37918d7212017",
+      "mode": "0600"
+    },
+    "pr2123-envelope-DRAFT.diff": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-envelope-DRAFT.diff",
+      "bytes": 1072,
+      "sha256": "d39e9c72138f246c6154e7148c4ee80a25ad0b616c6108aa2fd0b07ee16abee1",
+      "mode": "0600"
+    }
+  },
+  "external_writes": false,
+  "host_reads": false,
+  "tests_or_builds_run": false
+}

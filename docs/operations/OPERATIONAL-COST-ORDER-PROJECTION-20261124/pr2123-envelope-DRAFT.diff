@@ -1,0 +1,21 @@
+--- cabinet-archive-reviewed-envelope-reference.json
++++ pr2123-envelope-DRAFT.json
+@@ -1,11 +1,11 @@
+ {
+-  "source_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+-  "source_base_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+-  "intent_sha": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+-  "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+-  "tree": "74946da23e059283f49de2b04baf9860c8ee972d",
+-  "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+-  "initial_head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
++  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
++  "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
++  "intent_sha": "DRAFT_UNSET_INTENT_SHA_FOR_PR2123",
++  "deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
++  "tree": "DRAFT_UNSET_TREE_FOR_PR2123",
++  "release_id": "DRAFT_UNSET_RELEASE_ID_FOR_PR2123",
++  "initial_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+   "expected_untracked_count": 432,
+   "allow_runtime_metadata_append": true,
+   "live_foreign_scope": {

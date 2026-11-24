@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-24T22:14:47.419Z",
+  "recorded_at": "2026-11-24T22:18:18.522Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
@@ -115,7 +115,8 @@
           "Operational Balance Backend",
           "Stock Eligibility"
         ],
-        "executed_tests": 0
+        "executed_tests": 0,
+        "evidence": "pr2123-collection-only-verification.json"
       },
       "old_candidate": "Artifact14969150768 belongs only to A1; retained historical review, never valid for A2."
     },
@@ -146,7 +147,7 @@
       "sha256": "f6f73c8f186cc62e4b600ad25143eb8756d36166705eac57b27bd5b14ca74f12"
     }
   ],
-  "ci": "A2 running; verify actual61cases in both JUnit artifacts before relying on successful gate.",
+  "ci": "2026-11-24T22:17:25Z:19success,6conditional skips,2running(Operational Backend andStock); actual61case JUnit execution not yet proved.",
   "pr": {
     "number": 2123,
     "state": "Draft, exact-head CI in progress",
@@ -187,5 +188,29 @@
     "path": "pr2123-a-ci-a2-candidate.intent.json",
     "kind": "external source-A candidate, not tracked deployment intent",
     "clean_worktree_after_upload": true
+  },
+  "operator_draft": {
+    "status": "DRAFT_ONLY_NOT_EXECUTABLE_NOT_APPROVED_FOR_HOST",
+    "source": "E7 reviewed cabinet archive helper, only9declared literals changed; full text/AST equality after substitutions, all36functions preserved.",
+    "operator": {
+      "path": "pr2123-operator-DRAFT.py",
+      "bytes": 43492,
+      "sha256": "ff5c8895488533e209d4177bbd0d66bcf92b5af6357852c63598fc9eec553f22"
+    },
+    "envelope": {
+      "path": "pr2123-envelope-DRAFT.json",
+      "bytes": 1308,
+      "sha256": "ec07237ff88a0a653150b611a6d4ce2b6d8bdfa64820ac33ea33d94ba6db9451"
+    },
+    "independent_review": "pr2123-operator-DRAFT-independent-review.json",
+    "blocking_placeholders": [
+      "B",
+      "D",
+      "tree",
+      "RID"
+    ],
+    "live_scope_currentness_unverified": true,
+    "nonignored_entries_expected": 432,
+    "scope": "No helper execution/import, host read, lease, publication, service action or financial write."
   }
 }

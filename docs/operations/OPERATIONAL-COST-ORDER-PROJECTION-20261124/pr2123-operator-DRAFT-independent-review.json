@@ -1,0 +1,55 @@
+{
+  "status": "PASS_FOR_DRAFT_PRESERVATION_ONLY_NOT_EXECUTION_APPROVAL",
+  "recorded_at": "2026-11-24T22:17:29.682944+00:00",
+  "reviewer": "/root/recovery_evidence",
+  "recorded_by": "/root/code_review",
+  "method": "Independent complete local source/reference/diff and AST review; result delivered through agent message, recorded here without rerunning helper.",
+  "operator": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-operator-DRAFT.py",
+    "bytes": 43492,
+    "sha256": "ff5c8895488533e209d4177bbd0d66bcf92b5af6357852c63598fc9eec553f22"
+  },
+  "envelope": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-envelope-DRAFT.json",
+    "bytes": 1308,
+    "sha256": "ec07237ff88a0a653150b611a6d4ce2b6d8bdfa64820ac33ea33d94ba6db9451"
+  },
+  "findings": {
+    "concrete_blocker_for_draft": false,
+    "operator_literal_changes_only": 9,
+    "envelope_identity_value_changes_only": 7,
+    "exact_text_transform_byte_equal": true,
+    "normalized_full_ast_equal": true,
+    "top_level_function_definitions": 36,
+    "function_definitions_including_nested": 42,
+    "conditions_and_schema_unchanged": true,
+    "live_foreign_scope_unchanged": true,
+    "nonignored_count_432_unchanged": true,
+    "append_policy_unchanged": true
+  },
+  "early_rejection": {
+    "basis": "Static control-flow inspection, not execution",
+    "invalid_hex40_fields": [
+      "intent_sha",
+      "deployment_sha",
+      "tree"
+    ],
+    "first_rejection": "ENVELOPE_SHA_INVALID",
+    "reference_lines": "613-615 before ROOT access at628; B/TREE identity equality at616-617 also blocks a syntactically valid alternative envelope",
+    "no_stage_receipt_write": "save_receipt at109-111 is inactive while STAGE is None",
+    "rid_qualification": "RELEASE_ID has no standalone early regex. Do not claim a RID-only placeholder would necessarily be rejected before /app after replacing other identities; bind/review the complete identity set and require the original intent validator."
+  },
+  "remaining_root_prerequisites": [
+    "Bind and review final B/D/tree/RID and exact-D CI.",
+    "Fresh host validation of preserved LIVE_SCOPE: PID/start ticks/cmdline/executable plus path/log identity; do not silently update on mismatch.",
+    "Verify432 nonignored git_entries; this is not the count of all protected paths.",
+    "Preserve the explicit live-DB exception: no DB descendant bytes/path comparison; separate same-inode append-only log; exact comparison for the remaining foreign snapshot."
+  ],
+  "operator_imported": false,
+  "operator_executed": false,
+  "tests_or_builds_run": false,
+  "host_reads": false,
+  "github_writes": false,
+  "draft_pair_modified_during_review": false,
+  "root_steering": "Keep current draft unchanged even after candidate RID is learned; B/D and final binding remain later work owned by root."
+}

@@ -1,0 +1,76 @@
+{
+  "status": "PASS_COLLECTION_ONLY_NOT_CI_EXECUTION",
+  "recorded_at": "2026-11-24T22:14:59.817619+00:00",
+  "source_commit": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "parent_commit": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+  "test_module": "backend/tests/test_operational_balance_cost_order_projection.py",
+  "previous_module": "backend/tests/test_operational_open_cost_order_projection.py",
+  "rename_content_equivalence": {
+    "git_similarity_percent": 100,
+    "git_blob_before_and_after": "792dc9b9294e631c834f0f34d1bd9f9073196f57",
+    "sha256": "63ca04aa9b40f6022f89109a628362061f588f38b2886773605b974c96a25737"
+  },
+  "python": "3.12.14",
+  "checks": [
+    {
+      "workflow": ".github/workflows/operational-balance-web.yml",
+      "workflow_sha256": "8cd00aeba752e2679cfc05ca1d4a48d9030ede8617aef9a38dba76d7e9d47362",
+      "working_directory": "/workspace/scratch/39c6dec7c37f/operational-cost-order-projection",
+      "test_selector": "backend/tests/test_operational_balance*.py",
+      "selector_occurrences_new_module": 1,
+      "selector_occurrences_old_module": 0,
+      "collect_only": true,
+      "collected_cases": 61,
+      "unique_cases": 61,
+      "skip_markers": 0,
+      "exit_code": 0,
+      "tests_executed": 0,
+      "observed_collection_seconds": 1.96,
+      "asyncio_mode": "auto",
+      "flags": [
+        "--collect-only",
+        "--noconftest",
+        "-p",
+        "no:cacheprovider",
+        "-q"
+      ],
+      "stock_expected_module_gate_automatically_includes_module": null
+    },
+    {
+      "workflow": ".github/workflows/operational-stock-eligibility.yml",
+      "workflow_sha256": "06eeb4a430e2e16f4f4c513fb73d13ee2bc2d8e33668b20bd2dd439e8892a9ac",
+      "working_directory": "/workspace/scratch/39c6dec7c37f/operational-cost-order-projection/backend",
+      "test_selector": "tests/test_operational_balance*.py",
+      "selector_occurrences_new_module": 1,
+      "selector_occurrences_old_module": 0,
+      "collect_only": true,
+      "collected_cases": 61,
+      "unique_cases": 61,
+      "skip_markers": 0,
+      "exit_code": 0,
+      "tests_executed": 0,
+      "observed_collection_seconds": 1.89,
+      "asyncio_mode": "default",
+      "flags": [
+        "--collect-only",
+        "--noconftest",
+        "-p",
+        "no:cacheprovider",
+        "-q"
+      ],
+      "stock_expected_module_gate_automatically_includes_module": true
+    }
+  ],
+  "dependency_review": {
+    "old_module_imports_in_backend_scripts_workflows": 0,
+    "remaining_old_path_mentions": "STATUS documents the historical old_path; current test path is renamed",
+    "runtime_changes_required": false,
+    "test_body_changes_required": false,
+    "workflow_changes_required_for_inclusion": false
+  },
+  "tests_executed": 0,
+  "host_or_database_access": false,
+  "github_writes": false,
+  "evidence_scope": "Recorded from the two successful local collection-only commands already observed; no rerun of the 570-test suite.",
+  "pending": "Successful actual CI execution on exact final source remains required."
+}

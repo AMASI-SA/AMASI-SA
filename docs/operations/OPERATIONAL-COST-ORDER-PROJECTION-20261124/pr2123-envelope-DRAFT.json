@@ -1,0 +1,30 @@
+{
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "intent_sha": "DRAFT_UNSET_INTENT_SHA_FOR_PR2123",
+  "deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
+  "tree": "DRAFT_UNSET_TREE_FOR_PR2123",
+  "release_id": "DRAFT_UNSET_RELEASE_ID_FOR_PR2123",
+  "initial_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "expected_untracked_count": 432,
+  "allow_runtime_metadata_append": true,
+  "live_foreign_scope": {
+    "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "db_descendants_policy": "live_writer_managed_no_operator_access",
+    "process": {
+      "pid": 96507,
+      "start_ticks": 106766690,
+      "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+      "exe": "/usr/bin/mongod",
+      "exe_identity": [3145868, 85851, 493, 0, 0]
+    },
+    "directory_identities": {
+      ".worktrees": [66338, 394231, 493, 0, 0],
+      ".worktrees/p01-acceptance-state-20260919": [66338, 396081, 448, 0, 0],
+      ".worktrees/p01-acceptance-state-20260919/mongo": [66338, 396082, 493, 0, 0]
+    },
+    "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+    "log_identity": [66338, 121637, 420, 0, 0],
+    "log_policy": "independent_same_inode_append_only"
+  }
+}
