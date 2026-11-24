@@ -1,0 +1,22 @@
+{
+  "observed_at": "2026-11-24T23:41:33.339671+00:00",
+  "status": "WRAPPER_PARSE_FAILURE_ORIGINAL_VERIFY_NOT_STARTED",
+  "stage": "/tmp/mezan-prior-release-verify-5ejysnun",
+  "runner_pid": 16064,
+  "runner_alive": false,
+  "runner_sha256": "c9fb7022af7f2f9e8bb90f61b53c20843cdb4b49d708394257e16201505e58dc",
+  "lease_before_bytes": 668210,
+  "lease_before_sha256": "3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061",
+  "observed_files": {
+    "original-lease-before.json": 668210,
+    "runner.stderr": 265,
+    "runner.stdout": 0,
+    "verify_existing_release.py": 2166
+  },
+  "error": "SyntaxError: unterminated string literal (detected at line 7)",
+  "reason": "Nested literal newline in wrapper generation caused Python parse failure before any statement executed. No receipt or original-verify output files were created.",
+  "next_action": "Preserve failed stage, freshly prove exact lease and no competing original guard, byte-transfer and compile corrected wrapper, launch original verification once.",
+  "new_publish": false,
+  "manual_lease_clear": false,
+  "cabinet_mutation": false
+}

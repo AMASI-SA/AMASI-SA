@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "task": "PR2123 LIVE-REFRESHED-DRAFT evidence inventory",
+  "created_at_utc": "2026-11-24T23:40:48.898257+00:00",
+  "status": "STATIC_ONLY_D_UNSET_EXECUTION_PROHIBITED",
+  "deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
+  "execution_allowed": false,
+  "author_review_result": "PASS_STATIC_DRAFT_ONLY_NOT_HOST_APPROVAL",
+  "independent_review_result": "PASS_STATIC_EQUIVALENCE_ONLY",
+  "scope": "Exact saved bytes only. Reviews establish static E7 equivalence and agreement with the saved root observation; they do not establish host readiness or execution success.",
+  "authorization_context": "Root is completing the existing PR2120 original verification and matching lease closure under the latest user direction. No PR2123 merge or publication has occurred as part of this preparation. Earlier wait-only wording in the preserved author review is historical; see independent review.",
+  "required_before_execution": "Root must finish the current original release protocol, obtain inactive/absent-lease evidence, establish and review actual merged D with applicable gates, freshly confirm all host/process/count identities, and create and independently review a separate finalized pair. This D_UNSET pair must not run.",
+  "manifest_actions": "Local file reads and creation of this manifest only. No target import/execution, host call, source-file change, STATUS change or remote mutation.",
+  "files": [
+    {
+      "role": "operator",
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT.py",
+      "bytes": 43593,
+      "sha256": "951c1758d0d13a45c2cbf9d1a4c51498dc9adbb5dfa104afcc240215a64dc1ba",
+      "git_blob": "40b9582958aa2bae536845872320c4c59fdc12e3"
+    },
+    {
+      "role": "envelope",
+      "file": "pr2123-envelope-LIVE-REFRESHED-DRAFT.json",
+      "bytes": 1360,
+      "sha256": "e784d5fc1840714fd702f99c8d870b15349b96b24c0ccf3b6c739a987a1c4ff9",
+      "git_blob": "630e5d847ea322c7a9f470b5a40c8e87868e4e2a"
+    },
+    {
+      "role": "author_review",
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT-review.json",
+      "bytes": 9957,
+      "sha256": "86488a128cd06de0db3c7650d0a16ca839d3723f95f938564c9379d8a5745d2a",
+      "git_blob": "67c8c86a1d1483a1ed0c222f6b77718db5662696"
+    },
+    {
+      "role": "independent_review",
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT-independent-review.json",
+      "bytes": 8469,
+      "sha256": "8d58c64aafc9b11e4ca942c644928089765b8e70a80c289e56a09242b46d8195",
+      "git_blob": "672bed709851cc73b473e64e3167a405f836a146"
+    },
+    {
+      "role": "operator_diff",
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT.diff",
+      "bytes": 3907,
+      "sha256": "f5618ed05e2acfcae28c2c00a0cf27c8dc18427db1f75575fa8f5e288480d3ad",
+      "git_blob": "d719416b853146e6d8c7f159df9079df8590e4af"
+    },
+    {
+      "role": "envelope_diff",
+      "file": "pr2123-envelope-LIVE-REFRESHED-DRAFT.diff",
+      "bytes": 2333,
+      "sha256": "ed096b1e603e9e836edade68d38d4107f8baa14572829edb4ccd6292fef1915f",
+      "git_blob": "98b52d69ef13e6dc7caea8343f5b690f8bb3a689"
+    },
+    {
+      "role": "substitutions",
+      "file": "pr2123-LIVE-REFRESHED-DRAFT-substitutions.json",
+      "bytes": 2175,
+      "sha256": "5fafaba4b96512b87275fabe525c693b16e45458a1b506a9e10b24c9850795c5",
+      "git_blob": "837ccada88984bcad555559a1e8eddf4f46c5ec7"
+    },
+    {
+      "role": "current_live_identities",
+      "file": "pr2123-current-live-process-identities.json",
+      "bytes": 1026,
+      "sha256": "0a7baa385f5290a0dfd5cb16dcd8e3fe1e4b421833bc267ea10d3bb1b2b3edb1",
+      "git_blob": "374571bab1535efee32a0af63fbe016a4ad13f24"
+    }
+  ]
+}

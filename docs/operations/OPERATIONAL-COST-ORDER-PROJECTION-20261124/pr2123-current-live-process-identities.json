@@ -1,0 +1,50 @@
+{
+  "observed_at": "2026-11-24T23:25:25.492606+00:00",
+  "pid": 311,
+  "start_ticks": 40102116,
+  "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+  "exe": "/usr/bin/mongod",
+  "exe_identity": [
+    4194406,
+    85818,
+    493,
+    0,
+    0
+  ],
+  "directory_identities": {
+    ".worktrees": [
+      66340,
+      394231,
+      493,
+      0,
+      0
+    ],
+    ".worktrees/p01-acceptance-state-20260919": [
+      66340,
+      396081,
+      448,
+      0,
+      0
+    ],
+    ".worktrees/p01-acceptance-state-20260919/mongo": [
+      66340,
+      396082,
+      493,
+      0,
+      0
+    ]
+  },
+  "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+  "log_identity": [
+    66340,
+    121637,
+    420,
+    0,
+    0
+  ],
+  "log_bytes": 19397249,
+  "same_explicit_dbpath": true,
+  "read_only": true,
+  "symlink_checks_pass": true,
+  "source": "Rootboundedread-onlyexistingownTerminal2 afterpreviewreconnection. NoMongoDBqueryorcontentread,servicechange,guardlifecycleorleasewrite."
+}

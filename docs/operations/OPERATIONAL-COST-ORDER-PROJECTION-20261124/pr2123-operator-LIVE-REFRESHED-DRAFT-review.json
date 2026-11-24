@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "task": "PR2123 reviewed E7 live-scope literal refresh draft",
+  "recorded_at_utc": "2026-11-24T23:30:24.293903+00:00",
+  "result": "PASS_STATIC_DRAFT_ONLY_NOT_HOST_APPROVAL",
+  "scope": "New local helper/envelope and static review only. Neither helper imported nor executed. No browser/host access, source branch edits, GitHub mutations, lock/lease action, service/DB operation, merge, publication or financial write by this reviewer.",
+  "reference": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "immutable_evidence_commit": "3ca93d49b1c0071824a374bb7b1d1ee33a814a9f",
+    "operator": {
+      "path": "cabinet-archive-reviewed-operator-reference.py",
+      "bytes": 43560,
+      "sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+      "git_blob": "233b0eec3951fbee5f25d03b05faa6c4d9cd70ff"
+    },
+    "envelope": {
+      "path": "cabinet-archive-reviewed-envelope-reference.json",
+      "bytes": 1366,
+      "sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5",
+      "git_blob": "a3d841a47fe90ebf861acd08196d38ea9523debd"
+    },
+    "reviewed_logic": "Original E7 with existing exact-path live Mongo preservation; no executable logic changed."
+  },
+  "fresh_identity_evidence": {
+    "file": {
+      "path": "pr2123-current-live-process-identities.json",
+      "bytes": 1026,
+      "sha256": "0a7baa385f5290a0dfd5cb16dcd8e3fe1e4b421833bc267ea10d3bb1b2b3edb1",
+      "git_blob": "374571bab1535efee32a0af63fbe016a4ad13f24"
+    },
+    "source": "Root bounded read-only observation, not an independent host observation by this reviewer",
+    "observed_at": "2026-11-24T23:25:25.492606+00:00",
+    "observed_log_bytes": 19397249,
+    "limit": "Observed byte count is not pinned as the future baseline. Original helper takes a fresh complete log prefix at actual execution and rechecks pinned identities repeatedly. Any process/root/log replacement blocks, with no automatic rebinding."
+  },
+  "operator": {
+    "path": "pr2123-operator-LIVE-REFRESHED-DRAFT.py",
+    "bytes": 43593,
+    "sha256": "951c1758d0d13a45c2cbf9d1a4c51498dc9adbb5dfa104afcc240215a64dc1ba",
+    "git_blob": "40b9582958aa2bae536845872320c4c59fdc12e3"
+  },
+  "envelope": {
+    "path": "pr2123-envelope-LIVE-REFRESHED-DRAFT.json",
+    "bytes": 1360,
+    "sha256": "e784d5fc1840714fd702f99c8d870b15349b96b24c0ccf3b6c739a987a1c4ff9",
+    "git_blob": "630e5d847ea322c7a9f470b5a40c8e87868e4e2a"
+  },
+  "new_live_scope": {
+    "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "db_descendants_policy": "live_writer_managed_no_operator_access",
+    "process": {
+      "pid": 311,
+      "start_ticks": 40102116,
+      "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+      "exe": "/usr/bin/mongod",
+      "exe_identity": [
+        4194406,
+        85818,
+        493,
+        0,
+        0
+      ]
+    },
+    "directory_identities": {
+      ".worktrees": [
+        66340,
+        394231,
+        493,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919": [
+        66340,
+        396081,
+        448,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919/mongo": [
+        66340,
+        396082,
+        493,
+        0,
+        0
+      ]
+    },
+    "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+    "log_identity": [
+      66340,
+      121637,
+      420,
+      0,
+      0
+    ],
+    "log_policy": "independent_same_inode_append_only"
+  },
+  "static_verification": {
+    "ast_parse": "PASS",
+    "full_text_and_AST_after_reversing_declared_replacements_exactly_equal_E7": true,
+    "operator_text_substitution_blocks": 15,
+    "operator_changed_literal_values": 17,
+    "operator_task_identity_string_literals": 9,
+    "operator_live_identity_integer_literals": 8,
+    "top_level_function_count": 36,
+    "unchanged_function_AST_count": 34,
+    "functions_with_only_task_local_string_change": [
+      "protected_rehearsal",
+      "main"
+    ],
+    "main_change": "Unique original-guard import module name only",
+    "protected_rehearsal_change": "Unique owned temporary-stage prefix only",
+    "all_four_live_scope_functions_byte_for_byte_unchanged": true,
+    "envelope_key_set_count": 10,
+    "envelope_changed_scalar_leaf_count": 15,
+    "envelope_scalar_changes": [
+      {
+        "path": "/source_sha",
+        "from": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+        "to": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+      },
+      {
+        "path": "/source_base_sha",
+        "from": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+        "to": "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+      },
+      {
+        "path": "/intent_sha",
+        "from": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+        "to": "c71a0ba71e36a2306a0c4bce1822f39073e6984f"
+      },
+      {
+        "path": "/deployment_sha",
+        "from": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "to": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123"
+      },
+      {
+        "path": "/tree",
+        "from": "74946da23e059283f49de2b04baf9860c8ee972d",
+        "to": "2db384dde8a84d0945fceee9cd5be81638d5bb2d"
+      },
+      {
+        "path": "/release_id",
+        "from": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+        "to": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328"
+      },
+      {
+        "path": "/initial_head",
+        "from": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+        "to": "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+      },
+      {
+        "path": "/live_foreign_scope/process/pid",
+        "from": 96507,
+        "to": 311
+      },
+      {
+        "path": "/live_foreign_scope/process/start_ticks",
+        "from": 106766690,
+        "to": 40102116
+      },
+      {
+        "path": "/live_foreign_scope/process/exe_identity/0",
+        "from": 3145868,
+        "to": 4194406
+      },
+      {
+        "path": "/live_foreign_scope/process/exe_identity/1",
+        "from": 85851,
+        "to": 85818
+      },
+      {
+        "path": "/live_foreign_scope/directory_identities/.worktrees/0",
+        "from": 66338,
+        "to": 66340
+      },
+      {
+        "path": "/live_foreign_scope/directory_identities/.worktrees/p01-acceptance-state-20260919/0",
+        "from": 66338,
+        "to": 66340
+      },
+      {
+        "path": "/live_foreign_scope/directory_identities/.worktrees/p01-acceptance-state-20260919/mongo/0",
+        "from": 66338,
+        "to": 66340
+      },
+      {
+        "path": "/live_foreign_scope/log_identity/0",
+        "from": 66338,
+        "to": 66340
+      }
+    ],
+    "scope_literal_equals_envelope_and_root_observation": true,
+    "paths_and_policies_unchanged": true,
+    "original_guard_adapter_lineage_capacity_backup_and_preservation_logic_unchanged": true,
+    "invalid_D_rejected_by_original_SHA_regex_before_ROOT_guard_or_stage": "Static control-flow review PASS; no execution",
+    "draft_file_modes": "0600"
+  },
+  "preservation_contract": {
+    "database_path": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "database_descendants": "Original exact slash-delimited subtree only; no descendant byte/path reads or writes by helper, no DB connection. Process/start_ticks/cmdline/executable and real root identities bind the live writer. Sibling paths remain fingerprinted.",
+    "separate_log": "Original same dev/inode/mode/uid/gid; require all original prefix bytes, allow only append. Truncation, replacement or rotation blocks.",
+    "runtime_metadata": "Original .emergent/stripped_env_names append-only policy only, unchanged",
+    "all_other_foreign_paths": "Exact original path sets, record sets and fingerprints; all ignored and nonignored paths except separately backed-up generated cleanup targets.",
+    "write_disjointness": "Original lexical and resolved disjointness for source changes, Git metadata, cleanup paths and own stage retained.",
+    "generated_outputs": "All four original adapter targets copied, fully verified, fsynced and rechecked before adapter cleanup. Fresh capacity/inode checks retained; no capacity cleanup."
+  },
+  "historical_drafts": {
+    "preserved_unchanged": {
+      "pr2123-operator-DRAFT.py": "ff5c8895488533e209d4177bbd0d66bcf92b5af6357852c63598fc9eec553f22",
+      "pr2123-envelope-DRAFT.json": "ec07237ff88a0a653150b611a6d4ce2b6d8bdfa64820ac33ea33d94ba6db9451",
+      "pr2123-operator-STRICT-DRAFT.py": "989b643a3b4ad541ac911e3b26cfba69c8c55ff1cdbb7f37afae3266a429fc7a",
+      "pr2123-envelope-STRICT-DRAFT.json": "f1e26e6b62eba66841000dc5f95be79b136ff197db0f8300d8459b71435f0d4d",
+      "pr2123-operator-STRICT-DRAFT-review.json": "9f0cf7cfa11b2ec185c82c6bdba88f1579ddaabb479116a4fd9b02444983f0e7"
+    },
+    "strict_draft_state": "BLOCKED_BY_REPLACEMENT_WRITER; see pr2123-strict-DRAFT-blocked-by-replacement-writer.json",
+    "prior_E7_based_draft_state": "Old PID/root pins are obsolete after restart; not executable approval."
+  },
+  "remaining_before_execution": [
+    "Current publication conversation must close its own lease; latest user direction does not authorize a parallel takeover.",
+    "Root reads original status active:false with no incomplete lease directory, after current verify completes.",
+    "Normal PR2123 merge yields actual D, exact parents J,B and tree equality; all applicable exact-D CI gates complete.",
+    "Fresh host identity/count/scope facts still agree; expected432 was observed by root23:22:29UTC and original helper will check it again.",
+    "Root creates new finalized pair with actual D, independently reviews complete final helper/envelope, durably saves them and checks downloaded exact hashes before executing once.",
+    "Root preserves original receipts on any failure; no automatic restart, rollback, identity relaxation or cleanup."
+  ],
+  "production_changed": false,
+  "helper_imported": false,
+  "helper_executed": false,
+  "host_ready": false,
+  "lease_created": false,
+  "published": false
+}

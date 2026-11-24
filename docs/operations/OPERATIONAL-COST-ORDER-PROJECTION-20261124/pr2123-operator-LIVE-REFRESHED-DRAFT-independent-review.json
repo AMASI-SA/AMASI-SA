@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "task": "Independent review of PR2123 LIVE-REFRESHED-DRAFT",
+  "reviewer": "release_gate",
+  "reviewed_at_utc": "2026-11-24T23:35:10Z",
+  "result": "PASS_STATIC_EQUIVALENCE_ONLY",
+  "host_readiness": "PENDING_NOT_APPROVED_FOR_EXECUTION",
+  "scope": "Full source, diff, reference and fresh identity record reviewed; AST and literal comparisons only. Neither target imported nor executed; no host/API mutation or tests.",
+  "target": {
+    "operator": {
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT.py",
+      "bytes": 43593,
+      "sha256": "951c1758d0d13a45c2cbf9d1a4c51498dc9adbb5dfa104afcc240215a64dc1ba",
+      "mode": "0600"
+    },
+    "envelope": {
+      "file": "pr2123-envelope-LIVE-REFRESHED-DRAFT.json",
+      "bytes": 1360,
+      "sha256": "e784d5fc1840714fd702f99c8d870b15349b96b24c0ccf3b6c739a987a1c4ff9",
+      "mode": "0600"
+    },
+    "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123"
+  },
+  "primary_reference": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "commit": "3ca93d49b1c0071824a374bb7b1d1ee33a814a9f",
+    "operator": {
+      "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/cabinet_archive_release_operator_live_scope.py",
+      "blob": "233b0eec3951fbee5f25d03b05faa6c4d9cd70ff",
+      "bytes": 43560,
+      "sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f"
+    },
+    "envelope": {
+      "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/cabinet_archive_release_envelope_live_scope.json",
+      "blob": "a3d841a47fe90ebf861acd08196d38ea9523debd",
+      "bytes": 1366,
+      "sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5"
+    },
+    "independently_fetched_and_exactly_equal_local_reference_bytes": true
+  },
+  "verified_static_delta": {
+    "replacement_blocks": 15,
+    "changed_literal_values": 17,
+    "task_and_release_string_changes": 9,
+    "fresh_identity_integer_changes": 8,
+    "reverse_replacements_restore_entire_original_text_and_AST": true,
+    "top_level_functions": 36,
+    "unchanged_function_ASTs": 34,
+    "only_functions_with_literal_change": [
+      "protected_rehearsal",
+      "main"
+    ],
+    "their_changes": "Owned stage prefix and guard module unique name only.",
+    "four_live_functions_byte_identical": [
+      "live_identity",
+      "assert_live_write_disjoint",
+      "assert_live_scope",
+      "live_log_fingerprint"
+    ],
+    "envelope_key_set_unchanged_ten_fields": true,
+    "scope_literal_equals_envelope_and_root_observation": true,
+    "paths_cmdline_hash_executable_path_and_policies_unchanged": true,
+    "draft_D_rejected_before_APP_inspection_guard_process_checks_or_stage": true
+  },
+  "fresh_binding": {
+    "evidence_file": "pr2123-current-live-process-identities.json",
+    "evidence_bytes": 1026,
+    "evidence_sha256": "0a7baa385f5290a0dfd5cb16dcd8e3fe1e4b421833bc267ea10d3bb1b2b3edb1",
+    "evidence_observed_at": "2026-11-24T23:25:25.492606+00:00",
+    "reviewer_scope": "Compared exact fields in root's saved observation; reviewer did not access host.",
+    "pid": 311,
+    "start_ticks": 40102116,
+    "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+    "exe": "/usr/bin/mongod",
+    "exe_identity": [
+      4194406,
+      85818,
+      493,
+      0,
+      0
+    ],
+    "directory_device": 66340,
+    "directory_and_log_complete_dev_inode_mode_uid_gid_vectors_match": true,
+    "same_explicit_dbpath_and_symlink_checks_reported": true,
+    "log_bytes_19397249_is_observation_only_not_future_baseline": true
+  },
+  "requirement_checks": [
+    {
+      "requirement": "Keep exact original E7 logic",
+      "evidence": "Full source read and reversible complete text/AST comparison; all four live-scope functions byte-identical.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Bind live writer without touching database",
+      "evidence": "Repeated PID/start/cmdline SHA/explicit --dbpath/exe identity and real-directory checks. No Mongo query, stop, restart, descendant traversal or descendant content read.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Narrow exception only",
+      "evidence": "Exclusion uses exact LIVE_DB root plus slash-delimited descendants; siblings retain ordinary fingerprints. Both db/log must remain ignored. Root identity recorded and rechecked.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Preserve independent log",
+      "evidence": "Exact dev/inode/mode/uid/gid; O_NOFOLLOW bounded prefix hashing; fresh initial full length becomes retained prefix; truncation/replacement/rotation or prefix alteration blocks.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Keep writes disjoint",
+      "evidence": "Original lexical and resolved disjointness checks cover Git metadata, runtime metadata, generated cleanup paths, incoming source paths and owned stage.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Keep all other preservation",
+      "evidence": "Exact other foreign inventory/record sets and fingerprints; only original platform metadata append exception; all four generated targets separately manifest/copy/fsync/rechecked.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Keep release safeguards",
+      "evidence": "Original status inactive, mutex/absent lease, clean branch/START, J/A/B/D lineage, intent-only delta, unchanged controls, clone and canonical original adapter and full proofs.",
+      "result": "PASS_STATIC"
+    },
+    {
+      "requirement": "Keep fresh capacity checks",
+      "evidence": "Original owned backup bytes/inodes and current /app capacity checks before FF and adapter retained; no old measured capacity reused or cleanup added.",
+      "result": "PASS_STATIC"
+    }
+  ],
+  "findings": [],
+  "current_authorization_note": {
+    "latest_user_instruction_reported_by_root": "افتح اغلاق النشر انت",
+    "effect": "Root is again authorized to finish only the existing publication's original verification and matching lease closure, after avoiding a duplicate running verifier.",
+    "historical_text": "Writer review's earlier wait-only sentence reflects an earlier user instruction. It is superseded for root's existing-publication verification scope; the hashed review is preserved as history.",
+    "unchanged_boundaries": "No abort, manual lease removal, prepare, second publish or cabinet action; this PR2123 draft still cannot run while any release lease remains active."
+  },
+  "execution_prerequisites": [
+    "Finish exact current publication through the original protocol; require matching original verify receipt and subsequent original active:false/no incomplete directory.",
+    "Create actual normal-merge D, verify exact parents[J,B] and tree=B, and complete all applicable exact-D CI.",
+    "Fresh live process/root/log vectors must still equal the reviewed pins, not merely have the same pathname. Any restart or replacement stops the plan; no automatic rebind.",
+    "Recheck START/branch/clean state and current nonignored count (432 last reported23:22:29UTC); use fresh generated-output and capacity facts.",
+    "Create and independently review a separate final pair with actual D; durably retain it and hash-check exact downloaded bytes before one run.",
+    "Require complete owned clone and canonical adapter receipts before any own prepare/publication."
+  ],
+  "limitations": [
+    "This is static equivalence and identity-record comparison, not host execution proof.",
+    "Live DB descendants intentionally remain outside content/path equality checks; do not claim their bytes were unchanged.",
+    "Replacement of process/root/log identities causes rejection even if current names look identical. Existing receipts and historical drafts remain preserved.",
+    "A failure after FF does not automatically roll back; inspect retained failure state and backups rather than restarting blindly."
+  ],
+  "actions": {
+    "source_changes": false,
+    "tests": false,
+    "helper_import": false,
+    "helper_execution": false,
+    "host_calls": false,
+    "github_writes": false
+  }
+}
