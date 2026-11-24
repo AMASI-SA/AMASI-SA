@@ -1,57 +1,234 @@
 {
-  "observed_at_utc": "2026-11-24T16:12:36.808168+00:00",
-  "scope": "private source-A bootstrap build, original verifier, external freeze, candidate validation only",
+  "observed_at_utc": "2026-11-24T17:01:37.426457+00:00",
+  "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
-  "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
-  "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
+  "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+  "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
   "branch": "hotfix/prod-snap-meta-final",
+  "task_branch": "codex/inventory-location-short-codes-release2-20261124",
+  "source_root_tree_oid": "3379fb9bc4be6b7b1f0e40523173ab801ec9774f",
+  "source_base_root_tree_oid": "5f6ab712785d772fe22461d9d08a4693e992fbcd",
+  "preflight": {
+    "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-preflight.json",
+    "bytes": 10539,
+    "sha256": "74d27f79585245808b3730d929856811f2f79999b28586f35458393f4eb56d9d"
+  },
+  "focused_tests": [
+    {
+      "step": "backend-focused",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "started_at_utc": "2026-11-24T16:58:54.629163+00:00",
+      "elapsed_seconds": 6.901,
+      "argv": [
+        "/workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "backend/tests/test_warehouse_short_codes.py",
+        "backend/tests/test_warehouse_location_routes.py",
+        "backend/tests/test_product_inventory_receipt_routes.py",
+        "backend/tests/test_accounting_onboarding_domains.py"
+      ],
+      "database_env_removed": [
+        "MONGO_URL",
+        "MONGODB_URI",
+        "DEMAND_READ_TEST_MONGO_URI"
+      ],
+      "exit_code": 0,
+      "summary": "56 passed in 5.35s",
+      "log": {
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-backend-focused.log",
+        "bytes": 99,
+        "sha256": "46d7eecf135f3e9777eee71f99401d04b60290f8f8fba1ae6662096cfd2081a4"
+      },
+      "test_environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "backend:backend/tests"
+      }
+    },
+    {
+      "step": "mongo",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "started_at_utc": "2026-11-24T16:58:54.621184+00:00",
+      "elapsed_seconds": 9.031,
+      "argv": [
+        "/workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-p",
+        "pytest_asyncio.plugin",
+        "-q",
+        "-o",
+        "cache_dir=/workspace/scratch/021675d08c11/location-codes-testenv/pytest-cache-candidate-refresh2",
+        "--basetemp=/workspace/scratch/021675d08c11/location-codes-testenv/numbering-pytest-candidate-refresh2",
+        "backend/tests/test_warehouse_cabinet_numbering_mongo.py"
+      ],
+      "database_env_removed": [
+        "MONGO_URL",
+        "MONGODB_URI",
+        "DEMAND_READ_TEST_MONGO_URI"
+      ],
+      "owned_mongod": "/workspace/scratch/021675d08c11/location-codes-testenv/mongo/mongodb-linux-x86_64-ubuntu2204-7.0.14/bin/mongod",
+      "exit_code": 0,
+      "summary": "10 passed in 8.25s",
+      "log": {
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-mongo.log",
+        "bytes": 99,
+        "sha256": "2960d71574395a735f0622caf79acbc209d599fe79a762db1139058b2d1d8fcc"
+      },
+      "test_environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "backend:backend/tests",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      }
+    }
+  ],
   "steps": [
     {
       "step": "build",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "started_at_utc": "2026-11-24T16:59:44.372947+00:00",
+      "finished_at_utc": "2026-11-24T17:00:19.269999+00:00",
+      "elapsed_seconds": 34.897,
+      "argv": [
+        "python",
+        "-B",
+        "scripts/frontend_release_toolchain.py",
+        "exec",
+        "--",
+        "yarn",
+        "--cwd",
+        "frontend",
+        "build:release"
+      ],
+      "command": "python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build:release",
+      "public_build_environment": {
+        "REACT_APP_BACKEND_URL": "https://mezansalla.com",
+        "CI": "false",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XDG_CACHE_HOME": "/workspace/scratch/021675d08c11/location-codes-testenv/cache"
+      },
+      "bootstrap_intent_enabled": true,
       "exit_code": 0,
-      "command": "REACT_APP_BACKEND_URL=https://mezansalla.com CI=false PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache MEZAN_RELEASE_BOOTSTRAP_INTENT=1 python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build:release",
       "log": {
-        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-e11a2988-build.log",
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-build.log",
         "bytes": 71989,
-        "sha256": "3a4c29d20f797e1e6badcc88135b78ee6ca7778f1314cdbdcce94adf196f081b"
+        "sha256": "81cc618f4ec691586f812ee8bae505c534b5105a2d6dccad36e3979820b79100"
       }
     },
     {
       "step": "verify",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "started_at_utc": "2026-11-24T17:00:19.270546+00:00",
+      "finished_at_utc": "2026-11-24T17:00:26.094012+00:00",
+      "elapsed_seconds": 6.823,
+      "argv": [
+        "python",
+        "-B",
+        "scripts/frontend_release_toolchain.py",
+        "exec",
+        "--",
+        "python",
+        "-B",
+        "scripts/verify_frontend_build.py",
+        "--expected-git-sha",
+        "a611477be8d52b18f9ad851f44facf9c78be2905"
+      ],
+      "command": "python -B scripts/frontend_release_toolchain.py exec -- python -B scripts/verify_frontend_build.py --expected-git-sha a611477be8d52b18f9ad851f44facf9c78be2905",
+      "public_build_environment": {
+        "REACT_APP_BACKEND_URL": "https://mezansalla.com",
+        "CI": "false",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XDG_CACHE_HOME": "/workspace/scratch/021675d08c11/location-codes-testenv/cache"
+      },
+      "bootstrap_intent_enabled": false,
       "exit_code": 0,
-      "command": "REACT_APP_BACKEND_URL=https://mezansalla.com CI=false PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache python -B scripts/frontend_release_toolchain.py exec -- python -B scripts/verify_frontend_build.py --expected-git-sha e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
       "log": {
-        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-e11a2988-verify.log",
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-verify.log",
         "bytes": 134106,
-        "sha256": "0810f6f28780a8bbb961d50612b131f662d9f25a294427c3587cd99e30a41252"
+        "sha256": "c3bbb4edfe6e80d08d20fa0be816036a18efe301710eaac25d3f87e60ae676bf"
       }
     },
     {
       "step": "freeze",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "started_at_utc": "2026-11-24T17:00:26.094615+00:00",
+      "finished_at_utc": "2026-11-24T17:00:29.581175+00:00",
+      "elapsed_seconds": 3.487,
+      "argv": [
+        "python",
+        "-B",
+        "scripts/emergent_deployment_adapter.py",
+        "freeze-intent",
+        "--source-git-sha",
+        "a611477be8d52b18f9ad851f44facf9c78be2905",
+        "--source-base-git-sha",
+        "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+        "--branch",
+        "hotfix/prod-snap-meta-final",
+        "--output",
+        "/workspace/scratch/021675d08c11/location-codes-release/candidate-refresh2.json"
+      ],
+      "command": "python -B scripts/emergent_deployment_adapter.py freeze-intent --source-git-sha a611477be8d52b18f9ad851f44facf9c78be2905 --source-base-git-sha 20fc28f3432a78996f1d70f3356a38bd78b0309e --branch hotfix/prod-snap-meta-final --output /workspace/scratch/021675d08c11/location-codes-release/candidate-refresh2.json",
+      "public_build_environment": {
+        "REACT_APP_BACKEND_URL": "https://mezansalla.com",
+        "CI": "false",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XDG_CACHE_HOME": "/workspace/scratch/021675d08c11/location-codes-testenv/cache"
+      },
+      "bootstrap_intent_enabled": false,
       "exit_code": 0,
-      "command": "REACT_APP_BACKEND_URL=https://mezansalla.com CI=false PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache python -B scripts/emergent_deployment_adapter.py freeze-intent --source-git-sha e11a29881c7ba1622c17912af6d06d9f6f8acb0a --source-base-git-sha 3fd7594af806615d4c53616100dd546ef7b5fe9f --branch hotfix/prod-snap-meta-final --output /workspace/scratch/021675d08c11/location-codes-release/candidate-e11a2988.json",
       "log": {
-        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-e11a2988-freeze.log",
-        "bytes": 1529691,
-        "sha256": "219feac8f556f2ca73c0ef5fec51a62ce3c752c81d2e17026bd6217a54fede04"
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-freeze.log",
+        "bytes": 1530249,
+        "sha256": "af2f42880a04365bfc49fc82a9f8cd97998b07d281b7d9a54d0e4004268d306e"
       }
     },
     {
-      "step": "candidate_validate",
+      "step": "candidate-validate",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "started_at_utc": "2026-11-24T17:00:29.583385+00:00",
+      "finished_at_utc": "2026-11-24T17:00:32.042625+00:00",
+      "elapsed_seconds": 2.459,
+      "argv": [
+        "python",
+        "-B",
+        "-c",
+        "from pathlib import Path;import json;from scripts.emergent_deployment_adapter import load_candidate_release_intent;p=load_candidate_release_intent(Path('/workspace/scratch/021675d08c11/location-codes-release/candidate-refresh2.json'),source_git_sha='a611477be8d52b18f9ad851f44facf9c78be2905',source_base_git_sha='20fc28f3432a78996f1d70f3356a38bd78b0309e');print(json.dumps({'accepted':True,'source_git_sha':p['source_git_sha'],'source_base_git_sha':p['source_base_git_sha'],'release_id':p['runtime_identity']['release_id']}))"
+      ],
+      "command": "python -B -c 'from pathlib import Path;import json;from scripts.emergent_deployment_adapter import load_candidate_release_intent;p=load_candidate_release_intent(Path('\"'\"'/workspace/scratch/021675d08c11/location-codes-release/candidate-refresh2.json'\"'\"'),source_git_sha='\"'\"'a611477be8d52b18f9ad851f44facf9c78be2905'\"'\"',source_base_git_sha='\"'\"'20fc28f3432a78996f1d70f3356a38bd78b0309e'\"'\"');print(json.dumps({'\"'\"'accepted'\"'\"':True,'\"'\"'source_git_sha'\"'\"':p['\"'\"'source_git_sha'\"'\"'],'\"'\"'source_base_git_sha'\"'\"':p['\"'\"'source_base_git_sha'\"'\"'],'\"'\"'release_id'\"'\"':p['\"'\"'runtime_identity'\"'\"']['\"'\"'release_id'\"'\"']}))'",
+      "public_build_environment": {
+        "REACT_APP_BACKEND_URL": "https://mezansalla.com",
+        "CI": "false",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XDG_CACHE_HOME": "/workspace/scratch/021675d08c11/location-codes-testenv/cache"
+      },
+      "bootstrap_intent_enabled": false,
       "exit_code": 0,
-      "method": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
-      "path": "/workspace/scratch/021675d08c11/location-codes-release/candidate-e11a2988.json",
-      "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
-      "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
-      "result": "accepted by original validator at source A; observed tool process exit 0"
+      "log": {
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-candidate-validate.log",
+        "bytes": 424,
+        "sha256": "bc3252ebb5fcfaca50dbf4f5b844775c55c64e596e7ca45d9e65175f946ac97d"
+      }
     }
   ],
   "candidate": {
-    "path": "/workspace/scratch/021675d08c11/location-codes-release/candidate-e11a2988.json",
-    "bytes": 1529501,
-    "sha256": "460a55ac4f5242bd51321e9df23eba793954260be80b031815f6a42122d152c1"
+    "path": "/workspace/scratch/021675d08c11/location-codes-release/candidate-refresh2.json",
+    "bytes": 1530059,
+    "sha256": "cdc7a0d5af053b63f57b65fc896c133377fa8bb9892f260f94b28bcfde5546a0",
+    "git_blob_sha1": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7"
   },
-  "release_id": "rg5-f46ec42e0b8cb5f3bd757aae88f12a5023f06f3fe17cad80e4c53b042fbcb0ea",
+  "release_id": "rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e",
   "manifests": {
     "frontend_source": {
       "file_count": 1449,
@@ -62,35 +239,35 @@
     "backend_runtime_source": {
       "added_count": 1,
       "deleted_count": 0,
-      "file_count": 1356,
-      "manifest_sha256": "ba45acb71d40223db8666557d510f047a43df252fff89dc2db42a09459c5b430",
+      "file_count": 1357,
+      "manifest_sha256": "604e621faca6a2c15ec1c7e21cab674a3ba3b7adfc8f6675e0f47929e5add836",
       "modified_count": 6,
-      "projection_tree_oid": "32e215d8e8fbb7081473059481d3f13d5ce611bc",
+      "projection_tree_oid": "deff43a4f1dfb0ab7f5b4ef8cd266adebea48270",
       "scope": "backend_runtime_package_v1",
-      "scope_tree_oid": "7a09357b1ad27a9a257e4fe729c95cb8b571c3de",
-      "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
-      "source_base_root_tree_oid": "0e139ed1822245fd40f1b4b123cae4b3c490d9f8",
-      "source_base_scope_tree_oid": "b4ba1daa1926771ae5d803e8fffd01af98b2c148",
-      "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
-      "source_root_tree_oid": "ad3c5544b91ae7fcd34f86fa5c8387cc58add075",
+      "scope_tree_oid": "aa77430b5dc9882a7883fd74dd69ea5467a66360",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "source_base_root_tree_oid": "5f6ab712785d772fe22461d9d08a4693e992fbcd",
+      "source_base_scope_tree_oid": "a92a9984f3461af3971097818bd84f05957c5ba6",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_root_tree_oid": "3379fb9bc4be6b7b1f0e40523173ab801ec9774f",
       "tombstone_count": 0,
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "d69480249e1efbd3592e7e4347d1d238a55dcd602a364eef51775994881aa106"
+      "tree_sha256": "d6a3a29cbf55685983297ded2590912b66dc0bafd546ffc2f06a37b688a2ff37"
     },
     "release_control_source": {
       "added_count": 0,
       "deleted_count": 0,
       "file_count": 328,
-      "manifest_sha256": "dc0118c67474d6ee71b9215f057659fd917192211d6497a8306622a8ae185c6a",
+      "manifest_sha256": "e39355eef0533100ea5fb870a052e599998b284b307e65ec02899330eeb70740",
       "modified_count": 0,
       "projection_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
       "scope": "release_control_source_v1",
       "scope_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
-      "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
-      "source_base_root_tree_oid": "0e139ed1822245fd40f1b4b123cae4b3c490d9f8",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "source_base_root_tree_oid": "5f6ab712785d772fe22461d9d08a4693e992fbcd",
       "source_base_scope_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
-      "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
-      "source_root_tree_oid": "ad3c5544b91ae7fcd34f86fa5c8387cc58add075",
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_root_tree_oid": "3379fb9bc4be6b7b1f0e40523173ab801ec9774f",
       "tombstone_count": 0,
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tree_sha256": "d46ba8c755d6bedb769c4571d8ece21fcc3cbc32bfa4447220f35461259960a0"
@@ -104,7 +281,7 @@
     "build_meta": {
       "bytes": 591784,
       "path": "build-meta.json",
-      "sha256": "5145b0b1a38bc0f4fc18c73e32045aaab0ef099ceafb5144238c195329f383b6"
+      "sha256": "b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433"
     },
     "index": {
       "bytes": 3917,
@@ -125,46 +302,52 @@
     "kind": "frontend_two_clean_builds_v1",
     "passes": [
       {
-        "ordinal": 1,
+        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
         "build_meta": {
-          "path": "build-meta.json",
           "bytes": 591784,
-          "sha256": "5145b0b1a38bc0f4fc18c73e32045aaab0ef099ceafb5144238c195329f383b6"
+          "path": "build-meta.json",
+          "sha256": "b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433"
         },
-        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6"
+        "ordinal": 1
       },
       {
-        "ordinal": 2,
+        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
         "build_meta": {
-          "path": "build-meta.json",
           "bytes": 591784,
-          "sha256": "5145b0b1a38bc0f4fc18c73e32045aaab0ef099ceafb5144238c195329f383b6"
+          "path": "build-meta.json",
+          "sha256": "b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433"
         },
-        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6"
+        "ordinal": 2
       }
     ],
     "retained_pass": 2,
     "proof_file": {
       "bytes": 1521,
       "path": "frontend/.release/reproducible-build.json",
-      "sha256": "d2c83872af8601762970aad5f8ef73ba96b8917d8495cddf95da363d87044425"
+      "sha256": "8f582c809003c06d706e5a9513fb449638cf96731aa03f211e3e59bd72a36e58"
     },
     "build_elapsed_seconds": [
-      13.97,
-      10.59
+      11.15,
+      11.14
     ],
-    "modules_per_build": 7853
+    "modules_per_build": [
+      7853,
+      7853
+    ]
   },
   "postconditions": {
-    "head": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+    "head": "a611477be8d52b18f9ad851f44facf9c78be2905",
     "git_status_porcelain": "",
     "git_diff_check_exit_code": 0,
     "preflight_source_hashes_unchanged": true,
     "tracked_intent": {
       "path": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap/release/release-intent-v5.json",
-      "bytes": 1528959,
-      "sha256": "5a54eec61ec6f15abd6192f851df46932bf87830bf6973744dbbaff40dd8d3bf"
+      "bytes": 1529515,
+      "sha256": "ac2459b32412570d22f567f94eae5cd426c3549ce5e07930963c20c0bfc59bea",
+      "git_blob_sha1": "ce9e78375b462831e9c2a1ba5d57f66774e8d1bc"
     },
+    "intent_unchanged_from_J": true,
+    "intent_edit_commits": [],
     "candidate_matches_freeze_stdout": true,
     "verifier_evidence_matches_candidate": true,
     "no_backend_runtime_identity_materialized": true,
@@ -176,24 +359,29 @@
     "CSS @import ordering warning for the font import.",
     "sidebarVisibility.js has both dynamic and static imports; dynamic import does not split its chunk.",
     "Some chunks exceed 500 kB after minification.",
-    "Freeze and candidate validation import backend/release_identity.py, whose module-level BOOT_RELEASE_IDENTITY read logs missing ignored backend/release_identity.json. Original freeze and candidate validator both exit 0; this private A stage does not materialize runtime identity."
+    "Freeze and candidate validation import backend/release_identity.py, whose module-level identity read logs missing ignored backend/release_identity.json. Original freeze and candidate validator exit 0; this private A stage does not materialize runtime identity."
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "INTENT_B_REVIEWED_CI_RUNNING",
-  "release_branch": "codex/inventory-location-short-codes-release-20261124",
+  "state": "INTENT_B2_REVIEWED_CI_RUNNING",
+  "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
-  "pr": 2110,
-  "intent_commit": "c8766ed16c9806d56dad0fab733537833fa73bb4",
-  "intent_tree": "a2dc14faa5d4278c52433b00a197115504073448",
-  "candidate_git_blob": "9804039303c159b0750f303ce049650e597eb612",
-  "independent_candidate_review": "PASS: original Python candidate validator, governed Node frontend membership, actual artifact and complete proof; source A and prior intent clean",
+  "pr": 2113,
+  "intent_commit": "6005a1be25a7a9402442a389f3052ffab8664e07",
+  "intent_tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
+  "candidate_git_blob": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7",
+  "independent_review": {
+    "source": "PASS: sole parent J2, exact 20 owned paths, 19 non-status blobs byte-identical A1, inherited intent/full history unchanged; Frontend/control inputs identical",
+    "candidate": "PASS: original candidate validator, manifests, raw double-build evidence, retained artifact/build-meta/proof hashes and bytes",
+    "intent_commit": "PASS: sole parent A2, exactly one changed intent path, exact reviewed candidate Git blob",
+    "focused_tests": "PASS: independent raw log/result hashes; backend56 in5.35s and real Mongo10 in8.25s, exit0/no skips"
+  },
   "host_helper": {
-    "path": "operators/pr2110_guarded_rehearsal.py",
-    "sha256": "d7b77ac6b08058fe61ca2923c5a1ed100121204b6a5cd8799705685b30d7ee94",
+    "path": "operators/pr2113_guarded_rehearsal.py",
+    "sha256": "cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb",
     "bytes": 23356,
     "status": "REVIEWED_NOT_EXECUTED",
-    "changes": "identity-only J and PR/task prefixes from existing PR2092 helper; reverse replacement exact",
+    "changes": "Exactly J1 to J2 once and PR2110/pr2110 to PR2113/pr2113 twice each; reverse replacement byte equality, AST and independent review PASS",
     "review": "PASS: exact reverse identity substitutions and syntax; original constraints retained",
     "required_runtime_preconditions": [
       "completed successful applicable exact-D CI",
@@ -207,9 +395,43 @@
       "no ignored-file preservation claim beyond observed scope"
     ]
   },
+  "superseded_release": {
+    "pr": 2110,
+    "source": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+    "intent": "c8766ed16c9806d56dad0fab733537833fa73bb4",
+    "evidence_commit": "f9b65f05f5a2a23b2f696a868a2b7b16431430ac",
+    "reason": "Production advanced to PR2109 after final B1 checks passed",
+    "final_check_counts": {
+      "success": 41,
+      "conditional_skipped": 6,
+      "pending": 0,
+      "failure": 0,
+      "neutral": 0
+    },
+    "source_integration": {
+      "frontend_suites": 491,
+      "frontend_tests": 5552,
+      "backend_tests": 290,
+      "backend_subtests": 237
+    },
+    "host20_steps_passed": 21,
+    "host24_steps_passed": 21,
+    "closed_unmerged": true
+  },
+  "latest_shared_host_observation": {
+    "at_utc": "2026-11-24T16:58:59.182975+00:00",
+    "original_guard_active": true,
+    "foreign_actor": "chatgpt-operational-performance-recovery-20261124",
+    "deployment_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "source_git_sha": "b8426fc9cd8748b7440649f8cee4cf7fd0c4ab16",
+    "release_id": "rg5-697e775f366d205e079329af75b5e5f6806a5cc223ad549e0b7158b38bb11475",
+    "app_head": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "tracked_clean": true,
+    "platform_observation": "100th publish d0a7e31 building; previous owner publication in progress"
+  },
   "production_changed_by_this_task": false,
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "independent_B_review": "PASS: sole parent A, exact intent-only diff/bytes and original normal tracked-intent validator; clean checkout"
+  "next_safe_action": "Wait applicable exact-B2 gates and both host rehearsals; preserve foreign PR2109 lease/publication. Refresh J2 and original guard before normal tree-preserving merge. Require exact-D CI, original guarded helper rehearsal on clean J2, prepare/prepublish, one authorized Republish, newer successful platform deployment and original 3-probe verify/final inactive guard. No live cabinet mutations."
 }

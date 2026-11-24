@@ -9,23 +9,37 @@ No live cabinet, warehouse, location, inventory quantity, historical record, bar
 
 On 2026-11-24 the owner answered `نعم موافق` to the specific request to publish the numbering change after checks, while postponing creation of new cabinets and removal of the old one. This authorizes the numbering-only Protocol v5 release without another permission request. It does not authorize any live cabinet or inventory mutation.
 
+## Evidence branch checkpoint after source freeze
+
+This document is on the separate evidence branch; it is not merged into frozen A2/B2. Current PR: [#2113](https://github.com/AMASI-SA/AMASI-SA/pull/2113).
+
+- A2 `a611477be8d52b18f9ad851f44facf9c78be2905`; B2 `6005a1be25a7a9402442a389f3052ffab8664e07`, tree `abcdea0a41cb694cdd229492a96a7b68e25d8a3a`; base J2 `20fc28f3432a78996f1d70f3356a38bd78b0309e`.
+- Focused checks on A2: **56 backend tests in 5.35s and 10 real-Mongo tests in 8.25s, exit 0, no skips**. Independent raw-result review passed.
+- Original governed two-clean-build (11.15s / 11.14s, 7,853 modules each), verifier, external freeze and candidate validator all passed. Source and inherited intent remained clean.
+- Candidate: **1,530,059 bytes**, SHA256 `cdc7a0d5af053b63f57b65fc896c133377fa8bb9892f260f94b28bcfde5546a0`, exact Git blob `e5b2870da4cd713d8c98fb80d8a1ad91c72219b7`.
+- RID `rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e`. Independent source, complete candidate/proof and remote intent-only B2 reviews passed. Exact-B2 CI is running.
+- Reviewed helper [operators/pr2113_guarded_rehearsal.py](operators/pr2113_guarded_rehearsal.py), SHA256 `cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb`, 23,356 bytes. Only the five expected J/PR identity substitutions differ from the earlier reviewed helper. It has not been executed.
+- At **16:58:59 UTC**, original host guard became active for the **foreign** PR2109 actor `chatgpt-operational-performance-recovery-20261124`; `/app` was clean on J2. Emergent shows that owner's 100th publication `d0a7e31` building. This supersedes the earlier inactive/J1 observation; do not touch its lease or workspace.
+- **Production changed by this task: no.** No own shared-host mutation, lease, merge, publication or live cabinet changes. User-authorized numbering publication remains pending the release gates.
+
+Full machine-readable evidence: [RELEASE-EVIDENCE.json](RELEASE-EVIDENCE.json). Historical PR2110 is closed/unmerged and its successful final CI evidence is retained below. Continue from this section and the bounded Issue #1006 entry, not a previous candidate.
+
 ## Source boundary
 
 - Repository: `AMASI-SA/AMASI-SA`.
+- Current release baseline J2: `20fc28f3432a78996f1d70f3356a38bd78b0309e`, tree `5f6ab712785d772fe22461d9d08a4693e992fbcd`, the normal PR2109 merge into `hotfix/prod-snap-meta-final` at 2026-11-24 16:42:58 UTC.
+- Current release branch: `codex/inventory-location-short-codes-release2-20261124`, starting directly at J2.
+- Previous release baseline J1: `3fd7594af806615d4c53616100dd546ef7b5fe9f` (PR2103).
+- Previous reviewed source A1: `e11a29881c7ba1622c17912af6d06d9f6f8acb0a`, tree `ad3c5544b91ae7fcd34f86fa5c8387cc58add075`.
+- Previous intent-only B1: `c8766ed16c9806d56dad0fab733537833fa73bb4`, tree `a2dc14faa5d4278c52433b00a197115504073448`, sole parent A1.
+- Previous release PR [#2110](https://github.com/AMASI-SA/AMASI-SA/pull/2110) and branch `codex/inventory-location-short-codes-release-20261124` are preserved and superseded by the current refresh. Do not merge or publish their old intent.
 - Original implementation baseline: `80341983cf7e89145e4101b408ab68bb45f379cf`, tree `51e06077c65d99db02088ab441e1908118feb1d1`.
-- Updated release baseline J: `3fd7594af806615d4c53616100dd546ef7b5fe9f`, tree `0e139ed1822245fd40f1b4b123cae4b3c490d9f8`, the reviewed PR2103 merge.
-- Original task branch: `codex/inventory-location-short-codes-20261124` (preserved).
-- Release task branch: `codex/inventory-location-short-codes-release-20261124`, based directly on updated J.
-- Prior read-only checkpoint: `b3111de5716709c354521580bfdda4cfe4d06099`.
-- Verified implementation source: `e34016484da1ee43409a1e61b632a30b72f81c0e`.
-- Original draft PR: [#2106](https://github.com/AMASI-SA/AMASI-SA/pull/2106). The replacement release PR is recorded in Issue #1006 and the original PR; do not merge both.
-- Documentation-only checkpoint: `f4898d018b93ab71daec0d79f40ea33d561ec40b`.
-- Refreshed-base WIP checkpoint C: `d04b5b3d3a9fef5003a93da8362bd8e749c0d55e`, sole parent J; its 18 non-status feature files are byte-identical to `f4898d`. This final source adds the shipping-test fixture correction and updated verification record after C.
-- The final source checkpoint, reviewed intent-only commit and eventual deployment evidence are recorded in this task's bounded Issue #1006 section. Do not append source or documentation changes after freezing the release source.
+- Original task branch `codex/inventory-location-short-codes-20261124`, implementation `e34016484da1ee43409a1e61b632a30b72f81c0e`, documentation checkpoint `f4898d018b93ab71daec0d79f40ea33d561ec40b`, and original closed/unmerged PR [#2106](https://github.com/AMASI-SA/AMASI-SA/pull/2106) remain historical evidence.
+- The current source A2, candidate, intent-only B2, replacement PR and later deployment evidence are recorded in this task's bounded Issue #1006 section and the separate `codex/inventory-location-codes-evidence-20261124` branch. Do not append source or documentation changes after freezing A2; later evidence stays on the evidence branch.
 
-Production advanced to updated J while the test-fixture failure was being investigated. The new production paths and this task's paths are disjoint, except that the new production release owns its updated intent. A normal merge of the old task branch would itself appear in the original guard's full-history intent-change check. Consequently the release branch starts directly at J and carries the exact reviewed numbering files plus the verified fixture correction and this continuity document. The old branch is preserved without rewriting its history. The new production intent stays byte-identical until the separate intent-only B.
+Production source advanced from J1 to J2 after all B1 checks completed. J1..J2 changes eight paths: four operational source files, two operational tests, the operational task status and its release intent. None overlaps the 20 numbering-owned paths; Frontend, package/lockfiles, release controls, workflows and AGENTS did not change. This refreshed source carries the same 19 non-status blobs from A1 plus this updated status, directly on J2. The J2 intent remains byte-identical throughout J2..A2. A normal merge of the previous task branch is unsuitable because its earlier intent history would fail the original full-history source check. No old branch is rebased or force-pushed.
 
-At 15:51 UTC the original shared guard reported an active foreign lease for `chatgpt-operational-recovery-20261124-continuation`, deployment J, source `24603be6a5bc88519f59365d8f3846bd31fc2a55`; Emergent displayed that owner's publication in progress. No shared mutation or release rehearsal for this task may start until the original guard reports inactive again. Prior PR2097 is complete and unrelated; other workspaces and leases remain untouched.
+At the resumed 16:48 UTC host observation the original guard reported `active:false`, while `/app` remained tracked-clean at J1. GitHub proves PR2109 merged; that alone does not prove it was deployed. Its owner is preparing publication in a separate workspace. Preserve that owner's lease/workspaces and publication. Private source-A bootstrap may proceed without a lease; shared `/app` changes and release rehearsal require a fresh original `active:false` and the expected J2 host baseline. This feature has not changed Production.
 
 ## Implemented behavior
 
@@ -100,7 +114,20 @@ Governed Node 22.23.2 / Yarn 1.22.22; Vite 8.2.4 transformed 7,853 modules and c
 
 Non-blocking build warnings concerned the environment's experimental proxy agent, Vite's future native config loading, an existing font-import position, mixed static/dynamic sidebar import, and chunks over 500 kB. They did not fail the build and were not expanded into this numbering change. The first invocation stopped before Vite due to the launcher's repository-root working directory; the final command above uses `yarn --cwd frontend node` and passed.
 
-### PR and CI state
+### Completed previous release evidence and current refresh
+
+B1's final GitHub result is **47 completed checks: 41 success and six conditional skips, with zero pending, failure or neutral results**. The 18 workflow records comprise 17 successes and one conditional skip. The six skipped checks are branch/manual or unrelated-surface conditions; they do not replace required checks.
+
+- [Source integration](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45434916714/job/138590009956): backend 290 tests plus 237 subtests; Frontend 491 suites / 5,552 tests, no failures or skips; later browser/persistence integration steps also passed.
+- [Operational Backend](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45434917023/job/138590217078): 7,454 tests plus 151 subtests, followed by the required 106-test and 16-test / 18-subtest groups.
+- [Stock Eligibility](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45434917705/job/138589991564): 6,127 tests plus 97 subtests, with skips prohibited.
+- [Host20](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45434917528/job/138591601944) and [Host24](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45434917528/job/138591601868): all 21 steps passed in each clean-clone/no-Git adapter rehearsal, including artifact, proof, runtime identity, isolated package boundaries and JSON metadata.
+- B1 candidate RID: `rg5-f46ec42e0b8cb5f3bd757aae88f12a5023f06f3fe17cad80e4c53b042fbcb0ea`; artifact tree `20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6`. These values are historical and must not be reused for A2/B2.
+- Independent review confirmed all final B1 check records, selected raw logs, the zero-overlap J2 delta, and unchanged Frontend/control inputs.
+
+Those results remain evidence for their exact source. The new A2/B2 pair requires its own governed double build, validated candidate, identity and applicable exact-B2 CI; exact-deployment CI is also required before the reviewed host helper. Because the warehouse workflow does not select the new short-code/Mongo test files, rerun the focused 56 plus 10 isolated tests on A2. Do not repeat the unchanged full local Frontend suite without a concrete new risk.
+
+### Historical shipping fixture investigation
 
 The original PR #2106 was not merged. At `f4898d018b93ab71daec0d79f40ea33d561ec40b`, the MZ2 A+B source integration job failed to load `OrderDetailsV2.shippingIdentity.test.jsx`: an installed `react-router-dom` package was mocked as virtual, and suite order could make Jest resolve the real ESM module through `PermissionRoute.jsx`. The run passed 490 other suites and 5,541 assertions, but its later integration steps did not run. That failure is not waived by the local feature results. The replacement release branch must pass its own applicable GitHub checks.
 
@@ -132,20 +159,8 @@ Odoo documents recognizable location names, parent hierarchy and barcodes, not a
 
 ## Next safe action
 
-Read the release branch, replacement PR and final source checkpoint from this task's Issue #1006 section. The fixture and combined-base feature checks are verified. After the foreign publication has completed, build fixed source A twice under Node 22.23.2 / Yarn 1.22.22 with the reviewed backend URL, validate the candidate against complete Git ancestry, and create B changing only `release/release-intent-v5.json`. Require all applicable exact-B checks before merge, including source integration and both clean-clone host rehearsals. The earlier `f4898d` candidate is superseded and must not be published.
+Read the exact current source/intent/PR from this task's Issue #1006 section and evidence branch. Establish A2 directly on J2 with the 19 reviewed non-status blobs unchanged; verify the owned-path diff, inherited intent and complete ancestry. Run the focused 56 plus 10 isolated tests, build A2 twice using the original governed Node 22.23.2 / Yarn 1.22.22 tooling and reviewed backend URL, validate the external candidate, and create B2 changing only `release/release-intent-v5.json`. All previous candidates are superseded for deployment.
 
-Publication is now explicitly authorized. Complete the matching clean-clone adapter rehearsals, preserve the reviewed A/B relation through merge, and refresh Production refs and the original guard before touching `/app`. Only after the matched rehearsal may the owner acquire a lease, prepublish and perform one Republish. Require a new explicit Deployment Succeeded, three exact-identity live verification probes, and final `active:false`. Preserve other conversations' leases/workspaces. Verify the new cabinet form read-only and cancel it; live cabinet creation and deletion remain deferred. No further naming/layout or publication clarification is needed.
+Require all applicable exact-B2 checks, including source integration and both clean-clone host rehearsals. Refresh Production refs before merging normally with B2's tree preserved, then require the applicable exact-deployment checks before the reviewed host rehearsal. If Production advances again, stop and regenerate a source/intent pair on the new base rather than merging unbound source after A.
 
-## Release operations evidence branch (not a deployment branch)
-
-The governed release source is frozen at A `e11a29881c7ba1622c17912af6d06d9f6f8acb0a`. Intent-only B is `c8766ed16c9806d56dad0fab733537833fa73bb4`, tree `a2dc14faa5d4278c52433b00a197115504073448`, in [PR2110](https://github.com/AMASI-SA/AMASI-SA/pull/2110). The original PR2106 is closed without merge.
-
-This evidence branch `codex/inventory-location-codes-evidence-20261124` records operational receipts and the reviewable host helper separately. **Never merge this evidence branch into Production or append its files to frozen A/B.**
-
-The original governed source-A build completed twice with matching artifacts, and the original verifier, external freeze, candidate loader and independent full-source/artifact/proof review passed. Intent: 1,529,501 bytes, SHA256 `460a55ac4f5242bd51321e9df23eba793954260be80b031815f6a42122d152c1`, Git blob `9804039303c159b0750f303ce049650e597eb612`. Runtime release ID: `rg5-f46ec42e0b8cb5f3bd757aae88f12a5023f06f3fe17cad80e4c53b042fbcb0ea`. Exact-B CI is running; no merge, app mutation, own lease or publication yet.
-
-`RELEASE-EVIDENCE.json` retains the commands, exit statuses, source manifests, build/proof identities and source-build log hashes. `operators/pr2110_guarded_rehearsal.py` passed independent identity-only source review and has not been executed. It is an identity-only adaptation of the existing reviewed PR2092 helper: reviewed base J and PR/task prefixes change; all backup, foreign-file preservation, original operation-lock, exact envelope, FF-only, original adapter and verification logic remain unchanged. It requires an independently reviewed exact deployment envelope and completed exact-D gates. It never prepares a lease, publishes, performs financial actions or automatically rolls back.
-
-Current next action: require exact-B CI and both host rehearsals, review the helper and immutable deployment envelope, confirm the original foreign lease is closed, normal-merge preserving B tree, then run the guarded original app rehearsal. Only a successful rehearsal permits original prepare/prepublish and the already-authorized numbering-only publication. Require platform success plus original three-probe verification and inactive lease before completion.
-
-Independent normal-B review passed: sole parent A, only the intent path changes, exact reviewed bytes and original `load_release_intent()` validation pass with a clean tracked checkout. The host helper retains all original preconditions, including completed successful **exact-D** CI after merge, `/app` initially at J, D parents `[J,B]`, B parent `[A]`, exact untracked-entry count and no cleanup overlap. Fresh runtime preflight must confirm Python optimization is disabled; the original assert-based verifiers must execute. No guard or preservation exception is widened. The snapshot uses Git's non-ignored untracked scope; it is not a claim about every ignored foreign file.
+Publication is explicitly authorized. Refresh the original guard and confirm the shared host is on the expected baseline without a foreign lease. Use only the independently reviewed identity-updated rehearsal helper and its exact seven-field envelope, preserving unrelated files and making verified backups of the four adapter cleanup targets. Only after that matched rehearsal may this task acquire its own lease, prepublish and perform one Republish. Require a newer explicit Deployment Succeeded, three exact-identity live verification probes, and final `active:false`. Verify the new cabinet form read-only and cancel it; live cabinet creation and deletion remain deferred. No further naming, dimensions or publication clarification is needed.
