@@ -572,3 +572,48 @@ compensating movement or native source write is substituted for approval.
 Root still owns all integration and deployment. No new intent or lease exists.
 Next safe action: preserve this reviewed checkpoint, complete those independent
 reviews, then execute the final exact-source and two-commit release gates.
+
+## Bounded archive reading and short-screen navigation checkpoint
+
+Remote checkpoint `6bf2e73fc65107ac814c074ec9f07247ee96cb42` completed
+44 checks successfully with six existing conditional skips. Stock eligibility
+correctly failed its no-skips assertion because three newly added Mongo cases
+used the generic demand fixture's variable names rather than the job's owned
+operational test capability. Reviewed correction
+`b8f47cb7aa7317d50e1c21d44a670798975ff903` recognizes only one consistent,
+explicit loopback test URI. All 20 cases, including all three actual Mongo
+cases, then executed under the exact Stock environment with zero skips. No
+acceptance gate or production connection boundary was weakened.
+
+Reviewed archive source `3babaa3016a6b0f59ce366b140a0b3b1ccf17752` overlaps
+at most four encoded audit-page reads only inside the same authenticated,
+leased refresh and an exact supported Motor capability. All original ordered
+hash/count/owner/manifest validation and authorization cadence remain. Active
+driver reads have a finite deadline and are joined on every cancellation or
+failure; each validated raw buffer is released before the next validation.
+Ordinary and snapshot/session readers remain serial. Independent final
+acceptance passed 142 cases, plus a separate exact-Stock-environment selection
+of 50 cases, with zero skips. These selections overlap. The raw buffer limit
+is not a total Python RSS limit. See ARCHIVE_PAGE_PREFETCH.md.
+
+Direct browser testing also found the short accounting sidebar could place its
+return link below the viewport without a scroll container. The focused CSS
+change makes that content reachable using dynamic viewport height and local
+vertical scrolling. The existing browser harness now requires a fourteenth
+scenario: ordinary click exit at three short screen sizes during a preparing
+report, exact single consumer release, no later polling and no financial
+mutation. The source manifest binds the stylesheet, report component and its
+real API adapter. Local compilation and syntax validation passed; local
+sandboxed Chromium was denied a socket before cases executed, so the final
+GitHub browser gate remains mandatory. See SHORT_NAVIGATION_EXIT.md.
+
+A fresh production-branch read still reports D and Emergent still lists the
+prior PR #2101 publish as latest. The original guard was read directly again
+and reported inactive. Production was not changed by this follow-up. Live
+page timings, worker cancellation and aggregate memory observations are
+privately retained; they still show material report latency and memory pressure.
+The explicit closed-day advertising approval path is undergoing independent
+review in its isolated checkout. Root remains the sole integrator/deployer.
+Next safe action: preserve this WIP checkpoint remotely, validate its stronger
+CI, complete the advertising review, then freeze and verify a new immutable
+source/intent pair under the unchanged original release protocol.

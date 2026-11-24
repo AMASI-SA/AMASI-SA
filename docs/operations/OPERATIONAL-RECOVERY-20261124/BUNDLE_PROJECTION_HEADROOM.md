@@ -110,6 +110,19 @@ The new suite is included by the existing Operational Balance Web workflow's
 `test_operational_balance*.py` selection. The test runner deliberately uses
 `--noconftest` and disables dotenv; no production/shared Mongo URI was used.
 
+The first combined Stock eligibility run exposed a fixture-environment mismatch:
+that gate supplies its owned replica through `OPERATIONAL_TEST_MONGO_URI` and
+`MZ2_TEST_MONGO_URI`, whereas the generic demand-read fixture recognizes its own
+`DEMAND_READ_TEST_*` variables. Its three new Mongo cases were skipped, so the
+existing no-skips gate correctly rejected the run. A module-local adapter now
+accepts the established operational/MZ2 capability only after validating one
+consistent, explicit loopback URI without credentials or a database path.
+Local standalone runs still delegate to the original owned-replica fixture.
+With the same environment-variable set as Stock eligibility, a newly owned
+loopback replica and both `DEMAND_READ_TEST_*` variables absent, all **20 tests
+passed in 3.07 seconds**, including those three Mongo cases, with no skips.
+No workflow assertion or application runtime was changed for this correction.
+
 ## Controlled performance result
 
 The final-code synthetic benchmark uses 400 frozen financial bundle orders
@@ -136,7 +149,7 @@ independent automatic cycles under the unchanged 85-second job deadline.
 - `backend/operational_balance_sources.py` SHA-256:
   `357f7343b3a7665603f68665f2fffc2263f4f7449b4185eb0d7a3bf09f9674d5`
 - `backend/tests/test_operational_balance_bundle_cost_period.py` SHA-256:
-  `6e4e1fa20ccebb0217f5eeca24f67c1dce4540b3396daf9e69b492a5431985b5`
+  `f99e85a45658cb4daf1da6414352694280847bfb3feb915e1525e1ba2beec20f`
 
 Independent review is complete. Integration and production verification remain
 with the integration owner; local tests alone are not publication evidence.

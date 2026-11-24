@@ -1,15 +1,17 @@
 """Only unused cost expansion is omitted; all historical witnesses stay in scope."""
 import asyncio
+import os
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
 from threading import Event
+from urllib.parse import urlsplit
 
 from bson import BSON
 import pytest
 
 import operational_remaining_bundle_sources as bundles
-from demand_read_mongo_fixture import read_db, read_mongo_uri
+from demand_read_mongo_fixture import read_db, read_mongo_uri as demand_read_mongo_uri
 from operational_balance_engine import reconcile
 from operational_balance_service import report
 from operational_balance_sources import collect_sources
@@ -24,6 +26,25 @@ START = "2030-04-02T00:00:00+00:00"
 NOW = "2030-04-05T00:00:00+00:00"
 OLD = "2030-04-01T10:00:00+00:00"
 CURRENT = "2030-04-03T10:00:00+00:00"
+
+
+@pytest.fixture(scope="session")
+def read_mongo_uri(tmp_path_factory, request):
+    # Stock eligibility already owns the replica via the operational/MZ2 test
+    # variables. Reuse only that explicit loopback capability; ordinary local
+    # runs keep the demand fixture's isolated-server creation and cleanup.
+    if not (os.environ.get("DEMAND_READ_TEST_MONGO_URI") or os.environ.get("DEMAND_READ_TEST_MONGOD")):
+        supplied = {os.environ[name] for name in ("OPERATIONAL_TEST_MONGO_URI", "MZ2_TEST_MONGO_URI")
+                    if os.environ.get(name)}
+        if supplied:
+            assert len(supplied) == 1, "Conflicting isolated Mongo test capabilities"
+            uri = supplied.pop()
+            parsed = urlsplit(uri)
+            assert parsed.scheme == "mongodb" and parsed.hostname == "127.0.0.1" and parsed.port
+            assert parsed.username is None and parsed.password is None and parsed.path in ("", "/")
+            yield uri
+            return
+    yield from demand_read_mongo_uri.__wrapped__(tmp_path_factory, request)
 
 
 def raw(number, created=CURRENT):

@@ -14,7 +14,7 @@
 .mz-finance .ico{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;flex:none}
 .mz-finance button,.mz-finance a{transition:background .15s,color .15s,border-color .15s}
 .mz-finance .shell{display:grid;grid-template-columns:238px minmax(0,1fr);min-height:100vh}
-.mz-finance .side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:#fff;border-left:1px solid var(--line);padding:30px 17px 19px;z-index:4}
+.mz-finance .side{position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;overscroll-behavior-y:contain;display:flex;flex-direction:column;background:#fff;border-left:1px solid var(--line);padding:30px 17px 19px;z-index:4}
 .mz-finance .brand{display:flex;align-items:center;gap:13px;margin:0 12px 36px}
 .mz-finance .brand-mark{display:grid;place-items:center;width:45px;height:45px;border-radius:14px;color:#fff;background:#5c243f}
 .mz-finance .brand-mark .ico{width:27px;height:27px;stroke-width:1.7}
