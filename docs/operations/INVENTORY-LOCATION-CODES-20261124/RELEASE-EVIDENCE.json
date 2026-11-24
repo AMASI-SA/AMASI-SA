@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 19:19:46 UTC",
+  "observed_at_utc": "2026-11-24T19:30:41.880782+00:00",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "PUBLICATION_IN_PROGRESS",
+  "state": "PLATFORM_SUCCESS_ORIGINAL_VERIFY_RUNNING",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": true,
   "publication_authorized": true,
-  "next_safe_action": "Wait for newer explicit platform deployment finished/succeeded, then run unchanged original guard verify --url https://mezansalla.com. No repeated Publish click. Own lease remains active.",
+  "next_safe_action": "Wait for current unchanged original verifier. Require exit0, verifiedtrue/checks3/exactA2-D-RID, then original status inactive. Do not duplicate verifier or publish. Finish live add-cabinet form preview/cancel; no live creation/deletion.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -2018,12 +2018,32 @@
     },
     "republish_clicked": true,
     "publish_changes_confirmed": true,
-    "platform_state": "Publishing...",
-    "positive_outcome_observed": false,
+    "platform_state": "Deployment finished Nov24,10:29PM",
+    "positive_outcome_observed": true,
     "prior_version": {
       "ordinal": 100,
       "platform_id": "d0a7e31",
       "finished_at_display": "Nov24,08:05PM"
+    },
+    "platform_success": {
+      "display": "Deployment finished Nov 24, 10:29 PM",
+      "platform_id": "7fe1672",
+      "ordinal_label": "100th publish",
+      "newer_than_prior_by": "Later displayed timestamp and changed platform ID; no assumed ordinal increment",
+      "prior_id": "d0a7e31",
+      "prior_finished_display": "Nov24,08:05PM"
+    },
+    "production_verification": {
+      "state": "RUNNING",
+      "started_at_utc": "2026-11-24T19:30:41.880782+00:00",
+      "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "log": "/app/.git/mezan-pr2113-publication-o4xyp2sz/verify.log",
+      "original_verifier_unchanged": true,
+      "invocations": 1,
+      "expected_probes": 3,
+      "public_files": 381,
+      "expected_frontend_requests_per_probe": 770,
+      "no_concurrent_guard_status": true
     }
   }
 }

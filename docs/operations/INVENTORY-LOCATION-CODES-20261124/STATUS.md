@@ -160,3 +160,8 @@ Original `prepare` passed for actor `chatgpt-inventory-location-codes-20261124-p
 ## 2026-11-24 19:19 UTC — authorized publication in progress
 
 Original prepublish exited0 with `ready_to_publish=true` at19:18:44.860927 UTC, exact A2/D/RID (log333 bytes; SHA256 `fabd74c32b9985c34fd30e60d43d787078079c43de62a2326f5c244dd20d9a40`). Immediately clicked Republish, then the observed free-republish confirmation's Publish changes once. Platform visibly shows Publishing. No newer success yet; prior successful version100 was `d0a7e31`, displayed Nov24 08:05PM. Own lease remains active. Next: observe newer explicit success, original three-probe verify and inactive final guard, then live warehouse form preview/cancel.
+
+
+## 2026-11-24 19:30 UTC — newer platform success, original verification running
+
+Platform explicitly reported **Deployment finished Nov24,10:29PM** and new published identifier `7fe1672` (the UI labels it100th; no ordinal increment is inferred). This is newer than prior `d0a7e31` at08:05PM. Original unchanged `verify --url https://mezansalla.com` started once at19:30:41.880782 UTC, output retained in `/app/.git/mezan-pr2113-publication-o4xyp2sz/verify.log`. It performs three full probes, each including770 canonical/cache-busted public frontend requests over381 files. No concurrent status or duplicate verify/publish. Own lease remains active until original verify succeeds. Live verification is not yet claimed; final form preview/cancel remains pending.
