@@ -133,6 +133,34 @@ class TrackingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(after, before)
         return response.json()
 
+    async def test_delivery_history_is_order_scoped_and_preserves_driver_exceptions(self):
+        await self.source(status="delivering", order_id="source-10001", shipping_company="سمسا")
+        selector = {"user_id": "owner-a", "order_number": "10001", "order_id": "source-10001"}
+        assignment = {**selector, "id": "assignment-a", "driver_id": "driver-a",
+            "driver_name_snapshot": "الموصل الأول", "assigned_at": "2026-11-20T10:00:00Z",
+            "out_for_delivery_at": "2026-11-20T11:00:00Z", "delivered_at": "2026-11-21T12:00:00Z"}
+        await self.db.store_delivery_assignments.insert_many([assignment,
+            {**assignment, "user_id": "owner-b", "id": "foreign", "driver_name_snapshot": "FOREIGN_DRIVER"},
+            {**assignment, "order_id": "wrong-order", "id": "wrong", "driver_name_snapshot": "WRONG_ORDER"}])
+        await self.db.store_delivery_events.insert_many([
+            {**selector, "assignment_id": "assignment-a", "driver_id": "driver-a",
+             "event_type": "store_delivery_customer_unreachable", "occurred_at": "2026-11-20T12:00:00Z",
+             "note": "PRIVATE_NOTE"},
+            {**selector, "assignment_id": "assignment-a", "driver_id": "driver-a",
+             "event_type": "store_delivery_resumed", "occurred_at": "2026-11-21T09:00:00Z"},
+            {**selector, "assignment_id": "assignment-a", "driver_id": "different",
+             "event_type": "store_delivery_customer_requested_cancel", "occurred_at": "2026-11-20T13:00:00Z"}])
+        body = await self.get()
+        steps = body["order_route_steps"]
+        self.assertEqual(body["carrier_name"], "سمسا")
+        for label in ("أُسند الطلب إلى مندوب المتجر", "جاري توصيل الشحنة", "العميل لا يرد",
+                      "استؤنف التوصيل", "تم توصيل الشحنة"):
+            row = next(row for row in steps if row["label"] == label)
+            self.assertEqual(row["actor_name"], "الموصل الأول")
+        self.assertEqual(steps[0]["at"], "2026-11-21T12:00:00+00:00")
+        for hidden in ("PRIVATE_NOTE", "FOREIGN_DRIVER", "WRONG_ORDER", "العميل طلب إلغاء الطلب"):
+            self.assertNotIn(hidden, str(body))
+
     async def test_independent_grant_live_revoke_and_manager_owner_access(self):
         await self.source()
         self.assertEqual(required_mobile_permissions("/api/mobile/order-tracking/10001"),
