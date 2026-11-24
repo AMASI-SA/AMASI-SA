@@ -3,6 +3,8 @@ import { demandRead } from '../../lib/demandRead';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  adCorrectionPreview: (params, config = {}) => data(api.get(`${base}/ad-spend-corrections/preview`, {timeout: 30000, ...config, params})),
+  adCorrectionReceipt: (id, params, config = {}) => data(api.get(`${base}/ad-spend-corrections/receipts/${encodeURIComponent(id)}`, {timeout: 15000, ...config, params})),
   previewDeliveryAfterStart: (body, config = {}) => data(api.post(`${base}/delivery-after-start/preview`, body, {timeout: 30000, ...config})),
   confirmDeliveryAfterStart: body => data(api.post(`${base}/delivery-after-start/confirm`, body)),
   customerWalletContext: (config = {}) => data(api.get(`${base}/customer-wallet/context`, config)),
@@ -81,10 +83,11 @@ export const operationalApi = {
   obligations: (party_type, party_id, config = {}) => data(api.get(`${base}/obligations`, {...config, params:{...config.params, party_type, party_id}})),
   receiptContent: id => data(api.get(`${base}/receipts/${encodeURIComponent(id)}`, {responseType:"blob"})),
   reports: (config = {}) => data(api.get(`${base}/reports`, {timeout: 45000, ...config})),
-  refreshBalances: ({ courierOrderId, expectedSessionScope, ...config } = {}) => data(api.post(`${base}/refresh`, {
+  refreshBalances: ({ courierOrderId, expectedSessionScope, adCorrectionApproval, ...config } = {}) => data(api.post(`${base}/refresh`, {
     visible: true,
     ...(courierOrderId !== undefined ? {courier_order_id: courierOrderId} : {}),
     ...(expectedSessionScope !== undefined ? {expected_session_scope: expectedSessionScope} : {}),
+    ...(adCorrectionApproval !== undefined ? {ad_correction_approval: adCorrectionApproval} : {}),
   }, {timeout: 90000, ...config})),
   costExposure: (config = {}) => data(api.get(`${base}/cost-exposure`, {timeout: 45000, ...config})),
   financialPosition: ({ demand, readDemand, ...config } = {}) => demand

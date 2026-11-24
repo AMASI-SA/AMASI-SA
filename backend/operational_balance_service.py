@@ -657,7 +657,7 @@ def _bank_credit_actions(orders, recorded):
     return actions
 
 
-async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
+async def _reconcile_with_profit_snapshot(db, owner, state, stamp, *, ad_correction=None):
     """Join independent visible-request preparations before any financial save.
 
     Profit reads depend only on the owner and observation period. They do not
@@ -697,6 +697,9 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
+        if ad_correction is not None:
+            from operational_ad_corrections import prepare_approval
+            sources, ad_correction["plan"] = await prepare_approval(db, owner, state, sources, ad_correction, stamp)
         with refresh_stage("reconciliation"):
             result = await run_calculation(reconcile, state, sources, stamp)
         return result, sources
@@ -754,11 +757,15 @@ def _apply_refreshed_party_names(result, names):
                     "code": "operational_obligation_entity_incomplete", "source_id": obligation["id"]})
 
 
-async def refresh(db, owner, *, clock=None):
+async def refresh(db, owner, *, clock=None, ad_correction=None):
     from operational_demand_refresh import calculation_checkpoint, checkpoint, refresh_stage, run_calculation
     stamp = clock or now()
 
     async def apply(state):
+        if ad_correction is not None:
+            from operational_ad_corrections import approval_receipt
+            if approval_receipt(state, ad_correction) is not None:
+                return state
         if state["status"] != "active":
             return state
         previous_as_of = state.get("engine", {}).get("as_of")
@@ -766,7 +773,8 @@ async def refresh(db, owner, *, clock=None):
             return state
         await active_gate(db, owner, state)
         await checkpoint()
-        result, sources = await _reconcile_with_profit_snapshot(db, owner, state, stamp)
+        options = {"ad_correction": ad_correction} if ad_correction is not None else {}
+        result, sources = await _reconcile_with_profit_snapshot(db, owner, state, stamp, **options)
         from operational_bank_receipt_rollout import initialize_admission
         initialize_admission(result, stamp)
         await checkpoint()
@@ -814,6 +822,9 @@ async def refresh(db, owner, *, clock=None):
                 except ValueError:
                     names[kind] = {}
             await run_calculation(_apply_refreshed_party_names, result, names)
+        if ad_correction is not None:
+            from operational_ad_corrections import record_approval
+            await run_calculation(record_approval, state, result, ad_correction, ad_correction["plan"], stamp)
         from operational_entity_freshness import FIELD, build_coverage
         result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
         from operational_balance_recovery_proof import FIELD as PROOF_FIELD, build_recovery_proof
@@ -822,7 +833,12 @@ async def refresh(db, owner, *, clock=None):
         state["engine"]["as_of"] = stamp
         await checkpoint()
         return state
-    return await mutate(db, owner, apply)
+    async def review_before_commit(before, after):
+        from operational_ad_corrections import verify_before_commit
+        return await verify_before_commit(db, owner, before, after, ad_correction)
+
+    options = {"before_commit": review_before_commit} if ad_correction is not None else {}
+    return await mutate(db, owner, apply, **options)
 
 
 async def supplier_return(db, owner, actor, payload, *, clock=None):
@@ -879,13 +895,14 @@ def paypal_available(computed):
 
 def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False, paypal_sar=False, workspace_provider=None):
     from operational_financial_activity_runtime import preparation_checkpoint
+    from operational_report_copy import copy_report_value
     preparation_checkpoint()
     # Revision-bound health and recovery receipts have their own owner-only
     # readers. They are not financial report data, and copying/returning them
     # would change an otherwise identical report on every successful refresh.
     state = {**state, "engine": {key: value for key, value in state.get("engine", {}).items()
              if key not in {"automatic_source_coverage", "recovery_proof_v1"}}}
-    state = reconcile_credits(deepcopy(state))
+    state = reconcile_credits(copy_report_value(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
     valuations = usable_bases(state) if provider_balances_sar or paypal_sar else {}
     if paypal_sar and not provider_balances_sar:
@@ -925,7 +942,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                 "expense_paid", "owner_withdrawals", "ad_wallet_spent", "ad_wallet_balance", "ad_payable",
                 "customer_refunds_manual_debited")}}
         return parties[key]
-    obligations = deepcopy([row for row in (state.get("engine", {}).get("obligations") or {}).values() if not row.get("superseded")])
+    obligations = copy_report_value([row for row in (state.get("engine", {}).get("obligations") or {}).values() if not row.get("superseded")])
     for opening in state["openings"].values():
         preparation_checkpoint()
         row = get(opening["party_type"], opening["party_id"], opening["currency"], opening["name"])
@@ -1082,7 +1099,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                     settled = external_settled.get(identity, Decimal(0))
                     if settled > unallocated:
                         raise ValueError("external_advance_settlement_exceeds_balance")
-                    claim = deepcopy(external_claims[identity])
+                    claim = copy_report_value(external_claims[identity])
                     claim.update(settled=fmt(settled), outstanding=fmt(unallocated-settled),
                                  available_to_pay=fmt(unallocated-settled), pending_confirmation=False)
                     obligations.append(claim)
@@ -1198,7 +1215,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         "reference":case.get("refund_reference"), "reason":case.get("note")
         } for case in state.get("customer_returns", [])
         if case.get("case_type") == "order_compensation"]
-    provider_metrics = deepcopy(details.get("provider_reports", {}))
+    provider_metrics = copy_report_value(details.get("provider_reports", {}))
     settlement_parts = {}
     for movement in state["movements"]:
         preparation_checkpoint()
@@ -1244,7 +1261,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         preparation_checkpoint()
         provider_metrics[identity] = convert_projection(provider_metrics[identity], valuations[identity])
     details["provider_reports"] = provider_metrics
-    cod_metrics = deepcopy(details.get("cod_reports", {}))
+    cod_metrics = copy_report_value(details.get("cod_reports", {}))
     # Preserve incoming-only settlement arithmetic and allocation order, but
     # traverse history once rather than once for every COD claim.
     cod_settled = {}
@@ -1269,7 +1286,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     details["cod_reports"] = cod_metrics
     from operational_bank_credit_recognition import STATUS_INELIGIBLE
     # An ineligible bank receipt is visible in order review but has no financial effect yet.
-    issues = [deepcopy(row) for row in state.get("engine", {}).get("issues", [])
+    issues = [copy_report_value(row) for row in state.get("engine", {}).get("issues", [])
               if row.get("code") != STATUS_INELIGIBLE] + valuation_issues
     details["provider_order_payments"], details["provider_paid_totals"] = provider_customer_payments({
         "details": details, "issues": issues, "obligations": obligations,
@@ -1280,7 +1297,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         from operational_workspace_provider_orders import ProviderOrders
         order_details = ProviderOrders(workspace_provider, state)
     details["provider_balances"], resolved_fees = provider_balances(
-        state, details, obligations, parties if provider_balances_net else deepcopy(parties), valuations,
+        state, details, obligations, parties if provider_balances_net else copy_report_value(parties), valuations,
         sar_view=provider_balances_sar, paypal_sar=paypal_sar, order_details=order_details)
     if order_details is not None:
         details["workspace_provider_orders"] = list(order_details.rows.values())

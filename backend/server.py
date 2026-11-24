@@ -4441,6 +4441,8 @@ async def _local_startup() -> None:
     # canonical guards and runs the existing jobs with their existing leases.
     from background_worker_process import start_background_process
     start_background_process(app)
+    from salla_integration.webhook_monitor_routes import start_monitor_index_initialization
+    app.state.salla_monitor_index_task = start_monitor_index_initialization(db)
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     process_local_readiness_event.set()
@@ -4505,6 +4507,10 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     process_local_readiness_event.clear()
+    monitor_index_task = getattr(app.state, "salla_monitor_index_task", None)
+    if monitor_index_task is not None:
+        monitor_index_task.cancel()
+        await _asyncio.gather(monitor_index_task, return_exceptions=True)
     from background_worker_process import stop_background_process
     await stop_background_process(app)
     from order_review_resume_worker import stop_worker as stop_review_resume

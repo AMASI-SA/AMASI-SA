@@ -17,6 +17,7 @@ from operational_customer_provider_projection import (
 
 ZERO = Decimal(0)
 PENDING_SAMPLE_LIMIT = 20
+_REPORT_PROFILE_SCOPE_LIMIT = 256
 PENDING_MESSAGES = {
     "customer_collection_fee_unavailable": "التحصيل الإضافي مؤكد؛ عمولته تحتاج استكمالًا، وأصل المبلغ ظاهر مستقلًا.",
     "customer_collection_fee_match_required": "وصل أصل التحصيل الإضافي؛ يلزم ربط رسوم عمليته بكشف المنصة، وصافي التحصيل الأصلي محفوظ.",
@@ -258,6 +259,26 @@ def _unclaimed_same_provider_aliases(state, records, claims):
 
 def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False, paypal_sar=False, order_details=None):
     """Project fees once on the unpaid gross claim. Never change saved financial state."""
+    # These saved inputs are immutable for this report. A profile's owner,
+    # signature, rates and ambiguity checks need run once per exact source
+    # scope, not once per order. Never carry a result into another report.
+    selected_profiles = {}
+
+    def selected_profile(provider, currency, payment):
+        if (type(state.get("owner_id")) is not str or type(provider) is not str
+                or type(currency) is not str or type(payment) not in (dict, type(None))):
+            return select_statement_average_profile(state, provider, currency, payment=payment)
+        account = (payment or {}).get("merchant_account")
+        if type(account) not in (str, type(None)):
+            return select_statement_average_profile(state, provider, currency, payment=payment)
+        scope = (provider, currency, account)
+        if scope in selected_profiles:
+            return selected_profiles[scope]
+        profile = select_statement_average_profile(state, provider, currency, payment=payment)
+        if len(selected_profiles) < _REPORT_PROFILE_SCOPE_LIMIT:
+            selected_profiles[scope] = profile
+        return profile
+
     records, claims = _records(state, obligations, valuations)
     aliases = _unclaimed_same_provider_aliases(state, records, claims)
     collections = collection_records(state)
@@ -346,7 +367,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             return
         total["_fee_bases"].add("average_estimate")
         total["average_estimated_orders"].add(row["order_id"])
-        total["_average_profiles"][profile["profile_id"]] = statement_average_summary(profile)
+        if profile["profile_id"] not in total["_average_profiles"]:
+            total["_average_profiles"][profile["profile_id"]] = statement_average_summary(profile)
         total["_average_fixed_bases"].add(components["fixed_basis"])
         total["_average_operations_bases"].add(components["operations_basis"])
         total["average_variable_fees"] += components["variable"]
@@ -429,7 +451,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         fee = None
         fee_basis = "unavailable"
         estimate = {}
-        profile = select_statement_average_profile(state, provider, row["native_currency"], payment=row.get("payment"))
+        profile = selected_profile(provider, row["native_currency"], row.get("payment"))
         applied = allocated[identity]["gross"]
         operations, operations_basis = None, "unavailable"
         captures = statement_context["captures"][row["order_id"], provider]

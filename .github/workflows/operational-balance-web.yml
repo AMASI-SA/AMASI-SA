@@ -242,6 +242,9 @@ jobs:
               ('test_operational_balance_delivery_confirmation_integration', 20),
               ('test_operational_balance_delivery_confirmation_lifetime', 4),
               ('test_operational_balance_delivery_confirmation_acquisition', 9),
+              ('test_operational_balance_ad_corrections', 60),
+              ('test_operational_balance_ad_corrections_mongo', 18),
+              ('test_operational_balance_report_copy', 55),
           ):
               found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite]
               assert len(found) >= minimum, suite + ' demand-only/completeness coverage missing'
@@ -400,6 +403,7 @@ jobs:
                                           ['useDashboardCardSnapshot.test.jsx', 26],
                                           ['PreparationWorkDashboard.loading.test.jsx', 3],
                                           ['InventoryOptionRoles.test.jsx', 5],
+                                          ['AdSpendCorrections.test.jsx', 13],
                                           ['inventoryOptionPolicy.test.js', 3]]) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || suite.assertionResults.length < minimum)
@@ -562,16 +566,16 @@ jobs:
           const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
           if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
-              evidence.chromium_sandbox !== true || evidence.results.length !== 13 ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 14 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All thirteen simple balances browser scenarios must execute and pass');
+            throw Error('All fourteen simple balances browser scenarios must execute and pass');
           }
           for (const name of ['ledger', 'external-form', 'refund', 'access']) {
             for (const size of ['desktop', 'mobile']) {
               if (!fs.statSync(path.join(out, `${name}-${size}.png`)).size) throw Error('Missing component screenshot');
             }
           }
-          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile', 'automatic-freshness-warning-mobile']) {
+          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile', 'automatic-freshness-warning-mobile', 'short-accounting-navigation']) {
             if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing period/review/freshness screenshot');
           }
           JS

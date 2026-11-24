@@ -121,7 +121,18 @@ def _source_indexes(sources, state):
     for identity, row in _checked(state.get("engine", {}).get("obligations", {}).items()):
         if row.get("ad_day_id"):
             ad_parts[row["ad_day_id"]].append((identity, row))
+    # The approved-invoice proof deliberately excludes returns. Index both
+    # existing return facts and accepted native returns once for this receipt;
+    # scanning all facts for every supplier component would be quadratic.
+    supplier_returns = {row["receipt_id"] for key, row in _checked(state.get("engine", {}).get("facts", {}).items())
+                        if isinstance(key, str) and key.startswith("return:") and type(row) is dict
+                        and type(row.get("receipt_id")) is str}
+    supplier_returns.update("receipt:" + str(row.get("receipt_id"))
+        for row in _checked(sources.get("supplier_returns", []))
+        if type(row) is dict and row.get("accepted") is True)
     return {"salary_candidates": {}, "ad_parts": ad_parts, "ad_verified": {},
+            "supplier_receipts": _index(sources.get("supplier_receipts", []), lambda row: str(row.get("id", ""))),
+            "supplier_returns": supplier_returns,
             "orders": _index(sources.get("orders", []), lambda row: str(row.get("id", ""))),
             "deliveries": _index(chain(sources.get("orders", []), sources.get("delivery_events", [])), lambda row: str(row.get("id", ""))),
             "employees": _index(sources.get("employees", []), lambda row: str(row.get("id", ""))),
@@ -134,6 +145,7 @@ def _source_indexes(sources, state):
 
 
 def _ad_original(state, sources, row, day, stamp):
+    from operational_balance_engine import amount
     key = "advertising:" + row["party_id"] + ":" + day.isoformat()
     if key not in sources["ad_verified"]:
         source = sources["ads"].get((row["party_id"], day.isoformat()))
@@ -141,19 +153,82 @@ def _ad_original(state, sources, row, day, stamp):
         zone = ZoneInfo(source["timezone"])
         end = datetime.combine(day + timedelta(days=1), time.min, zone)
         parts = sources["ad_parts"].get(key, [])
-        valid_parts = bool(parts) and all(identity in {key, key + ":wallet", key + ":credit"}
+        # Native Google costs retain micros. The financial engine records cents
+        # with HALF_UP, so exact raw-vs-cent equality incorrectly rejects valid
+        # original dates. Reproduce only that engine conversion/allocation;
+        # never use a tolerance or alter either the native or financial amount.
+        native_amount = _money(source["amount"])
+        financial_amount = Decimal(amount(native_amount))
+        expected_parts = {key: financial_amount}
+        funding, wallet_first = source.get("funding_type"), source.get("funding_policy") == "wallet_first"
+        fraction = Decimal(0) if wallet_first or funding == "postpaid" else Decimal(1)
+        expected_funding = {key: "wallet_first" if wallet_first else funding}
+        if funding == "hybrid" and not wallet_first:
+            fraction = _money(source["wallet_fraction"])
+            if fraction is None or fraction > 1:
+                return False
+            wallet = Decimal(amount(native_amount * fraction))
+            expected_parts = {key + ":wallet": wallet, key + ":credit": Decimal(amount(native_amount-wallet))}
+            expected_funding = {key + ":wallet": "prepaid", key + ":credit": "postpaid"}
+        valid_parts = set(identity for identity, _ in parts) == set(expected_parts) and all(
+            identity in expected_parts
+            and part.get("id") == identity and part.get("direction") == "payable"
             and part.get("party_type") == "ad_account" and part.get("party_id") == row["party_id"]
             and part.get("currency") == source["currency"] and part.get("business_date") == day.isoformat()
             and part.get("timezone") == source["timezone"] and not part.get("superseded")
-            and _money(part.get("expected")) == 0 and _money(part.get("confirmed")) is not None
-            and _money(part.get("ad_total_amount")) == _money(source["amount"]) for identity, part in _checked(parts))
+            and _money(part.get("expected")) == 0 and _money(part.get("confirmed")) == expected_parts[identity]
+            and (funding is None or (part.get("funding_mode") == funding
+                 and part.get("funding_type") == expected_funding[identity]
+                 and part.get("funding_policy") == source.get("funding_policy")
+                 and _money(part.get("wallet_fraction")) == fraction))
+            and _money(part.get("ad_total_amount")) == financial_amount for identity, part in _checked(parts))
         sources["ad_verified"][key] = (source.get("closed") is True and source.get("complete") is True
             and source.get("day_ended") is True and saved.get("closed") is True
             and saved.get("timezone") == source["timezone"] and valid_parts
-            and _money(source["amount"]) == _money(saved.get("amount"))
-            and sum((_money(part["confirmed"]) for _, part in parts), Decimal(0)) == _money(source["amount"])
+            and financial_amount == _money(saved.get("amount"))
+            and sum((_money(part["confirmed"]) for _, part in parts), Decimal(0)) == financial_amount
             and end <= _instant(source["observed_at"]) <= stamp and stamp >= end + timedelta(hours=2))
     return row.get("ad_day_id") == key and sources["ad_verified"][key]
+
+
+def _supplier_original(state, sources, identity, row, day, stamp):
+    """Certify only a paired native approved invoice with no return evidence."""
+    from operational_balance_engine import amount, instant
+    evidence = row.get("evidence_ids")
+    if type(evidence) is not list or len(evidence) != 1 or type(evidence[0]) is not str or not evidence[0].startswith("receipt:"):
+        return False
+    receipt_id = evidence[0]
+    source = sources["supplier_receipts"].get(receipt_id.removeprefix("receipt:"))
+    if type(source) is not dict or receipt_id in sources["supplier_returns"]:
+        return False
+    if (not source.get("invoice_id") or source.get("component_fully_invoiced") is not True
+            or row.get("source_component_fully_invoiced") is not True):
+        return False
+    if any(type(source.get(field)) is not str or not source[field]
+           for field in ("id", "order_id", "item_id", "supplier_id", "invoice_id")):
+        return False
+    accepted = instant(source["accepted_at"])
+    gross, net, tax = (_money(source.get("gross_amount", source["amount"])),
+                       _money(source.get("net_amount", source["amount"])), _money(source.get("tax_amount", "0")))
+    if None in (gross, net, tax) or gross != net+tax or gross != _money(source["amount"]):
+        return False
+    frozen = {"order_id": source["order_id"], "item_id": source["item_id"],
+              "supplier_id": source["supplier_id"], "amount": amount(gross),
+              "net_amount": amount(net), "tax_amount": amount(tax), "gross_amount": amount(gross),
+              "tax_evidence": source.get("tax_evidence"), "accepted_at": accepted.isoformat()}
+    return (identity == "supplier:" + source["order_id"] + ":" + source["item_id"] + ":" + receipt_id
+        and row.get("id") == identity and row.get("kind") == row.get("party_type") == "supplier"
+        and row.get("party_id") == source["supplier_id"] and row.get("currency") == source.get("currency") == "SAR"
+        and row.get("direction") == "payable" and _money(row.get("expected")) == 0
+        and _money(row.get("confirmed")) == Decimal(amount(gross)) and _money(row.get("returned_amount")) == 0
+        and row.get("source_invoice_id") == source["invoice_id"]
+        and row.get("source_invoice_number") == source.get("invoice_number")
+        and _instant(row.get("source_invoice_approved_at")) == accepted
+        and _instant(state.get("started_at")) <= accepted <= stamp
+        and accepted.astimezone(RIYADH).date() == day
+        and state.get("engine", {}).get("facts", {}).get(receipt_id) == frozen
+        and all(_money(row.get(field)) == _money(frozen[field]) for field in ("net_amount", "tax_amount", "gross_amount"))
+        and row.get("tax_evidence") == frozen["tax_evidence"])
 
 
 def _original_date(state, sources, identity, row, stamp, *, movement=False):
@@ -192,6 +267,9 @@ def _original_date(state, sources, identity, row, stamp, *, movement=False):
             return False, "movement_date_unproven"
         if row.get("derived_credit") is True:
             return False, "derived_adjustment"
+        if row.get("kind") == "supplier":
+            valid = _supplier_original(state, sources, identity, row, day, stamp)
+            return valid, "supplier_invoice_approval" if valid else "supplier_invoice_date_unproven"
         if row.get("kind") == "provider":
             from operational_provider_dates import verified_original_obligation
             order_id = identity.removeprefix("provider:").split(":", 1)[0]

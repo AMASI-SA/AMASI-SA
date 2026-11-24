@@ -237,13 +237,19 @@ async def unpack(db, owner, state):
     from operational_financial_activity_runtime import prepare_in_thread
     context = demand_context()
     visible = context is not None and context.db is db and context.owner == owner
-    # Only this exact request/owner may group fresh authorization gates. Keep
-    # every page read sequential and validate it before reading the next one.
-    # The joined worker still observes cancellation for each page; ordinary
-    # readers and other database/session capabilities retain their old gates.
+    # Only this exact request/owner may group fresh authorization gates. A
+    # plain Motor refresh may prefetch bounded raw pages below, while every
+    # validation remains ordered. Other database/session readers keep their
+    # original sequential reads and per-page authorization capabilities.
     prepare_page = prepare_in_thread if visible else _prepare_read
     events = []
     refs = meta["pages"]
+    from operational_audit_prefetch import read_audit_pages
+    prefetched = await read_audit_pages(db, owner, refs)
+    if prefetched is not None:
+        if len(prefetched) != meta["count"]:
+            raise ArchiveError("incomplete reconciliation audit")
+        return await _prepare_read(_restore_audit, state, prefetched, tail)
     for index, ref in enumerate(refs):
         if visible and index % VISIBLE_AUDIT_GATE_PAGES == 0:
             await checkpoint()

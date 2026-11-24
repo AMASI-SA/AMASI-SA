@@ -18,6 +18,7 @@ let actor = f.owner, scenario = '', access = structuredClone(f.access);
 const rows = structuredClone(f.ledger), refunds = [...Array.from({ length: 6 }, (_, index) => f.refund(index)), structuredClone(f.platformRefund)];
 const requests = new Set();
 const pendingCommands = new Map(), retiredCommands = new Set();
+const shortDrawerConsumers = new Set(), releasedShortDrawerConsumers = new Set();
 let holdEntryRegistration = false, releaseEntryRegistration = null, entryRegistrationStarted = null;
 let balanceHealth = null, releaseBalanceRefresh = null, balanceRefreshStarted = null;
 const assertRegistered = (action, targetId, body) => {
@@ -57,9 +58,23 @@ const server = http.createServer(async (request, response) => {
     let body;
     if (request.method !== 'GET') {
       let raw = ''; for await (const chunk of request) raw += chunk;
-      body = JSON.parse(raw); call.body = body;
+      body = raw ? JSON.parse(raw) : null; call.body = body;
     }
     if (url.pathname === '/api/auth/me' && request.method === 'GET') return send(200, actor);
+    if (url.pathname === '/api/operational-balances/workspace/report' && request.method === 'GET') {
+      assert.equal(scenario, 'Short accounting navigation exits a pending report and releases its read');
+      assert.equal(call.params.view, 'summary'); assert.equal(call.params.demand, 'true');
+      assert.match(call.consumer, /^[a-zA-Z0-9-]{8,128}$/);
+      assert(!releasedShortDrawerConsumers.has(call.consumer), 'An exited consumer must not poll again');
+      shortDrawerConsumers.add(call.consumer);
+      return send(202, { status: 'preparing', key: 'short-drawer-report', retry_after_ms: 2000 });
+    }
+    if (url.pathname === '/api/operational-balances/workspace/read-demand/short-drawer-report' && request.method === 'DELETE') {
+      assert(shortDrawerConsumers.has(call.params.consumer_id), 'Release must own its report consumer');
+      assert(!releasedShortDrawerConsumers.has(call.params.consumer_id), 'Release exactly once');
+      releasedShortDrawerConsumers.add(call.params.consumer_id);
+      return send(200, { released: true });
+    }
     if (url.pathname === '/api/operational-balances/freshness' && request.method === 'GET') {
       if (!actor.is_owner) return send(403, { detail: { code: 'operational_freshness_owner_required' } });
       return send(200, balanceHealth || f.freshness(actor));
@@ -664,7 +679,40 @@ async function capture(page, name) {
       await capture(page, 'automatic-freshness-warning-mobile');
       balanceHealth = null; releaseBalanceRefresh = null; balanceRefreshStarted = null;
     });
-    assert.deepEqual(errors, []); assert.equal(results.length, 13); assert.equal(screenshots.length, 13);
+    await check('Short accounting navigation exits a pending report and releases its read', async () => {
+      actor = f.owner;
+      for (const [width, height] of [[674, 468], [390, 360], [1440, 420]]) {
+        await page.setViewportSize({ width, height });
+        const start = calls.length;
+        const pending = page.waitForResponse(response => response.status() === 202
+          && new URL(response.url()).pathname === '/api/operational-balances/workspace/report');
+        await page.goto(origin + '/operational-balances?view=reports');
+        await pending;
+        await page.getByText('جارٍ قراءة التقرير…', { exact: true }).waitFor();
+        if (width <= 800) await page.getByRole('button', { name: 'القائمة', exact: true }).click();
+        const back = page.getByRole('link', { name: 'العودة إلى ميزان', exact: true });
+        await back.scrollIntoViewIfNeeded();
+        const bounds = await back.boundingBox();
+        assert(bounds && bounds.y >= 0 && bounds.y + bounds.height <= height,
+          'Return must be reachable inside the short viewport: ' + JSON.stringify({ width, height, bounds }));
+        if (width === 674) await capture(page, 'short-accounting-navigation');
+        const released = page.waitForResponse(response => response.request().method() === 'DELETE'
+          && new URL(response.url()).pathname.endsWith('/read-demand/short-drawer-report'));
+        await back.click();
+        await page.getByRole('heading', { name: 'خارج الأرصدة — وجهة الاختبار', exact: true }).waitFor();
+        assert.equal((await released).status(), 200);
+        const count = calls.filter(call => call.path === '/api/operational-balances/workspace/report').length;
+        // Longer than the steady poll cadence: leaving must stop every consumer.
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        assert.equal(calls.filter(call => call.path === '/api/operational-balances/workspace/report').length, count);
+        assert.equal(calls.slice(start).filter(call => call.method === 'DELETE').length, 1);
+        assert.equal(calls.slice(start).some(call => ['POST', 'PUT', 'PATCH'].includes(call.method)), false);
+        assert.equal(await page.locator('#finance-main').count(), 0);
+      }
+      assert.equal(shortDrawerConsumers.size, 3);
+      assert.equal(releasedShortDrawerConsumers.size, 3);
+    });
+    assert.deepEqual(errors, []); assert.equal(results.length, 14); assert.equal(screenshots.length, 14);
     await context.close();
   } finally {
     fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true, chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));

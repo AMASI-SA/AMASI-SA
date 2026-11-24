@@ -399,3 +399,284 @@ The next source commit must be rebuilt and get its own intent/proof; A2's proof
 is not reusable. Final reviewed B CI and the official clean-clone Emergent
 rehearsal remain mandatory. No merge, publish, source-sync, financial refresh
 or automation enable by this task has occurred.
+
+## Live verification follow-up after PR #2101
+
+The preceding entries are historical checkpoints. PR #2101 was normally merged
+as `0ffa962d3cfda3eb49b5750c7bdc2f932a645d4d` and published through the original
+v5 guard. Live source is `1b928b7221b8f56a9a652aa7d251d6baff095ba3`, release ID
+`rg5-490ad5d4e64d59753972aba0328d23df8b1a15f9df245c2a2a2f4354501244df`.
+Emergent publish `4998d1e` completed; all three original guard verification
+rounds passed and the lease closed. A fresh GitHub check found the production
+branch still at that merge. User-authorized source recovery and one financial
+refresh subsequently completed. Financial evidence remains private and is not
+included in repository records. Automation has not yet been enabled.
+
+Direct live acceptance exposed two further bounded issues. The receipt UI
+rejected legitimate explicit-null unassigned group identities, preventing
+download of an otherwise valid saved receipt. All financial views also
+revalidated the same saved fee profile for each order in one report. This
+follow-up retains explicit unassigned groups in display and the complete JSON
+export, and scopes fee-profile selection to one immutable report invocation.
+Money, dates, admission policies and source records are unchanged.
+
+Integration branch: `codex/operational-recovery-verification-20261124`, based
+exactly on production D above. Reviewed source commits are
+`9a7f5eb631b345f07a53c44577775bf7aa100ffc` (receipt UI) and
+`33dd0fb3d6a1bf5e62166a044fe4baa64c357d12` (per-report profile reuse).
+They were cherry-picked without conflict into this dedicated checkout.
+Both frozen release candidates, the original WIP checkout and shared Emergent
+files remain untouched by this follow-up. No new release intent is frozen.
+
+Verification: the receipt regression reproduced two failures before its fix;
+39 affected UI tests passed afterwards, with 25 independently repeated. The
+profile change passed 184 focused tests independently, and all 36 differential
+reports across 12 views matched the deployed source byte for byte. A paired
+synthetic benchmark reduced median report time from 1519.66 ms to 1055.82 ms;
+this is not a production timing claim. These test selections overlap and must
+not be added together. See the two scoped evidence documents in this folder.
+
+Production changed: yes, by the previously approved PR #2101 release and
+subsequent expressly authorized recovery. This follow-up itself has not been
+published. Remaining: independent original-date verifier corrections,
+integrated source gates, a new governed A/B intent pair, original-guard
+rehearsal/publish/verification, receipt export and complete financial acceptance,
+and actual scheduled-cycle and performance verification. Preserve the saved
+receipt before another financial calculation. Issue #1006 reached GitHub's
+comment limit; the task PR body is the continuation fallback already recorded
+by this task. The next safe action is to push this verified checkpoint and
+open a draft continuation PR, then integrate only reviewed verifier changes.
+
+## Native-date verification and saved-report read checkpoint
+
+PR #2102 is an open Draft. Its first remote checkpoint is
+`b6a6e9c911853a9f7110ba7bf5b8bc7d4b5f6367`, tree
+`5139aa42611cd36d0cf8b4fb66879319472134c4`. A fresh GitHub ref read still
+reports production D `0ffa962d3cfda3eb49b5750c7bdc2f932a645d4d`.
+
+The next source checkpoint additionally verifies advertising native micros
+using the engine's exact cent conversion and funding allocation. Supplier
+original-date certification requires a unique native approved invoice paired
+with the frozen receipt, exact identity/currency/money and Riyadh approval day;
+returns, estimates and incomplete sources remain unverified. This changes only
+future proof classification, never financial amounts, original dates or saved
+historical receipts. All added fixtures use synthetic dates and values.
+Two independent runs of the same five focused suites passed 183 tests each.
+Runtime SHA256: `5d11b801fb86e69e72f89860baa2fec1838302122f3e63d6f29ef7a52e7e17f0`.
+Synthetic test SHA256: `d344bf593cf7aaa11cfd531d80ac479e1078cbd61447fd586bb19b2873c92737`.
+
+The legacy saved `/reports` route now uses the existing financial-state reader,
+avoiding historical audit-page hydration that its response discards. Complete
+response equality, owner reauthorization, financial/issue packet and manifest
+integrity, and cancellation are retained. Explicit `/audit` remains unchanged.
+Four fail-first cases reproduced audit reads on the prior source. Both author
+and independent reviewer passed all 60 affected cases. See
+`SAVED_REPORT_STATE_READ.md`; production latency is not yet measured for this
+change.
+
+The full first financial receipt has now been privately archived and checked.
+The private audit enumerates every group and keeps original-date additions,
+unverified additions and changed-existing deltas separate. A supplemental
+native invoice comparison is underway; no financial data is included here.
+No second financial calculation or automation enablement has occurred at this
+checkpoint. The prior PR #2101 deployment remains the live version.
+
+Remaining source work: bounded Salla native detail fallback for existing
+missing-clock candidates, explicit creation-date recovery bounds, and truthful
+partial/truncated status. An isolated worktree owns that change. Root alone
+owns integration, merge, deployment and live recovery. No new intent or lease
+has been created. Next safe action: preserve this exact reviewed tree remotely
+on PR #2102, finish and independently review Salla, then run integrated gates
+and the complete new A/B release protocol.
+
+## Source-window, monitor and statement integration checkpoint
+
+The preceding entries are historical. The second remote PR #2102 checkpoint
+is `af0f7f6267ef299958cb22b49a38d15fbc6847f6`, tree
+`67570a8b0b2063e8fce4460975653e268571a22c`. Production remains the previously
+verified PR #2101 identity; no follow-up release intent has been frozen.
+
+Reviewed Salla source commit `6bebde32c04c272fe0fa9ac6f80d76dfa428b326`
+adds a bounded explicit creation-date window, native detail fallback for
+eligible missing-clock candidates, and truthful partial/truncated outcomes.
+Scheduled reconciliation remains update-only. Explicit manual recovery may
+import new orders within the requested window, with original source identity,
+dates, items and the existing component fence. No fence or financial admission
+rule is bypassed. Author verification passed 472 tests with 43 subtests on an
+owned local Mongo replica; independent review passed 147 focused backend,
+14 frontend and all 24 actual transaction cases with zero skips.
+
+Reviewed monitor commit `9d510f67041a5f4561b1db70a258febaf7b159b6` addresses
+the observed whole-history monitor query timeout. Historical counts use a
+covering metadata index; at most one projected latest row per approved event
+is fetched separately. Missing index, timeout or invalid scope gives explicit
+unknown status. A bounded one-shot startup task initializes the index without
+blocking readiness and is cancelled/joined on shutdown. GET performs no index
+or data write. Author and independent runs passed 75 cases each, including
+four real-Mongo cases without skips. The new suite is added to the existing
+Salla recovery CI selection; no acceptance gate is removed.
+
+Statement views and printing now select the existing saved demand-read path
+with the original AbortSignal. Six real-transport fail-first tests reproduced
+the legacy behavior, then passed. Both root and independent review passed
+53 frontend cases; independent backend statement, 360-row chunk parity and
+disconnect checks passed 43 cases without skips. Full periods, money, dates,
+current authorization and print grants are preserved. See the scoped source,
+monitor and statement evidence documents for commands and limitations.
+
+Live owner-authorized automation was enabled after a fresh inactive guard
+check. Two independently scheduled attempts ran after leaving accounting.
+The first failed the bounded primary read. The second completed that read but
+reached the existing 85-second total lifetime during reconciliation. Neither
+committed partial financial output. This is an unresolved release blocker,
+not a successful automation claim. Isolated reviewers are investigating
+repeated snapshot decoding and source/profit construction while retaining
+all deadlines, low-priority execution, complete-source admission and CAS.
+
+The complete initial recovery receipt and independent native source supplement
+are privately archived, with their individual identities and preservation
+checks. No private financial fixtures or evidence are included in this PR.
+Root remains the sole merger, deployer and live writer. Existing shared files,
+other conversations and prior release pairs remain preserved. Next safe action:
+push this verified WIP tree and update the PR continuation, resolve the actual
+automatic-cycle timeout, run all final gates, then freeze a new governed A/B
+pair and follow the unchanged original-guard release procedure.
+
+## Independent scheduled commit and retained performance work
+
+The third live scheduled attempt completed and committed while the accounting
+pages were closed. Its new receipt has been privately archived, and the actual
+bank statement confirms an original-date automatic movement while previous
+manual corrections remain intact. All new duplicate counters are zero. This
+does not establish complete native source coverage. The attempt remained close
+to the configured lifetime; the previous two failures are retained as evidence
+that additional performance headroom is still required.
+
+Reviewed commit `138e091eef3c9036ac6a96af9ce6bd48105d7af1` retains every
+historical bundle authority, allocation, receipt and invoice witness read, but
+omits the final unused cost expansion only for orders provably at or before
+the operational start. Ordinary callers remain unchanged. Invalid/unknown
+dates remain in the full computation. Shared historical/current allocation
+and receipt conflicts cannot be hidden by the optimization.
+
+The author passed 449 adjacent tests without skips. Independent acceptance
+passed all 20 focused cases with a fresh owned real-Mongo replica, including
+complete source/reconciliation/report parity and exact replay. Synthetic
+paired projection timing improved from 441.812 to 276.435 ms; it does not
+predict production improvement. See BUNDLE_PROJECTION_HEADROOM.md.
+
+Additional bounded archive-read work and an explicit owner-approved closed-day
+advertising correction path are isolated and not yet integrated. The existing
+engine correctly holds unapproved platform restatements, and no manual
+compensating movement or native source write is substituted for approval.
+Root still owns all integration and deployment. No new intent or lease exists.
+Next safe action: preserve this reviewed checkpoint, complete those independent
+reviews, then execute the final exact-source and two-commit release gates.
+
+## Bounded archive reading and short-screen navigation checkpoint
+
+Remote checkpoint `6bf2e73fc65107ac814c074ec9f07247ee96cb42` completed
+44 checks successfully with six existing conditional skips. Stock eligibility
+correctly failed its no-skips assertion because three newly added Mongo cases
+used the generic demand fixture's variable names rather than the job's owned
+operational test capability. Reviewed correction
+`b8f47cb7aa7317d50e1c21d44a670798975ff903` recognizes only one consistent,
+explicit loopback test URI. All 20 cases, including all three actual Mongo
+cases, then executed under the exact Stock environment with zero skips. No
+acceptance gate or production connection boundary was weakened.
+
+Reviewed archive source `3babaa3016a6b0f59ce366b140a0b3b1ccf17752` overlaps
+at most four encoded audit-page reads only inside the same authenticated,
+leased refresh and an exact supported Motor capability. All original ordered
+hash/count/owner/manifest validation and authorization cadence remain. Active
+driver reads have a finite deadline and are joined on every cancellation or
+failure; each validated raw buffer is released before the next validation.
+Ordinary and snapshot/session readers remain serial. Independent final
+acceptance passed 142 cases, plus a separate exact-Stock-environment selection
+of 50 cases, with zero skips. These selections overlap. The raw buffer limit
+is not a total Python RSS limit. See ARCHIVE_PAGE_PREFETCH.md.
+
+Direct browser testing also found the short accounting sidebar could place its
+return link below the viewport without a scroll container. The focused CSS
+change makes that content reachable using dynamic viewport height and local
+vertical scrolling. The existing browser harness now requires a fourteenth
+scenario: ordinary click exit at three short screen sizes during a preparing
+report, exact single consumer release, no later polling and no financial
+mutation. The source manifest binds the stylesheet, report component and its
+real API adapter. Local compilation and syntax validation passed; local
+sandboxed Chromium was denied a socket before cases executed, so the final
+GitHub browser gate remains mandatory. See SHORT_NAVIGATION_EXIT.md.
+
+A fresh production-branch read still reports D and Emergent still lists the
+prior PR #2101 publish as latest. The original guard was read directly again
+and reported inactive. Production was not changed by this follow-up. Live
+page timings, worker cancellation and aggregate memory observations are
+privately retained; they still show material report latency and memory pressure.
+The explicit closed-day advertising approval path is undergoing independent
+review in its isolated checkout. Root remains the sole integrator/deployer.
+Next safe action: preserve this WIP checkpoint remotely, validate its stronger
+CI, complete the advertising review, then freeze and verify a new immutable
+source/intent pair under the unchanged original release protocol.
+
+## Final source integration before the v5 release pair
+
+Remote checkpoint `8bc807e24f2258d2ccc95c63292768f451bc3983` completed
+45 checks successfully; six existing conditionally unrelated jobs were skipped.
+The Operational Backend job executed 7,289 cases plus 151 subtests, demand-read
+acceptance executed 106 cases, and Stock executed 5,962 cases plus 97 subtests.
+All mandatory collection/no-skip gates passed. The actual browser job passed
+14 financial-position, 14 simple-balance and eight inventory scenarios,
+including the new short-screen ordinary click and cancelled report consumer.
+
+Reviewed report-only copy source `d9c0676c2f84a0762ed03fca9e5195c5c29c1707`
+preserves all seven protective copies inside `report()`, specializing only
+plain dict/list traversal and exact immutable scalar types. Typed and custom
+objects retain the standard deepcopy memo/hook semantics. No financial write
+or refresh copy changes. Author and independent six-suite acceptance each
+passed 242 cases without skips, with all twelve views byte-identical and inputs
+unchanged. The new CI-selected module has 55 cases. Its final alternating
+synthetic comparison measured 10.97% median wall and 11.59% CPU improvement;
+neither production latency nor RSS improvement is inferred from that fixture.
+
+Closed-ad source `91fce2c513b34570be3e1514ce59e091923b37b1` adds explicit
+owner preview/approval of an original closed advertising day through the
+existing refresh lease and aggregate CAS. Native close proof, full funding
+parts, pinned currency conversion, original IDs/dates, fresh source digest,
+revision and current owner are checked. The approval audit and replay receipt
+are saved with the financial result. A missing FX proof, stale source, changed
+revision, revoked owner or pre-dispatch cancellation/deadline rejects the
+approval. An already dispatched CAS keeps the original joined-result contract.
+No client amount, compensating manual movement or native source write is added.
+
+The author passed 324 adjacent backend cases, including 18 real-Mongo HTTP
+cases, and 89 frontend cases including 13 approval UI cases. The 18 Mongo cases
+also executed under the existing Stock-only URI capability names without a
+skip. Root independently reviewed the runtime/route/UI/commit boundaries and
+the merged copy/correction selection passed all 302 cases in 15.85 seconds.
+The final isolated independent advertising review is recorded in the PR
+continuation before any release freeze. Existing workflows now explicitly
+require the 60 new pure correction, 18 real-Mongo correction, 55 copy and 13 UI
+cases; all prior acceptance requirements remain.
+
+The original guard was read directly again and reported inactive. Shared
+tracked `/app` remained clean at production D, and Emergent still listed the
+previous PR #2101 publish as latest with no active publication. New source
+content is held on the dedicated PR #2102 branch only. Root remains the sole
+merger/deployer and financial writer. The next action is to preserve the final
+reviewed source A remotely, freeze an intent-only B using the pinned governed
+A/B build, require exact B CI, and perform the clean official Emergent adapter
+rehearsal before any original-guard lease or publication. Production recovery,
+source completeness, real page timings and receipts remain separate live
+acceptance steps; the follow-up has not yet changed Production.
+
+The independent closed-ad review subsequently passed on the exact frozen
+`91fce2c513b34570be3e1514ce59e091923b37b1` source with all eight runtime,
+test and UI hashes unchanged. Its first broad run recorded 323 passing cases
+and one existing hospitality-test database-cleanup cancellation during a
+shared executor stall; the completed business assertions were retained. A
+fresh owned replica then passed that exact failed case together with all
+18 Stock-style correction transaction cases (19/19, 21.72 seconds), with both
+demand fixture variables absent. The five frontend suites passed all 89 cases.
+No implementation, fixture assertion or acceptance gate was weakened to
+resolve that failure. All four independent findings were fixed and no review
+blocker remains. Final immutable GitHub and production checks are still required.

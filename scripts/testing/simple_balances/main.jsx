@@ -12,6 +12,7 @@ createRoot(document.getElementById('root')).render(
   <BrowserRouter><AuthProvider><Routes>
     <Route path="/operational-balances" element={<ApprovedFinance />} />
     <Route path="/operational-balances/access" element={<SimpleBalanceAccess />} />
+    <Route path="/dashboard-v2" element={<h1>خارج الأرصدة — وجهة الاختبار</h1>} />
     <Route path="*" element={<SimpleBalances />} />
   </Routes></AuthProvider></BrowserRouter>,
 );

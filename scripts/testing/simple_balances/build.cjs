@@ -26,7 +26,8 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
   });
   const files = [
     ...['ApprovedFinance.jsx','ApprovedEntry.jsx','ApprovedLedger.jsx','PaymentSourceFields.jsx','PendingEntryActions.jsx',
-      'workspaceReadHooks.js','WorkspaceResourcePicker.jsx','WorkspaceSnapshot.jsx']
+      'workspaceReadHooks.js','WorkspaceResourcePicker.jsx','WorkspaceSnapshot.jsx',
+      'approvedFinance.css','ApprovedReports.jsx','api.js']
       .map(file => `frontend/src/pages/operational/${file}`),
     ...['BalanceFreshnessNotice.jsx', 'BalanceAutomationSettings.jsx', 'BalanceRecoveryProof.jsx',
       'balanceFreshness.css', 'balanceFreshnessApi.js',

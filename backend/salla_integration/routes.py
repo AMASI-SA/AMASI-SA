@@ -62,6 +62,7 @@ from .config_store import (
 from .sync import (
     compute_sources_comparison,
     create_sync_log,
+    normalize_order_sync_filters,
     ensure_sync_indexes,
     run_orders_sync,
     run_products_sync,
@@ -251,6 +252,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         to_date: Optional[str],
         updated_since_hours: Optional[int],
         recover_marketing_attribution: bool,
+        recover_missing_order_clock: bool,
     ) -> None:
         task_key = str(user_id)
         try:
@@ -262,6 +264,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 updated_since_hours=updated_since_hours,
                 log_id=log_id,
                 recover_marketing_attribution=recover_marketing_attribution,
+                recover_missing_order_clock=recover_missing_order_clock,
             ), timeout=_MANUAL_SYNC_TIMEOUT_SECONDS)
         except asyncio.CancelledError:
             raise
@@ -736,6 +739,14 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     async def sync_orders(payload: Optional[dict] = None, user: dict = Depends(current_user)):
         payload = payload or {}
         user_id = str(user["id"])
+        try:
+            if payload.get("recover_missing_order_clock") and payload.get("recover_marketing_attribution"):
+                raise ValueError("source clock recovery cannot be combined with attribution recovery")
+            from_date, to_date = normalize_order_sync_filters(
+                payload.get("from_date"), payload.get("to_date"), payload.get("updated_since_hours"),
+                recover_missing_order_clock=payload.get("recover_missing_order_clock", False))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         now = datetime.now(timezone.utc)
         await db.salla_sync_logs.update_many(
             {
@@ -778,9 +789,10 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     user_id=user_id,
                     lease_token=lease_token,
                     log_id=log_id,
-                    from_date=payload.get("from_date"),
-                    to_date=payload.get("to_date"),
-                    updated_since_hours=payload.get("updated_since_hours"),
+                    from_date=from_date,
+                    to_date=to_date,
+                    updated_since_hours=None,
+                    recover_missing_order_clock=payload.get("recover_missing_order_clock", False),
                     recover_marketing_attribution=(
                         payload.get("recover_marketing_attribution") is True
                     ),

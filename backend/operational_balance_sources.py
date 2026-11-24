@@ -1508,7 +1508,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
     with refresh_stage('source_bundles'):
         bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
-            operational_state=operational_state, native_matches=native_matches)
+            operational_state=operational_state, native_matches=native_matches, cost_started_at=start)
     with refresh_stage('source_option_catalog'):
         await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
     with refresh_stage('source_orders'):

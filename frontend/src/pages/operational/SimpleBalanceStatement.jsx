@@ -121,7 +121,7 @@ export default function SimpleBalanceStatement({ context, identity, resource: in
     const query = { date_from: form.date_from, date_to: form.date_to, purpose };
     const requestedScope = scope;
     try {
-      const value = await api.statement(selected.kind, selected.id, query, { signal: controller.signal });
+      const value = await api.statement(selected.kind, selected.id, query, { signal: controller.signal, demand: true });
       if (controller.signal.aborted || sequence !== request.current.sequence || requestedScope !== latestScope.current) return;
       if (!isStatement(value, selected, query)) throw { localMessage: 'تعذر التحقق من كشف الفترة. أعد طلبه.' };
       if (purpose === 'print' && value.can_print !== true) throw { response: { status: 403 } };

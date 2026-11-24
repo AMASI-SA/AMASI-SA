@@ -1249,7 +1249,10 @@ def make_operational_balance_router(db, current_user):
             actor, owner, _ = await scope(db, user, "reports")
             from operational_balance_completeness import annotate_report_coverage
             from operational_financial_order_labels import attach_order_numbers
-            state = await read(db, owner)
+            from operational_financial_position_state import read_financial_position_state
+            # This report excludes audit and write histories. Keep full packet
+            # and manifest checks without materializing discarded audit pages.
+            state = await read_financial_position_state(db, owner)
             result = await prepare_in_thread(lambda: annotate_report_coverage(report(
                 state, provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)))
             if position_amounts:
@@ -1460,6 +1463,8 @@ def make_operational_balance_router(db, current_user):
     attach_delivery_confirmation_routes(router, db, current_user, scope, guarded)
     from operational_demand_refresh_routes import attach_demand_refresh_routes
     attach_demand_refresh_routes(router, db, current_user, scope)
+    from operational_ad_correction_routes import attach_ad_correction_routes
+    attach_ad_correction_routes(router, db, current_user, scope)
     from operational_balance_freshness_routes import attach_freshness_routes
     attach_freshness_routes(router, db, current_user, scope)
     from operational_balance_automation_routes import attach_automation_routes

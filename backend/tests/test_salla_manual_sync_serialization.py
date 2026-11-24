@@ -80,6 +80,41 @@ def test_manual_timeout_ends_before_shared_lease_can_expire():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [
+    {"from_date": "2030-04-25", "to_date": "2030-04-24"},
+    {"from_date": "2030-03-01", "to_date": "2030-04-24", "recover_missing_order_clock": True},
+    {"updated_since_hours": True}, {"recover_missing_order_clock": "true"},
+])
+async def test_invalid_source_window_is_rejected_before_log_or_lease(harness, payload):
+    db, client = harness
+    response = await client.post("/salla/sync/orders", json=payload)
+    assert response.status_code == 422, response.text
+    assert await db.salla_sync_logs.count_documents({}) == 0
+    assert await db.salla_sync_leases.count_documents({}) == 0
+    routes.run_orders_sync.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_manual_source_window_passes_bounded_recovery_into_existing_worker(harness, monkeypatch):
+    db, client = harness
+    entered = asyncio.Event()
+    captured = {}
+    async def work(db_, owner, **kwargs):
+        assert db_ is db and owner == OWNER
+        captured.update(kwargs)
+        entered.set()
+        return {"updated": 1}
+    monkeypatch.setattr(routes, "run_orders_sync", work)
+    response = await client.post("/salla/sync/orders", json={
+        "from_date": "2020-04-20", "to_date": "2020-04-24", "recover_missing_order_clock": True})
+    assert response.status_code == 202, response.text
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    assert captured["from_date"] == "2020-04-20" and captured["to_date"] == "2020-04-24"
+    assert captured["recover_missing_order_clock"] is True
+    assert captured["updated_since_hours"] is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("path", PRODUCT_PATHS)
 async def test_occupied_shared_lease_returns_409_without_starting_product_work(harness, monkeypatch, path):
     db, client = harness
