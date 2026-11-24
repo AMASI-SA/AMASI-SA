@@ -88,8 +88,6 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
     if not isinstance(engine, dict) or not engine.get("as_of"):
         raise InitialCaptureHold("prior_source_snapshot_required")
     last_source = _instant(engine["as_of"])
-    if captured_at <= last_source:
-        raise InitialCaptureHold("historical_capture_requires_reconciliation")
 
     facts = engine.get("facts")
     obligations = engine.get("obligations")
@@ -107,6 +105,10 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
                 and _cash(obligations[obligation_key].get("confirmed")) >= captured):
             return {"status": "already_posted", "provider": provider, "reference": native_ref}
         raise InitialCaptureHold("capture_identity_conflict")
+    # An exact replay remains idempotent even if the normal scheduled
+    # refresh has advanced beyond the original capture timestamp.
+    if captured_at <= last_source:
+        raise InitialCaptureHold("historical_capture_requires_reconciliation")
     if (obligation_key in obligations or obligation_key in reports or
             any(isinstance(fact, dict) and str(fact.get("order_id")) == order_id
                 and str(key).startswith(("capture:", "provider_order_balance:", "refund:"))
