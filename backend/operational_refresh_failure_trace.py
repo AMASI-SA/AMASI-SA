@@ -46,14 +46,18 @@ def safe_failure_trace(payload):
     if type(payload) is not dict:
         return result
     for entry in payload.get("stage_timings", [])[-MAX_STAGES:] if type(payload.get("stage_timings")) is list else ():
-        if (type(entry) is not dict or type(entry.get("stage")) is not str\n                or entry["stage"] not in STAGES or type(entry.get("outcome")) is not str\n                or entry["outcome"] not in OUTCOMES):
+        if (type(entry) is not dict or type(entry.get("stage")) is not str
+                or entry["stage"] not in STAGES or type(entry.get("outcome")) is not str
+                or entry["outcome"] not in OUTCOMES):
             continue
         duration = _duration(entry.get("duration_ms"))
         if duration is not None:
             result["stage_timings"].append({
                 "stage":entry["stage"], "outcome":entry["outcome"], "duration_ms":duration})
     for entry in payload.get("primary_orders_reads", [])[-MAX_READS:] if type(payload.get("primary_orders_reads")) is list else ():
-        if (type(entry) is not dict or entry.get("collection") != "unified_orders"\n                or type(entry.get("outcome")) is not str or entry["outcome"] not in OUTCOMES\n                or type(entry.get("cursor_kind")) is not str or entry["cursor_kind"] not in CURSOR_KINDS):
+        if (type(entry) is not dict or entry.get("collection") != "unified_orders"
+                or type(entry.get("outcome")) is not str or entry["outcome"] not in OUTCOMES
+                or type(entry.get("cursor_kind")) is not str or entry["cursor_kind"] not in CURSOR_KINDS):
             continue
         retained, checkpoint = entry.get("rows_retained"), entry.get("last_checkpoint_rows")
         if (type(retained) is not int or type(checkpoint) is not int
