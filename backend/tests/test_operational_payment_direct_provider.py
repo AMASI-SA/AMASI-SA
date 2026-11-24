@@ -85,8 +85,10 @@ class DirectProviderTests(unittest.TestCase):
 
     def test_historical_capture_prior_to_last_refresh_denied(self):
         s = state()
+        previous = normalized(captured_at="2026-11-24T20:49:00+03:00")
+        previous["order_created_at"] = "2026-11-24T20:40:00+03:00"
         with self.assertRaisesRegex(InitialCaptureHold, "historical"):
-            post(s, normalized(captured_at="2026-11-24T20:49:00+03:00"))
+            post(s, previous)
         self.assertEqual(s["engine"]["facts"], {})
 
     def test_capture_prior_to_cutover_denied(self):
