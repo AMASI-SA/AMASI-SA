@@ -460,3 +460,56 @@ production base before a normal merge. The reviewed operator remains unchanged
 and requires `PYTHONOPTIMIZE=0` during any eventual invocation. Production
 changed by this evidence work: **no**. No source edit, PR metadata change,
 release-branch mutation, merge, host action, lease or publication was performed.
+
+## Continuity checkpoint E3 — historical operator must not run
+
+This checkpoint extends E2
+`5985afecf247b515ed2ae673e6049c543d54dbe2` on the separate evidence branch.
+**The E1 `pr2122_guarded_rehearsal.py` is historical and MUST NOT RUN.** Its
+helper, tests, recorded results and hashes are preserved unchanged. The
+earlier operator invocation is withdrawn pending a reviewed replacement.
+
+The predecessor's immutable
+[E6 evidence](https://github.com/AMASI-SA/AMASI-SA/commit/2e4bc4140b77472127e765be4ec6811aed1a6e0d)
+documents the concrete reason: the original foreign-file equality check
+encounters an already running, separate Mongo service under
+`.worktrees/p01-acceptance-state-20260919/mongo` and its sibling `mongo.log`.
+The predecessor v1 owned-clone adapter passed, then its preservation check
+stopped with `FOREIGN_ENTRY_CHANGED` before generated backups, source
+fast-forward or the canonical `/app` adapter. Its full snapshot covered
+193,825 records; it cannot prove stable live database bytes. This is not an
+approval-system rejection, and it does not justify stopping the service or
+weakening the original release controls.
+
+That owner is preparing a separate independently reviewed v2 helper with a
+narrow, explicit live-service boundary. Wait for its immutable helper, envelope
+schema, tests and review before adapting it for this task. Preserve the exact
+process/start, executable, command-line and real directory identities; only
+that existing Mongo service's data descendants may change. Keep the sibling
+log append-only under its identified existing writer with unchanged file
+identity and original prefix. Every other foreign record remains exact, and
+all source, adapter, staging and backup write paths must be disjoint. Do not
+implement a parallel workaround or run the old helper.
+
+The frozen dashboard source and intent identities remain unchanged:
+
+- A3: `10bb33957c8c2994814a76ba5feed1182336ebda`.
+- Source base J: `f199a471f8bc6e05b475bb9b65a12107cbdc946b`.
+- B: `c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7`.
+- B tree: `fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1`.
+- Runtime ID:
+  `rg5-71a053d9aff1c8c4dec4f5b5e9171630b8c53bf6fea6d3516427bd7836c4ba9c`.
+
+At the coordinator's latest exact-B CI observation, two tests remained pending
+and no failures were reported. This is not an all-green result. PR #2122 has
+not been merged by this task; no D or execution envelope has been created.
+This task has made no shared `/app` change, lease or publication.
+
+Next safe sequence: obtain the immutable v2 packet and independently review
+the minimal task/base adaptation; wait for the preceding publisher's successful
+publication, original verification and lease closure; require final exact-B
+CI, confirm the production base, then perform the normal reviewed merge D and
+exact-D CI. Only afterward may a fresh, reviewed v2 execution envelope bind
+the final identities and current host preservation observations. Any eventual
+invocation must retain `PYTHONOPTIMIZE=0` and the unchanged original guard and
+adapter gates. Production changed by this evidence checkpoint: **no**.

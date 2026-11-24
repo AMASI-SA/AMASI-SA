@@ -102,3 +102,34 @@ origin. It does not create a lease or publish. A blocked result retains its
 private receipts/backups for owner review without automatic rollback or resume.
 Release preparation, prepublication and live verification remain separate
 owner-controlled actions after a successful rehearsal.
+
+## E3 supersession warning — MUST NOT RUN
+
+**The `pr2122_guarded_rehearsal.py` retained in this evidence directory is
+historical and MUST NOT RUN. The invocation above is withdrawn pending a
+reviewed replacement.** Preserve the existing helper, isolated checks and
+results byte for byte; their prior review does not establish safe execution
+against the subsequently observed live-service boundary.
+
+The predecessor's immutable E6 checkpoint
+`2e4bc4140b77472127e765be4ec6811aed1a6e0d` records
+`FOREIGN_ENTRY_CHANGED` from an existing separate Mongo data directory and
+sibling append-only log. Its owned-clone adapter passed, but the operation
+stopped before source fast-forward and the canonical `/app` adapter. Our
+PR2092-derived equality model would encounter the same concrete issue.
+
+The existing owner is preparing an independently reviewed v2 helper that binds
+the exact live process/start and real directory identities, restricts mutable
+descendants to that service's data directory, and preserves the log's writer,
+file identity and original prefix. All other foreign records remain exact and
+all operator/adapter/source write paths remain disjoint. Do not stop the
+service, inspect or change database records, widen the boundary, or implement
+a duplicate workaround.
+
+Wait for that owner's immutable reviewed v2 helper/schema/tests. Adapt only
+this task's identity and exact expected base, independently review and persist
+the successor, and wait for the preceding publisher's successful publication
+and lease closure. Final B/D CI and a fresh reviewed v2 envelope remain
+required. This supersession changes evidence only; A3/B and the retained old
+helper/tests are unchanged, and no dashboard-task host action, lease, merge or
+publication has occurred.
