@@ -68,10 +68,10 @@ async def stage_verified_payment_update(db, item):
             # Strong, currently scoped Salla order-page evidence is a separate
             # cumulative paid observation. It is NOT a fabricated captured_at
             # and never applies to bank transfers or COD.
-            from operational_payment_first_order_page_writer import (
-                enabled as paid_page_post_enabled, post_first_paid_page,
-            )
-            if paid_page_post_enabled():
+            # Avoid importing the native-page financial writer at all while
+            # its opt-in is OFF. This keeps ordinary Salla ingestion fast.
+            if os.environ.get("OPERATIONAL_PAYMENT_ORDER_PAGE_POST_ENABLED") == "1":
+                from operational_payment_first_order_page_writer import post_first_paid_page
                 outcome = await post_first_paid_page(
                     db, item["user_id"], item["merchant_id"],
                     item["order_number"], source_ref=item["_id"],
