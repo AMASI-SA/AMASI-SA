@@ -19,6 +19,7 @@ on:
       - "backend/salla_integration/payment_update_inbox.py"
       - "backend/salla_integration/webhook_order_sync.py"
       - "backend/tests/test_operational_payment_salla_event_capture.py"
+      - "backend/tests/test_operational_payment_initial_order_inbox.py"
       - "backend/tests/test_operational_payment_evidence_inbox.py"
       - "backend/operational_balance_routes.py"
       - "backend/tests/test_operational_payment_snapshot_integrity.py"
@@ -50,3 +51,4 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_evidence_inbox.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_cas_reconciliation.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_salla_event_capture.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
