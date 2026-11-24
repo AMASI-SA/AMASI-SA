@@ -249,3 +249,18 @@ It returns `status=verified_native_capture` with **posting_permitted=False**; it
 **CI:** Operational Payment Event Policy **PASS** on source SHA `d9b8a35647ddf3bc3baa5e38b1b62555f1e61aa3`, workflow run `45475354071`. Contains direct-vs-canonical original booking-date checks, no-money undated page tests, transaction proof recovery tests, pooled settlement and opening-overlap guard tests.
 
 **Remaining blockers:** the native transaction date candidate is read-only until owner order/source cross-reference, global duplicate/reference proof and CAS/refresh no-double-post integration are validated; no full original paid_at for all orders guaranteed. Existing 85s refresh + source coverage warnings and divergent Draft PR still prevent direct merge. All feature flags OFF, no production financial writes.
+
+
+## 2026-11-24 — First-capture overlap with provider opening balances
+
+Further reconciliation found that the direct native-capture writer originally checked exact order allocations, but not pooled settlements or ambiguous provider opening balances with no movement yet. This was materially weaker than `operational_balance_engine.reconcile`, which calls `operational_provider_history.late_payment_blocks` when a new capture may overlap existing activity.
+
+New safeguards:
+- `operational_payment_direct_provider.apply_first_provider_capture` now invokes **the same canonical `late_payment_blocks` function** when the owner state has any movement or relevant provider opening balance (including incomplete provider identity/currency). This occurs before any new `capture:<ref>` fact or `provider:<order>` obligation can be saved in CAS.
+- If a pooled/unallocated settlement or ambiguous provider opening might already contain that payment, reject with `provider_pooled_settlement_review_required` and persist only an accountant-review exception, never a second receivable.
+- A uniquely identified, valid single provider opening without movements, or an unrelated fully allocated payout for another provider order, may still pass this **particular** overlap check; all remaining event, date, fee, source and idempotency guards remain mandatory.
+- Added isolated tests that load the REAL `operational_provider_history.late_payment_blocks` function with only filesystem-free database/runtime stubs. Covers unallocated provider incoming settlement, fully allocated payout for another order, two ambiguous provider openings without movements, and one valid opening.
+
+Previous CI PASS (source commit `d9b8a35647ddf3bc3baa5e38b1b62555f1e61aa3`, run `45475354071`) covered actual pooled payout tests. New opening-balance cases have been submitted at code SHA `fcc22a8e71f6c9875c9c91ed3e961ce608eb4d51`, run `45475596417` currently QUEUED at last inspection; do not report their CI success until completed.
+
+This remains draft/flags OFF with no Preview or production financial mutation.
