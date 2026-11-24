@@ -121,6 +121,7 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
                 "provider_fee_policy_ambiguous",
                 "provider_fee_projection_invalid",
                 "capture_identity_conflict",
+                "capture_manual_collection_overlap",
             }:
                 return {"status": "review_required", "reason_code": reason}
             fail(reason, "تعذر اعتماد الدفعة آليًا؛ يلزم مطابقة إثبات المصدر", 409)
