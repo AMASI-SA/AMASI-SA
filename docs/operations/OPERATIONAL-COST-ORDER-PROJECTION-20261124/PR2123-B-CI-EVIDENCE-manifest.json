@@ -1,0 +1,58 @@
+{
+  "deployment_candidate_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "files": [
+    {
+      "bytes": 14550,
+      "path": "pr2123-b-root-final-ci.json",
+      "sha256": "260e2077a9e115f94bb366941da3c51ad2b7234260c1bc1d7637c41294059a0c"
+    },
+    {
+      "bytes": 35674,
+      "path": "pr2123-b-ci-final-review.json",
+      "sha256": "a74f0c7c60a5e1a4366d5ea865d3a0616a392a8f7337934effae9d5d0e6d9eaf"
+    },
+    {
+      "bytes": 30019,
+      "path": "pr2123-b-ci-final-junit-review.json",
+      "sha256": "21e98343a9fdfb88794f446efb430b1d6e9f5a21785f465fe0687d4a41cd011a"
+    },
+    {
+      "bytes": 142049,
+      "path": "pr2123-b-ci-backend.zip",
+      "sha256": "cc694cb06d55246a4989d1cf124cc7f3534a591213b92278d653628615ffc468"
+    },
+    {
+      "bytes": 108091,
+      "path": "pr2123-b-ci-stock.zip",
+      "sha256": "776a8e6367e28e4cbb9e88a3c68b48f62dbb7821059aee9b4b40e93228ae1513"
+    },
+    {
+      "bytes": 17326,
+      "path": "pr2123-b-ci-rehearsal-review.json",
+      "sha256": "7ae567fc9bb03a82aabb6d37a4ace918e6d5cd4f8b5220a67c91e4c8ca7c929a"
+    },
+    {
+      "bytes": 63799,
+      "path": "pr2123-b-ci-host20-evidence.zip",
+      "sha256": "11be5bd9378abb9955f2f191f4ea40a957ce35136153d5e76c5653f6cdd01503"
+    },
+    {
+      "bytes": 63803,
+      "path": "pr2123-b-ci-host24-evidence.zip",
+      "sha256": "31442e5e4a992805b57b41690ed9bfd03b2429664b76c70d34c14a686f8f3664"
+    },
+    {
+      "bytes": 1510,
+      "path": "pr2123-b-original-intent-validation.json",
+      "sha256": "f27084f05775be609c95f09857f316ae995ef12fea6e0c050cfdfe54ef5af737"
+    },
+    {
+      "bytes": 4462,
+      "path": "pr2123-frozen-B-independent-review.json",
+      "sha256": "19f02b962ca58a58af8f89bbc6d4480bc39856eb04d8d21ee18598593f0ea0ee"
+    }
+  ],
+  "scope": "Original required CI JUnit archives, original host rehearsal environment/package/build evidence and reviewed immutable handoff. Generated build output stays ignored/untracked. No production publication proof.",
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "task": "PR2123 exact frozen B CI"
+}

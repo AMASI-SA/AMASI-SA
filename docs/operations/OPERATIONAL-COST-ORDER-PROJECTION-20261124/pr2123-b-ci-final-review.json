@@ -1,0 +1,897 @@
+{
+  "schema_version": 2,
+  "task": "PR2123 exact reviewed-intent B CI audit",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 2123,
+  "deployment_candidate_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "deployment_candidate_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+  "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "verified_sole_parent": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "verified_a2_to_b_changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "intent_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+  "intent_sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+  "intent_exactly_matches_reviewed_a2_candidate": true,
+  "automatic_event_supersessions": [
+    {
+      "workflow": ".github/workflows/snapchat-campaign-publication.yml",
+      "superseded_run": 45500689344,
+      "replacement_run": 45500689693,
+      "reason": "synchronize followed by ready_for_review; same PR concurrency group cancel-in-progress true"
+    },
+    {
+      "workflow": ".github/workflows/snapchat-settings-management-v2.yml",
+      "superseded_run": 45500689341,
+      "replacement_run": 45500689477,
+      "reason": "synchronize followed by ready_for_review; same PR concurrency group cancel-in-progress true"
+    }
+  ],
+  "release_readiness_run": 45500689243,
+  "frontend_job": 138822847244,
+  "host_rehearsal_jobs": {
+    "20.20.2": 138823450224,
+    "24.19.0": 138823450558
+  },
+  "required_new_module": "test_operational_balance_cost_order_projection",
+  "required_cases_per_junit": 61,
+  "scope": "Read-only GitHub/artifact audit; owned files only; no reruns, host/guard/lease/publish/merge actions.",
+  "superseded_checks": [
+    {
+      "name": "Publication backend and existing write guards",
+      "id": 138822856845,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689344/job/138822856845",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "run_id": 45500689344
+    },
+    {
+      "name": "Publication frontend and existing media flow",
+      "id": 138822856795,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689344/job/138822856795",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "run_id": 45500689344
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "id": 138822856359,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689341/job/138822856359",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "run_id": 45500689341
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "id": 138822855764,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689341/job/138822855764",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "run_id": 45500689341
+    },
+    {
+      "name": "scope",
+      "id": 138822846796,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689344/job/138822846796",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "run_id": 45500689344
+    },
+    {
+      "name": "Fail-closed settings and multi-account scope guard",
+      "id": 138822846588,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689341/job/138822846588",
+      "completed_at": "2026-11-24T22:24:47Z",
+      "run_id": 45500689341
+    }
+  ],
+  "other_owner_written_checkpoint": {
+    "checkpoint": "E11",
+    "blob": "52ed2d16bce6025d23bb13cf7abc854ea16e9981",
+    "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/STATUS.md",
+    "publication_submitted_once": true,
+    "publish_preflight_timestamp": "2026-11-24T22:31:39.075030+00:00",
+    "deployment_success_or_verify_proven": false
+  },
+  "current_check_counts": {
+    "skipped": 6,
+    "success": 23
+  },
+  "host_rehearsal_evidence": {
+    "result": "PASS",
+    "file": "pr2123-b-ci-rehearsal-review.json",
+    "sha256": "7ae567fc9bb03a82aabb6d37a4ace918e6d5cd4f8b5220a67c91e4c8ca7c929a",
+    "both_host_generated_file_maps_exactly_equal": true,
+    "hosts": [
+      {
+        "host": "20.20.2",
+        "job_id": 138823450224,
+        "result": "success",
+        "http_cases": 8,
+        "generated_files_verified": 387,
+        "git_absent_during_adapter": true
+      },
+      {
+        "host": "24.19.0",
+        "job_id": 138823450558,
+        "result": "success",
+        "http_cases": 8,
+        "generated_files_verified": 387,
+        "git_absent_during_adapter": true
+      }
+    ]
+  },
+  "parent_original_b_validator_receipt": {
+    "file": "pr2123-b-original-intent-validation.json",
+    "sha256": "f27084f05775be609c95f09857f316ae995ef12fea6e0c050cfdfe54ef5af737",
+    "result": "PASS",
+    "seconds": 2.868,
+    "tracked_paths": 6599,
+    "sparse_entries": 0,
+    "missing_files": 0,
+    "source_and_identity_unchanged": true,
+    "auditor_read_receipt_only": true
+  },
+  "additional_skip_reason": {
+    "check": "reviewed-candidate",
+    "workflow": ".github/workflows/tiktok-content-release-candidate.yml",
+    "condition": "github.head_ref == 'codex/tiktok-content-ci-20261011' && github.event.pull_request.head.repo.full_name == github.repository",
+    "applicable_to_this_branch": false
+  },
+  "result": "PASS",
+  "recorded_at_utc": "2026-11-24 22:55:31 UTC",
+  "raw_check_counts": {
+    "skipped": 6,
+    "success": 23,
+    "cancelled": 6
+  },
+  "superseded_cancelled_checks": 6,
+  "zero_current_failures_or_pending": true,
+  "raw_checks": [
+    {
+      "name": "Emergent manual redeploy required",
+      "id": 138824770954,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:28:19Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138824770954"
+    },
+    {
+      "name": "CodeQL",
+      "id": 138824176944,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:15Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/runs/138824176944"
+    },
+    {
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "id": 138823450558,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:28:19Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138823450558"
+    },
+    {
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "id": 138823450224,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:43Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138823450224"
+    },
+    {
+      "name": "Publication backend and existing write guards",
+      "id": 138822988652,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:02Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689693/job/138822988652"
+    },
+    {
+      "name": "Publication frontend and existing media flow",
+      "id": 138822988611,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:02Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689693/job/138822988611"
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "id": 138822982853,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689477/job/138822982853"
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "id": 138822981384,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689477/job/138822981384"
+    },
+    {
+      "name": "reviewed-candidate",
+      "id": 138822909673,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:47Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689138/job/138822909673"
+    },
+    {
+      "name": "scope",
+      "id": 138822860007,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:02Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689693/job/138822860007"
+    },
+    {
+      "name": "Fail-closed settings and multi-account scope guard",
+      "id": 138822859579,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689477/job/138822859579"
+    },
+    {
+      "name": "Publication backend and existing write guards",
+      "id": 138822856845,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689344/job/138822856845"
+    },
+    {
+      "name": "Publication frontend and existing media flow",
+      "id": 138822856795,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689344/job/138822856795"
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "id": 138822856359,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689341/job/138822856359"
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "id": 138822855764,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689341/job/138822855764"
+    },
+    {
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "id": 138822847316,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822847316"
+    },
+    {
+      "name": "Frontend build",
+      "id": 138822847244,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:52Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822847244"
+    },
+    {
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "id": 138822847136,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:04Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822847136"
+    },
+    {
+      "name": "Backend security contracts",
+      "id": 138822846828,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:28Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689055/job/138822846828"
+    },
+    {
+      "name": "Backend preflight",
+      "id": 138822846801,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:08Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822846801"
+    },
+    {
+      "name": "scope",
+      "id": 138822846796,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:48Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689344/job/138822846796"
+    },
+    {
+      "name": "employee-contract",
+      "id": 138822846713,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:19Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689473/job/138822846713"
+    },
+    {
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "id": 138822846626,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:54Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846626"
+    },
+    {
+      "name": "Canonical worker excludes operational balance jobs",
+      "id": 138822846590,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:26Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846590"
+    },
+    {
+      "name": "Fail-closed settings and multi-account scope guard",
+      "id": 138822846588,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:47Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689341/job/138822846588"
+    },
+    {
+      "name": "Operational Balance Frontend",
+      "id": 138822846512,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:50Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846512"
+    },
+    {
+      "name": "G47 purchase and receiving UI tests and build",
+      "id": 138822846478,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:23Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688906/job/138822846478"
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "id": 138822846467,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:28:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689055/job/138822846467"
+    },
+    {
+      "name": "CodeQL (javascript-typescript)",
+      "id": 138822846285,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689021/job/138822846285"
+    },
+    {
+      "name": "Operational Balance Backend",
+      "id": 138822846113,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:40:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846113"
+    },
+    {
+      "name": "CodeQL (python)",
+      "id": 138822846053,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:30:35Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689021/job/138822846053"
+    },
+    {
+      "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+      "id": 138822846006,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:36:57Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688969/job/138822846006"
+    },
+    {
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "id": 138822845833,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:30:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688906/job/138822845833"
+    },
+    {
+      "name": "real-mongo-tracking",
+      "id": 138822845152,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:53Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688928/job/138822845152"
+    },
+    {
+      "name": "backend-unit",
+      "id": 138822844501,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:15Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688850/job/138822844501"
+    }
+  ],
+  "current_checks": [
+    {
+      "name": "Emergent manual redeploy required",
+      "id": 138824770954,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:28:19Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138824770954"
+    },
+    {
+      "name": "CodeQL",
+      "id": 138824176944,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:15Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/runs/138824176944"
+    },
+    {
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "id": 138823450558,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:28:19Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138823450558"
+    },
+    {
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "id": 138823450224,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:43Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138823450224"
+    },
+    {
+      "name": "Publication backend and existing write guards",
+      "id": 138822988652,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:02Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689693/job/138822988652"
+    },
+    {
+      "name": "Publication frontend and existing media flow",
+      "id": 138822988611,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:02Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689693/job/138822988611"
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "id": 138822982853,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689477/job/138822982853"
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "id": 138822981384,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689477/job/138822981384"
+    },
+    {
+      "name": "reviewed-candidate",
+      "id": 138822909673,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:24:47Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689138/job/138822909673"
+    },
+    {
+      "name": "scope",
+      "id": 138822860007,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:02Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689693/job/138822860007"
+    },
+    {
+      "name": "Fail-closed settings and multi-account scope guard",
+      "id": 138822859579,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689477/job/138822859579"
+    },
+    {
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "id": 138822847316,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822847316"
+    },
+    {
+      "name": "Frontend build",
+      "id": 138822847244,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:52Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822847244"
+    },
+    {
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "id": 138822847136,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:04Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822847136"
+    },
+    {
+      "name": "Backend security contracts",
+      "id": 138822846828,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:28Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689055/job/138822846828"
+    },
+    {
+      "name": "Backend preflight",
+      "id": 138822846801,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:08Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689243/job/138822846801"
+    },
+    {
+      "name": "employee-contract",
+      "id": 138822846713,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:19Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689473/job/138822846713"
+    },
+    {
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "id": 138822846626,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:54Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846626"
+    },
+    {
+      "name": "Canonical worker excludes operational balance jobs",
+      "id": 138822846590,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:26Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846590"
+    },
+    {
+      "name": "Operational Balance Frontend",
+      "id": 138822846512,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:50Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846512"
+    },
+    {
+      "name": "G47 purchase and receiving UI tests and build",
+      "id": 138822846478,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:23Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688906/job/138822846478"
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "id": 138822846467,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:28:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689055/job/138822846467"
+    },
+    {
+      "name": "CodeQL (javascript-typescript)",
+      "id": 138822846285,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:27:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689021/job/138822846285"
+    },
+    {
+      "name": "Operational Balance Backend",
+      "id": 138822846113,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:40:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688963/job/138822846113"
+    },
+    {
+      "name": "CodeQL (python)",
+      "id": 138822846053,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:30:35Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500689021/job/138822846053"
+    },
+    {
+      "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+      "id": 138822846006,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:36:57Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688969/job/138822846006"
+    },
+    {
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "id": 138822845833,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:30:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688906/job/138822845833"
+    },
+    {
+      "name": "real-mongo-tracking",
+      "id": 138822845152,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:26:53Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688928/job/138822845152"
+    },
+    {
+      "name": "backend-unit",
+      "id": 138822844501,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "completed_at": "2026-11-24T22:25:15Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45500688850/job/138822844501"
+    }
+  ],
+  "workflow_runs": [
+    {
+      "id": 45500689693,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2093,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689693/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689693/logs",
+      "workflow_id": 396364833
+    },
+    {
+      "id": 45500688963,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2268,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688963/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688963/logs",
+      "workflow_id": 375747544
+    },
+    {
+      "id": 45500688906,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2761,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688906/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688906/logs",
+      "workflow_id": 367907600
+    },
+    {
+      "id": 45500689021,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 5213,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689021/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689021/logs",
+      "workflow_id": 335797767
+    },
+    {
+      "id": 45500688969,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2354,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688969/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688969/logs",
+      "workflow_id": 380812173
+    },
+    {
+      "id": 45500689344,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "run_number": 2092,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689344/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689344/logs",
+      "workflow_id": 396364833
+    },
+    {
+      "id": 45500689341,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "run_number": 3939,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689341/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689341/logs",
+      "workflow_id": 344971566
+    },
+    {
+      "id": 45500689138,
+      "name": "TikTok Creator Release Candidate",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 563,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689138/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689138/logs",
+      "workflow_id": 380971731
+    },
+    {
+      "id": 45500689477,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 3940,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689477/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689477/logs",
+      "workflow_id": 344971566
+    },
+    {
+      "id": 45500688850,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 4617,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688850/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688850/logs",
+      "workflow_id": 320915169
+    },
+    {
+      "id": 45500688928,
+      "name": "Mobile Order Tracking",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 959,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688928/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500688928/logs",
+      "workflow_id": 388861620
+    },
+    {
+      "id": 45500689473,
+      "name": "MZ2 Employee Salary and Password",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 685,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689473/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689473/logs",
+      "workflow_id": 375607499
+    },
+    {
+      "id": 45500689243,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 5619,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689243/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689243/logs",
+      "workflow_id": 330739464
+    },
+    {
+      "id": 45500689055,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 5213,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689055/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45500689055/logs",
+      "workflow_id": 335759269
+    }
+  ],
+  "junit_review": "pr2123-b-ci-final-junit-review.json",
+  "node20_node24_review": "pr2123-b-ci-rehearsal-review.json",
+  "prior_owner_read": {
+    "branch": "codex/inventory-cabinet-archive-evidence-20261124",
+    "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/STATUS.md",
+    "blob": "52ed2d16bce6025d23bb13cf7abc854ea16e9981",
+    "latest_checkpoint": "E11: publication submitted once; success/original verify3/closed lease not yet documented",
+    "verified_live_base": false
+  },
+  "release_boundary": "CI PASS only. Root must confirm prior owner publication original verify3 and closed lease before next merge or host mutation. No publication or live improvement established by this audit."
+}

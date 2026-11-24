@@ -1,0 +1,6 @@
+{
+  "recorded_at": "2026-11-24T23:05:45.630Z",
+  "latest_instruction": "Current publishing conversation will close the publication lease.",
+  "scope": "PR2123 waits. Do not perform parallel verify/status/lease close. Prior takeover review remains historical and unexecuted. No cabinet business action.",
+  "root_actions": "No verify/status/abort/prepare orleasewrites performed. B CI evidence saved locally; financialbalancesunchanged."
+}
