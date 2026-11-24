@@ -90,6 +90,37 @@ class DirectPaidPageTests(unittest.TestCase):
             post(s,raw=sample("bank"))
         self.assertFalse(s["engine"]["facts"])
 
+    def test_same_native_reference_on_different_order_is_refused(self):
+        s = state()
+        s["engine"]["facts"]["provider_order_balance:other-order"] = {
+            "order_id": "other-order", "provider": "tamara",
+            "transaction_reference": "t-transaction-01", "paid": "173.99",
+        }
+        with self.assertRaisesRegex(FirstPageHold, "reference_reused"):
+            post(s)
+        self.assertNotIn("provider:580626783", s["engine"]["obligations"])
+
+    def test_cross_order_capture_reference_reuse_is_refused(self):
+        s = state()
+        s["engine"]["facts"]["capture:t-transaction-01"] = {
+            "order_id": "another-order", "provider": "tamara",
+            "amount": "173.99",
+        }
+        with self.assertRaisesRegex(FirstPageHold, "reference_reused"):
+            post(s)
+        self.assertNotIn("provider:580626783", s["engine"]["obligations"])
+
+    def test_cross_order_manual_collection_reference_reuse_is_refused(self):
+        s = state()
+        s["customer_collections"] = [{
+            "status": "confirmed", "reference": "t-transaction-01",
+            "order_id": "another-order", "destination_type": "provider",
+            "destination_id": "tamara", "amount": "173.99",
+        }]
+        with self.assertRaisesRegex(FirstPageHold, "reference_reused"):
+            post(s)
+        self.assertNotIn("provider:580626783", s["engine"]["obligations"])
+
     def test_existing_provider_claim_refuses_second_credit(self):
         s=state()
         s["engine"]["obligations"]["provider:580626783"]={"confirmed":"173.99"}
