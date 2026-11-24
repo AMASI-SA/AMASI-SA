@@ -36,6 +36,10 @@ def source_snapshot(payment):
             "items": [], "payment": copy.deepcopy(payment),
         }],
         "fee_policies": copy.deepcopy(state()["engine"]["provider_fee_inputs"]["policies"]),
+        # Source refresh supplies the authoritative fee policy settings,
+        # rather than relying solely on stale previously saved settings.
+        "provider_fee_settings": {},
+        "provider_fee_source_mode": "configured",
         "issues": [],
     }
 
