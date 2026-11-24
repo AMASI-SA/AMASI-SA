@@ -56,3 +56,11 @@ Only operational balances. Do not create Qoyod invoices, alter Salla order state
 6. Add a recurring daily exception reconciliation process, bounded replay and freshness alert.
 7. Historical dry-run per provider from the true operational starting point and opening balances; zero-difference reconciliation and Preview UAT.
 8. Keep feature flags OFF until all gates pass; no Qoyod/general ledger changes or production deployment.
+
+
+## Snapshot integrity preview (2026-11-24)
+Implemented `GET /api/operational-balances/payment-events/integrity-preview` as an **owner-only, read-only** endpoint. It uses the existing `operational_balance_store.read` and checks recorded customer collections against existing canonical `capture:` facts with exact references; reports collisions, unmatched recorded collections, invalid snapshot effects, revision and data-as-of without modifying money. Results are explicitly scoped to the saved snapshot and NEVER authorize auto-posting, refund approvals or a historical backfill. Unit tests added.
+
+Operational Payment Event Policy CI passed on commit `2b33ff6c26148f88c701facbee8b1b6d0df4a85b` (run 45447385570). No end-to-end Preview execution yet.
+
+**Activation blockers still present:** authoritative proof ingestion from new Salla events; validated, owner-scoped transactional posting into the existing operational CAS (including concurrency and duplicate exclusion); provider-native event identity for Tabby/Tamara CSV refund/installment rows; daily scheduler; historical side-by-side reconciliation; checking production version and release guard. Keep the feature disabled and leave existing confirmed balances unchanged.
