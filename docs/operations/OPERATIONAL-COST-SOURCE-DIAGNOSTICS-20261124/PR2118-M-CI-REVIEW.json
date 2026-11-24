@@ -1,0 +1,136 @@
+{
+  "task": "PR2118 exact deployment M CI",
+  "deployment_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "result": "PASS",
+  "root_read_at": "2026-11-24T20:20:19Z",
+  "independent_read_at": "2026-11-24T20:17:40Z",
+  "total": 11,
+  "success": 11,
+  "pending": 0,
+  "failure": 0,
+  "neutral": 0,
+  "skipped": 0,
+  "records": [
+    {
+      "id": 138744201079,
+      "name": "Emergent manual redeploy required",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:12:08Z",
+      "completed_at": "2026-11-24T20:12:12Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138744201079"
+    },
+    {
+      "id": 138742877355,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:10:03Z",
+      "completed_at": "2026-11-24T20:11:48Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138742877355"
+    },
+    {
+      "id": 138742877353,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:10:03Z",
+      "completed_at": "2026-11-24T20:12:06Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138742877353"
+    },
+    {
+      "id": 138742230858,
+      "name": "Backend preflight",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:09:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138742230858"
+    },
+    {
+      "id": 138742230832,
+      "name": "Frontend build",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:10:01Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138742230832"
+    },
+    {
+      "id": 138742230672,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:09:13Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138742230672"
+    },
+    {
+      "id": 138742230241,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:09:12Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709522/job/138742230241"
+    },
+    {
+      "id": 138742228510,
+      "name": "Frontend dependency and CSP checks",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:16Z",
+      "completed_at": "2026-11-24T20:12:43Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709386/job/138742228510"
+    },
+    {
+      "id": 138742228433,
+      "name": "CodeQL (javascript-typescript)",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:11:22Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709384/job/138742228433"
+    },
+    {
+      "id": 138742228279,
+      "name": "Backend security contracts",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:10:42Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709386/job/138742228279"
+    },
+    {
+      "id": 138742227376,
+      "name": "CodeQL (python)",
+      "head_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T20:09:00Z",
+      "completed_at": "2026-11-24T20:15:35Z",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45477709384/job/138742227376"
+    }
+  ],
+  "push_runs": [
+    45477709522,
+    45477709386,
+    45477709384
+  ],
+  "independent_steps": {
+    "host_node20": "21/21 PASS",
+    "host_node24": "21/21 PASS",
+    "manual_handoff": "3/3 PASS; instruction handoff is not publication"
+  },
+  "limitation": "CI does not replace the shared-host canonical rehearsal or live publication verification."
+}
