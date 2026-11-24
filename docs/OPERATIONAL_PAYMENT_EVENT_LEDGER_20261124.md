@@ -91,3 +91,16 @@ The staged source evidence is now correlated with the provider/refund facts gene
 **CRITICAL:** This is still *post-reconciliation evidence linkage*, not event-triggered financial posting. The operational engine continues to compute financial claims only when its authoritative refresh succeeds. The reported `operational_source_setup_incomplete` error remains an activation blocker, and the owner-enabled automation presently runs at a 7200-second interval. Do not claim instant automatic journal entry is operational, and do not reduce interval/bypass source validation merely to meet latency expectations.
 
 The new stage is kept as a Draft PR and remains unexercised against live balances/Preview. Run the full test suite and UAT before considering feature activation. The evidence hook feature flag remains OFF in production.
+
+
+## Owner-approved initial order awaiting review — 2026-11-24
+The merchant approved immediate operational recognition for **new electronically-paid orders** arriving at status «انتظار المراجعة», but this is the *trigger*, not independent proof. The Salla signed order event must supply authoritative captured status/reference/amount/time.
+
+Fix in the Draft branch:
+- `salla_integration/webhook_order_sync.py` optionally enqueues verified `order.created` into the existing durable payment evidence inbox after the canonical source fence. The process is gated by `OPERATIONAL_PAYMENT_EVIDENCE_CAPTURE_ENABLED` (default OFF), and does not block order/fulfillment when OFF.
+- `salla_integration/payment_update_inbox.py` now retains `order.created` alongside `order.payment.updated` with stable deduplication.
+- `operational_payment_salla_event_capture.normalized_webhook_capture` accepts these two events, but only forwards complete native `normalize_payment` confirmed captures. Missing paid timestamp/reference/amount is not a financial event.
+- Focused tests cover initial created event, incomplete payment evidence, existing updated payment event and retry behavior.
+- Isolated Operational Payment Event Policy workflow run `45452409434` on commit `e7d6fecc671c04d29b4dda29ebed7bae3e956e60` passed.
+
+This is **durable EVIDENCE delivery**, not a live bank/platform ledger posting. The current `operational_balance_service.refresh` remains the only owner of derived provider claims. Avoid duplicate per-payment writes into claims when refresh already derives the same capture from Salla. Production deployment SHA, Preview end-to-end tests and historical opening/provider statement reconciliation remain outstanding; do not merge/deploy yet.
