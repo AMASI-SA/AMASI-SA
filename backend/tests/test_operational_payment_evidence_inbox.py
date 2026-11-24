@@ -65,6 +65,21 @@ class EvidenceInboxTests(unittest.TestCase):
         queue_evidence_in_state(state, another, "2026-11-24T18:02:00Z")
         self.assertEqual(len(state[INBOX_KEY]), 2)
 
+    def test_existing_canonical_capture_is_not_new_money(self):
+        state = {"status": "active", "engine": {"facts": {
+            "capture:tx-1": {"order_id": "o-1", "provider": "tabby", "amount": "300.00"}
+        }}}
+        result = queue_evidence_in_state(state, record(), "2026-11-24T18:00:00Z")
+        self.assertEqual(result["status"], "already_recognized")
+        self.assertEqual(state[INBOX_KEY][result["key"]]["status"], "already_recognized")
+
+    def test_conflicting_canonical_capture_rejected(self):
+        state = {"status": "active", "engine": {"facts": {
+            "capture:tx-1": {"order_id": "o-2", "provider": "tabby", "amount": "300.00"}
+        }}}
+        with self.assertRaisesRegex(ValueError, "canonical_conflict"):
+            queue_evidence_in_state(state, record(), "2026-11-24T18:00:00Z")
+
     def test_unverified_payment_cannot_enter(self):
         with self.assertRaisesRegex(ValueError, "payment_event_not_confirmed"):
             record(payment(evidence=Evidence.ORDER_STATUS_ONLY))
