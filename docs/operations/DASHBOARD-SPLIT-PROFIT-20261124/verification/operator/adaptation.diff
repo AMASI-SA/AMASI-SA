@@ -1,0 +1,53 @@
+--- pr2092_guarded_rehearsal.py
++++ pr2122_guarded_rehearsal.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""One-shot, reviewed-base-only PR2092 /app rehearsal; requires reviewed envelope.
++"""One-shot, reviewed-base-only PR2122 /app rehearsal; requires reviewed envelope.
+ 
+ External prerequisite: exact deployment D CI has completed successfully.
+ This helper does not prepare a lease, publish, restart, recalculate, or roll back.
+@@ -24,7 +24,7 @@
+ sys.dont_write_bytecode = True
+ ROOT = Path("/app")
+ BRANCH = "hotfix/prod-snap-meta-final"
+-J = "422fffc8fb9c381165cc76b1ded5ca595773ce8e"
++J = "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+ A = B = D = TREE = RELEASE_ID = None
+ EXPECTED_UNTRACKED = None
+ RUNTIME_PATH = ".emergent/stripped_env_names"
+@@ -36,7 +36,7 @@
+ STAGE: Path | None = None
+ STEP = "startup"
+ RECEIPT: dict = {
+-    "task": "PR2092_guarded_app_rehearsal", "status": "RUNNING",
++    "task": "PR2122_guarded_app_rehearsal", "status": "RUNNING",
+     "initial_head": J, "source_sha": A, "intent_sha": B,
+     "deployment_sha": D, "tree": TREE, "release_id": RELEASE_ID,
+     "external_precondition": "operator verified completed successful exact-D CI",
+@@ -346,7 +346,7 @@
+     assert_no_lease(guard)
+     for parent in (ROOT, ROOT / "frontend", ROOT / "backend", ROOT / ".git"):
+         require(parent.is_dir() and not parent.is_symlink(), "UNSAFE_WORKSPACE_ROOT")
+-    STAGE = Path(tempfile.mkdtemp(prefix="mezan-pr2092-rehearsal-", dir="/tmp"))
++    STAGE = Path(tempfile.mkdtemp(prefix="mezan-pr2122-rehearsal-", dir="/tmp"))
+     STAGE.chmod(0o700)
+     fsync_directory(STAGE)
+     fsync_directory(STAGE.parent)
+@@ -417,6 +417,7 @@
+     for name in tuple(environment):
+         if name.startswith("GITHUB_"):
+             environment.pop(name)
++    environment.pop("MEZAN_RELEASE_BOOTSTRAP_INTENT", None)
+     environment["REACT_APP_BACKEND_URL"] = "https://mezansalla.com"
+     # The repository dispatcher invokes the unchanged v5 governed adapter.
+     run("canonical-app-adapter", ["yarn", "build"], cwd=ROOT / "frontend",
+@@ -485,7 +486,7 @@
+                                 capture=True, timeout=45))
+         require(status.get("active") is False, "ACTIVE_RELEASE_LEASE")
+         RECEIPT["initial_public_status"] = {"active": False}
+-        spec = importlib.util.spec_from_file_location("pr2092_original_release_guard", guard_path)
++        spec = importlib.util.spec_from_file_location("pr2122_original_release_guard", guard_path)
+         require(spec is not None and spec.loader is not None, "CANNOT_LOAD_ORIGINAL_GUARD")
+         guard = importlib.util.module_from_spec(spec)
+         sys.modules[spec.name] = guard

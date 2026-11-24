@@ -1,0 +1,12 @@
+{
+  "helper_sha256": "98719b39a298c98c5a56d517bcdf2edd3f350497e53bd05aadf4202a2d43c65b",
+  "isolated_checks": "PASS",
+  "results": [
+    "all four generated backups preserve content, modes, literal symlinks and fsync receipt/stage entries",
+    "only same-file prefix-preserving runtime append is accepted",
+    "runtime prefix corruption and byte-identical inode replacement are blocked",
+    "nested mount point is blocked independently of st_dev",
+    "timeout terminates process group including SIGTERM-ignoring descendant and records failure"
+  ],
+  "no_live_operations": true
+}

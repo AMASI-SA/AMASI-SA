@@ -1,0 +1,9 @@
+{
+  "helper_sha256": "98719b39a298c98c5a56d517bcdf2edd3f350497e53bd05aadf4202a2d43c65b",
+  "isolated_test_sha256": "ce0ea658dd00f6e888d21ff424dd5d2491d45b9503b84167cc7f900f9b083d75",
+  "test_exit_code": 0,
+  "duration_seconds": 1.053,
+  "log_sha256": "cc41b878ecae682c742a84cb7b94c87cbb3436b4d5b4ded5b226dce6d6e2ca45",
+  "no_live_operations": true,
+  "main_not_invoked": true
+}

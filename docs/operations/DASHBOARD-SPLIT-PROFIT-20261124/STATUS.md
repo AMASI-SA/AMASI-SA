@@ -357,3 +357,50 @@ B, original adapter rehearsal and publication verification.
 Root owns PR/continuation-ledger updates, source adoption, intent freeze, merge
 and publication. This integration preserves prior branches and other tasks'
 source/intent. No post-release dashboard or live-profit claim is made.
+
+## Operator evidence checkpoint — 25 November 2026, Asia/Riyadh
+
+This append-only checkpoint is on the separate branch
+`codex/dashboard-split-profit-evidence-20261125`, based directly on verified
+remote source A3 `10bb33957c8c2994814a76ba5feed1182336ebda`, tree
+`0941ce9c29e3515346e2f31eac161e9986730e68`. A3 has sole parent A2
+`6a55a5772318bc33af69622dc0c6e71bf85d7990`. The evidence branch leaves the
+release branch and frozen-source history untouched; do not merge it into the
+Protocol-v5 candidate. Its enclosing commit is an evidence checkpoint, not B.
+
+The A3 test correction is backed by the recorded complete four-platform backend
+selection: **449 tests and seven subtests passed**, exit 0, in 17.33 seconds.
+Those are local verification results, not a claim that all current CI or the
+new governed build has completed. [PR #2122](https://github.com/AMASI-SA/AMASI-SA/pull/2122)
+remains the release candidate; PR #2121 remains superseded.
+
+The checkpoint adds the operator under `operators/pr2122_guarded_rehearsal.py`
+and its README, complete adaptation diff, adapted isolated checks, result log
+and verification manifest under `verification/operator/`. The operator SHA256 is
+`98719b39a298c98c5a56d517bcdf2edd3f350497e53bd05aadf4202a2d43c65b`.
+It retains the original PR #2092 preservation/lock/timeout/argument behavior,
+changes J to `f199a471f8bc6e05b475bb9b65a12107cbdc946b`, updates only task labels,
+and strips inherited bootstrap intent from the official adapter environment.
+
+All five isolated operator check groups passed, exit 0, in 1.053 seconds, with
+the helper main and actual shared host never invoked. Independent operator
+review passed with the explicit requirement to invoke it using
+`PYTHONOPTIMIZE=0 PYTHONDONTWRITEBYTECODE=1 python -B`; the reviewed helper bytes
+were not changed after review. The artifacts contain no secrets, credentials,
+customer identifiers or private environment values.
+
+The exact A3 governed build, fresh intent-only B, exact-D CI/review, merge,
+shared-host rehearsal and publication verification remain pending at this
+checkpoint. No envelope was created. It will be created only after D and the
+fresh actual untracked-entry count are known, using the exact reviewed A/B/D,
+common B/D tree and deterministic runtime identity. The prior publisher's
+running original guard operation must finish before another guard call or
+shared-host action; never use or clear another owner's lease.
+
+Next safe action: the root owner completes the current A3 build and original
+candidate validation, freezes a new intent-only B, and checks exact-head CI
+and the preceding publisher's completion. The operator README supplies the
+remaining prerequisites and mandatory invocation. Root owns the PR and Issue
+#1006 continuation-ledger updates. Production changed by this evidence work:
+**no**. No source-checkout edit, release-branch update, PR metadata change,
+merge, host action, lease, publication, sync or accounting write is included.
