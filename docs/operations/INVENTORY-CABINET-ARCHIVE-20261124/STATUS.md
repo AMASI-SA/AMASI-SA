@@ -2,7 +2,7 @@
 
 ## Current state
 
-**MERGED — PR #2120 passed every applicable final-head gate and merged normally; post-merge gates and guarded rehearsal are pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**READY FOR HOST REHEARSAL — every applicable B and D gate passed; frozen operator and envelope independently reviewed.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -73,7 +73,7 @@ The new workflow checks the actual PR head, uses a checksum-pinned owned Mongo b
 
 ## Next safe action
 
-Complete applicable exact-D CI and independent review of the guarded operator. D is already merged and verified tree-equivalent to B. Complete the original release protocol from the reviewed immutable packet. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
+Execute only the independently reviewed immutable operator/envelope after its fresh original guard and host checks. D is merged, tree-equivalent to B, and all exact-D push gates passed. Complete the original release protocol from the reviewed immutable packet. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
 
 ## Release checkpoint E1 — 2026-11-24 21:01 UTC
 
@@ -102,3 +102,13 @@ Root independently read all 64 final B checks: **54 success and 10 conditional s
 Post-merge D CI is running. A fresh host read showed HEAD J, clean tracked files, 432 nonignored untracked entries, and regular platform runtime metadata. Free space was 421,769,216 bytes at /app and 237,201,190,912 bytes at /tmp. No /app source or services have changed, no lease has been created, and no production publication or cabinet mutation has occurred. The independently reviewed operator must use owned /tmp staging and recheck all host facts before action.
 
 Next: complete exact-D gates, finish operator review and immutable envelope, retain that evidence remotely, then run the original clean adapter rehearsal and /app adapter under the original guard operation lock. Prepare/prepublish and publication remain later steps; do not archive d1 before successful publication and original three-probe verification.
+
+## Release checkpoint E4 — all gates passed, operator frozen
+
+Root independently fetched all **11 exact-D checks, each completed successfully**; production branch still equals D `f199a471f8bc6e05b475bb9b65a12107cbdc946b`. The independent CI reviewer confirms all three push workflows passed with no skipped, pending, neutral or failed checks, including both actual host clean-clone adapter jobs. The final B CI review (93,735 bytes, SHA-256 `fd335feb80744742f018a9faca4fb50fd4a71a34197e88ff5bc572cb6642e909`) is retained as `pr2120-exact-b-ci-review.json`.
+
+The external operator `cabinet_archive_release_operator.py` is 35,827 bytes, SHA-256 `18a8cf2e09605947263999cd897ac680507c4fbbabffc0ffb4568f606ed6b703`; AST and independent full static review passed. The exact nine-field envelope `cabinet_archive_release_envelope.json` is 532 bytes, SHA-256 `c67cbf86ad270185505c7cb8653e741b968a07ed917c9e9ed7762bbc0d06f37b`; independent review passed. It pins A/J/B/D/tree/runtime, initial host J, and 432 nonignored entries. Only the platform names metadata may append while preserving inode/device/mode and the full original prefix; every other foreign fingerprint must remain exact. The helper rejects Python optimization, takes the original release operation lock after public inactive status, builds through the unmodified adapter in an owned /tmp clone, measures capacity, backs up and verifies the original generated paths, then FFs /app and uses the original adapter there. It does not prepare a lease, publish, restart services, recalculate or perform capacity cleanup. The full frontend/.release cleanup target was confirmed against original adapter code; no release control was modified.
+
+The platform baseline is published version `eeecd3f` (100th publish), with visible “Deployment finished Nov 24, 11:41 PM” Riyadh. The live warehouse page still shows d1 with nine empty slots and unchanged parent hierarchy. No publication or cabinet mutation has been submitted by this task. Exact checks, reviews and host prerequisites are retained in `operator-review.json` and `ci-deployment-D-final.json`.
+
+Next: download this commit's helper and envelope into a new owned /tmp directory, verify both SHA-256 values before execution, and run from /app. Any guard, lineage, foreign-file or capacity rejection stops the operator. Only a successful owned-clone and canonical /app original adapter receipt permits original prepare/prepublish, one authorized publish, explicit newer Deployment Succeeded and three verified probes. Live d1 archive remains after those gates.

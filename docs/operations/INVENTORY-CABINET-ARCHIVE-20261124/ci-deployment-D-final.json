@@ -1,0 +1,105 @@
+{
+  "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "result": "PASS",
+  "checks": [
+    {
+      "name": "Emergent manual redeploy required",
+      "id": 138789824899,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138789824899",
+      "started_at": "2026-11-24T21:27:15Z",
+      "completed_at": "2026-11-24T21:27:18Z"
+    },
+    {
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "id": 138788528783,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138788528783",
+      "started_at": "2026-11-24T21:25:04Z",
+      "completed_at": "2026-11-24T21:26:48Z"
+    },
+    {
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "id": 138788528756,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138788528756",
+      "started_at": "2026-11-24T21:25:04Z",
+      "completed_at": "2026-11-24T21:27:13Z"
+    },
+    {
+      "name": "Frontend build",
+      "id": 138787453126,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787453126",
+      "started_at": "2026-11-24T21:24:01Z",
+      "completed_at": "2026-11-24T21:25:02Z"
+    },
+    {
+      "name": "Backend security contracts",
+      "id": 138787452962,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452962",
+      "started_at": "2026-11-24T21:23:55Z",
+      "completed_at": "2026-11-24T21:25:39Z"
+    },
+    {
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "id": 138787452873,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452873",
+      "started_at": "2026-11-24T21:23:56Z",
+      "completed_at": "2026-11-24T21:24:13Z"
+    },
+    {
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "id": 138787452872,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452872",
+      "started_at": "2026-11-24T21:23:33Z",
+      "completed_at": "2026-11-24T21:23:54Z"
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "id": 138787452581,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452581",
+      "started_at": "2026-11-24T21:23:22Z",
+      "completed_at": "2026-11-24T21:26:35Z"
+    },
+    {
+      "name": "Backend preflight",
+      "id": 138787452406,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452406",
+      "started_at": "2026-11-24T21:23:25Z",
+      "completed_at": "2026-11-24T21:23:44Z"
+    },
+    {
+      "name": "CodeQL (python)",
+      "id": 138787452008,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630/job/138787452008",
+      "started_at": "2026-11-24T21:23:40Z",
+      "completed_at": "2026-11-24T21:30:23Z"
+    },
+    {
+      "name": "CodeQL (javascript-typescript)",
+      "id": 138787451441,
+      "conclusion": "success",
+      "status": "completed",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630/job/138787451441",
+      "started_at": "2026-11-24T21:23:20Z",
+      "completed_at": "2026-11-24T21:25:44Z"
+    }
+  ]
+}

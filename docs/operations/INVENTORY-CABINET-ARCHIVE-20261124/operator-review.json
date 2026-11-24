@@ -1,0 +1,46 @@
+{
+  "operator": {
+    "path": "cabinet_archive_release_operator.py",
+    "bytes": 35827,
+    "sha256": "18a8cf2e09605947263999cd897ac680507c4fbbabffc0ffb4568f606ed6b703",
+    "static_review": "PASS",
+    "ast": "PASS",
+    "executed": false
+  },
+  "envelope": {
+    "path": "cabinet_archive_release_envelope.json",
+    "bytes": 532,
+    "sha256": "c67cbf86ad270185505c7cb8653e741b968a07ed917c9e9ed7762bbc0d06f37b",
+    "review": "PASS",
+    "fields": 9,
+    "initial_head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "expected_untracked_count": 432,
+    "allow_runtime_metadata_append": true
+  },
+  "foreign_policy": "All non-generated nonignored and ignored paths must keep exact fingerprints. The one platform metadata exception retains dev/inode/mode and exact original content prefix, allowing only appended bytes. Generated cleanup targets match the original adapter exactly and are independently backed up and verified. No foreign cleanup or git object packing.",
+  "platform_baseline": {
+    "version": "eeecd3f",
+    "ordinal": 100,
+    "finished_text": "Deployment finished Nov 24, 11:41 PM",
+    "timezone": "Asia/Riyadh",
+    "publication_submitted": false
+  },
+  "latest_host_read": {
+    "head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "tracked_clean": true,
+    "nonignored_untracked": 432,
+    "runtime_metadata_regular": true,
+    "runtime_metadata_bytes": 115164,
+    "app_available_bytes": 421769216,
+    "tmp_available_bytes": 237201190912
+  },
+  "preconditions": [
+    "All applicable exact-D CI completed successfully",
+    "Original guard status inactive before operation lock and lease absent within it",
+    "Recheck expected START, branch, clean tracked state, exact foreign set, source lineage and remote D",
+    "Owned clone original adapter and original verifications pass before measuring required capacity",
+    "Fresh checked originals/backups and sufficient measured app capacity before FF",
+    "Original /app adapter then exact identity/proof verification; no lease or publish in operator"
+  ]
+}
