@@ -41,6 +41,13 @@ async def _apply(db, item):
         return "paused"
     result = await sync_order_from_verified_webhook(db, item["event"])
     if result.get("synced") or result.get("reason") == "stale_salla_snapshot":
+        # A signed payment event may supply original capture proof even when
+        # its order snapshot has become stale. Preserve proof in the
+        # operational CAS only when the separately gated staging succeeds.
+        # No financial movement or account balance is changed here.
+        from operational_payment_salla_event_capture import stage_verified_payment_update
+        if not await stage_verified_payment_update(db, item):
+            return "pending"
         return "done"
     return "pending"
 
