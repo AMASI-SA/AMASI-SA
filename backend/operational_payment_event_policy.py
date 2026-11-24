@@ -118,5 +118,10 @@ def decide(event: PaymentEvent) -> PostingDecision:
     )
     if not identifier or not identifier.strip():
         return PostingDecision(Decision.PENDING_EVIDENCE, "missing_stable_financial_identifier")
-    key = "|".join((event.kind.value, event.provider.strip().lower(), event.order_id.strip(), identifier.strip()))
+    # A provider transaction belongs to ONE order. Do not scope the unique key
+    # by order_id: that would allow the same external payment to credit two
+    # different orders. The atomic posting layer must also compare the stored
+    # owner/order/amount/currency against this incoming observation and flag
+    # any mismatch as a conflict rather than replaying silently.
+    key = "|".join((event.kind.value, event.provider.strip().lower(), identifier.strip()))
     return PostingDecision(Decision.POST, "verified", key, bucket)
