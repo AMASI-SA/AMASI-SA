@@ -25,7 +25,7 @@ from operational_source_diagnostics import source_failure_detail
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
     invoice_component_amounts, shipping_charge, supplier_receipt_proven,
-    unique_index, usable,
+    unique_index, usable, REFRESH_ORDER_FIELDS,
 )
 
 ZERO = Decimal("0")
@@ -40,10 +40,27 @@ READS = ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_products_v2"
     "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2",
     "mezan_cost_resources_v2", "mezan_preparation_pieces_v1", "mezan_supplier_invoices_v2",
     "mezan_suppliers_v2", "store_drivers", "store_delivery_assignments", "mz2_shipping_setup_v2")
+# Keep canonical evidence containers whole. Cost/COD previews additionally
+# inspect outer assignment and negative shipping evidence: omitting a returned
+# shipment or a label could wrongly make an order eligible as having no waybill.
+# No date/status filter is safe here; even rows without canonical raw evidence
+# participate in outer identity-ambiguity checks.
+COST_ORDER_FIELDS = (*REFRESH_ORDER_FIELDS,
+    "store_delivery_assignment_id", "store_delivery_driver_id", "store_delivery_status",
+    "store_delivery_payment_status", "store_delivery_delivered_at", "store_delivery_collection_amount",
+    "delivered_at", "archived", "superseded", "returned", "deleted", "is_deleted", "status", "type",
+    "shipment", "superseded_shipment_ids", "source_kind", "tracking_url", "shipping_label_url",
+    "shipment_id", "waybill", "awb", "awb_number", "tracking", "label_url")
 POOL_NAME = "منتجات لم تُستلم من المورد"
 _READ_CACHE = SnapshotReadCache(ttl=20, max_entries=32)
 READ_TIMEOUT = 45
 _LOG = logging.getLogger(__name__)
+
+
+async def _cost_source_rows(db, owner, collection):
+    if collection == "unified_orders":
+        return await rows(db, owner, collection, fields=COST_ORDER_FIELDS)
+    return await rows(db, owner, collection)
 
 
 def _fmt(value):
@@ -160,7 +177,7 @@ async def _project(db, owner, state, *, as_of=None):
     if stamp < started:
         raise ValueError("operational_work_forecast_time_invalid")
     try:
-        data = await load_collections(db, owner, READS, reader=rows)
+        data = await load_collections(db, owner, READS, reader=_cost_source_rows)
     except SourceReadError as error:
         try:
             detail = source_failure_detail(error.code, error.collection)

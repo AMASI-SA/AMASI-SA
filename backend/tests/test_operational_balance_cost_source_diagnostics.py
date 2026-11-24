@@ -28,7 +28,7 @@ def message(collection, cause=CODE):
 def install_failure(monkeypatch, failure, collection="mezan_products_v2"):
     calls = []
 
-    async def reader(database, owner, name):
+    async def reader(database, owner, name, *, fields=None):
         assert owner == OWNER
         calls.append(name)
         if name == collection:
@@ -155,7 +155,7 @@ async def test_observability_failure_cannot_replace_source_exception(
 async def test_actual_read_deadline_and_cleanup_are_preserved(monkeypatch, caplog):
     budgets, stopped = [], asyncio.Event()
 
-    async def reader(database, owner, name):
+    async def reader(database, owner, name, *, fields=None):
         if name != "unified_orders":
             return []
         budgets.append(pymongo._csot.remaining())
@@ -179,7 +179,7 @@ async def test_actual_read_deadline_and_cleanup_are_preserved(monkeypatch, caplo
 async def test_cancellation_does_not_become_a_source_failure(monkeypatch, caplog):
     entered, stopped = asyncio.Event(), asyncio.Event()
 
-    async def reader(database, owner, name):
+    async def reader(database, owner, name, *, fields=None):
         if name != "unified_orders":
             return []
         entered.set()
