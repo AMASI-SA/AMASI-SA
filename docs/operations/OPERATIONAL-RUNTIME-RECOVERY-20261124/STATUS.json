@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-RUNTIME-RECOVERY-20261124",
-  "status": "WIP_NOT_RELEASE_READY",
+  "status": "SOURCE_VERIFIED_RELEASE_PREPARATION",
   "base_commit": "80341983cf7e89145e4101b408ab68bb45f379cf",
   "branch": "codex/operational-runtime-recovery-20261124",
   "root_responsibility": "Sole integrator, merger, deployer and live financial writer",
@@ -25,7 +25,34 @@
       "seconds": 57.43,
       "completed_at_utc": "2026-11-24T14:42:59.191287+00:00",
       "cause": "Partial mocked make_spec omitted owner_id/actor_id; encoder tests did not reach encoder. No assertion weakened."
-    }
+    },
+    "combined_4713": {
+      "source_sha": "4713d0d41f80f823aafcddd096e3d9d56b4c4317",
+      "passed": 216,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 55.294,
+      "confirmed_from_existing_junit_on_resume": true
+    },
+    "github_4713": {
+      "check_runs": 43,
+      "success": 37,
+      "conditional_skipped": 6,
+      "failed": 0,
+      "pending": 0,
+      "operational_run": 45417936791,
+      "operational_passed": 7454,
+      "operational_subtests": 151,
+      "demand_passed": 106,
+      "salla_run": 45417935937,
+      "salla_passed": 560,
+      "salla_subtests": 53,
+      "skip_floor_gates_passed": true,
+      "release_rehearsal": "Not executed for source-only candidate; mandatory for intent-only B"
+    },
+    "independent_review": "No material blocker found on exact4713 source. Runtime acceptance after publication remains required.",
+    "resume_live_state": "Production shared checkout clean at base80341983; task checkout clean at4713 before documentation checkpoint; original guard inactive. No publication or financial mutation by this continuation yet."
   },
   "production_changed_by_this_followup": false,
   "financial_recovery_claim": false,
@@ -35,8 +62,8 @@
     "Other task branches and worktrees",
     "Pending source admission and manual financial records"
   ],
-  "next_safe_action": "Execute same-view eight-case real-Mongo suite plus all208 affected tests with realistic fixture; complete bounded legacy cost/inventory candidate reviews. No release A/B frozen yet.",
-  "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00",
+  "next_safe_action": "Freeze immutable release source after this documentation-only checkpoint; build twice with governed toolchain and origin, create intent-only B, require exact-B gates and official clean rehearsal before publication.",
+  "checkpoint_at_utc": "2026-11-24T15:13:17.490Z",
   "integrated_candidates": [
     {
       "name": "bounded demand metadata projections",
@@ -84,7 +111,7 @@
         "backend/tests/test_operational_balance_owner_read_diagnostics.py"
       ],
       "review": "Root and independent static review passed; all11 hashes bound. Independent20 assertions and two real-driver stalled-socket checks passed. Actual production AcceptanceConfigDatabase route chain confirmed.",
-      "runtime_acceptance": "New21 diagnostic cases passed alone in Emergent. b11 direct affected combined run:206 passed,2 failed because existing mocked spec omitted required owner/actor keys before encoding. One-line fixture correction preserves all revocation/disconnect assertions; combined rerun remains mandatory.",
+      "runtime_acceptance": "Combined216-case actual Mongo suite passed after realistic owner/actor fixture correction; exact4713 operational CI passed. No skipped failures or errors.",
       "limits": "The 200ms driver deadline is not a strict wall-clock ceiling; independent joined socket observations were about504ms. Telemetry does not itself repair cold report latency.",
       "integration_correction": "Release review caught a test filename collision in WIP3ae42e3a. Restore the pre-existing 13-case primary-source diagnostic suite byte-for-byte from633a; retain all21 new owner-trace cases in a distinct, verified-absent module. All10 reviewed runtime files remain unchanged. Both suites stay selected by existing CI globs."
     },
@@ -96,8 +123,15 @@
         "backend/tests/test_operational_balance_report_demand_binding.py"
       ],
       "review": "Root and independent static review passed. Nine runtime lines canonicalize only already validated complete active same-view anchors, after mandatory forecast/supplied-anchor checks; no source/scope/permission widening.",
-      "runtime_acceptance": "Eight new real-Mongo/HTTP cases plus adjacent suites pending actual execution.",
+      "runtime_acceptance": "Eight new real-Mongo/HTTP cases and adjacent suites executed in combined216 passing run, and exact4713 CI passed.",
       "limits": "Avoids a duplicate unanchored-to-bound job for an identical view. Does not fix cold different-view computation by itself."
     }
+  ],
+  "remaining_acceptance": [
+    "Immutable source/intent A/B and complete exact-B CI",
+    "Clean official adapter and isolated package rehearsal without lease",
+    "Normal merge preserving immutable pair; original guard publish and three consecutive probes",
+    "Bounded Salla retry and receipt comparison against prior16938 without duplicate recovery claims",
+    "Cold-report latency and legacy cost/inventory errors remain to be diagnosed from actual runtime stages"
   ]
 }
