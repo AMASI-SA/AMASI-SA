@@ -24,3 +24,12 @@ process its socket at launch, before any case executed. That launch failure is
 not a browser acceptance pass. The unchanged sandboxed GitHub browser gate
 must execute on the final immutable candidate. Production verification of
 ordinary click exit remains required after publication.
+## Exact GitHub execution
+
+The browser job for remote source `8bc807e24f2258d2ccc95c63292768f451bc3983`
+completed successfully on 24 November 2026. Job `138234572268` ran all
+fourteen financial-position, fourteen simple-balance and eight inventory
+scenarios. The new short-navigation scenario passed at all three sizes,
+including the pending report's consumer release and stopped polling checks.
+This supersedes the local Chromium execution limitation below; it does not
+claim that the follow-up has been deployed or measured in Production.

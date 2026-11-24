@@ -1463,6 +1463,8 @@ def make_operational_balance_router(db, current_user):
     attach_delivery_confirmation_routes(router, db, current_user, scope, guarded)
     from operational_demand_refresh_routes import attach_demand_refresh_routes
     attach_demand_refresh_routes(router, db, current_user, scope)
+    from operational_ad_correction_routes import attach_ad_correction_routes
+    attach_ad_correction_routes(router, db, current_user, scope)
     from operational_balance_freshness_routes import attach_freshness_routes
     attach_freshness_routes(router, db, current_user, scope)
     from operational_balance_automation_routes import attach_automation_routes

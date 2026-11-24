@@ -64,7 +64,7 @@ async def read(db, owner):
     return await logical_state(db, owner, await _raw_state(db, owner))
 
 
-async def mutate(db, owner, operation, *, threaded_preparation=False):
+async def mutate(db, owner, operation, *, threaded_preparation=False, before_commit=None):
     """Operation is async and side-effect free outside the returned aggregate.
 
     Callers revalidate source identity/permissions on every retry. No process
@@ -112,8 +112,14 @@ async def mutate(db, owner, operation, *, threaded_preparation=False):
                 await stage_pages(db, pages)
             except ArchiveError:
                 fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
+            # An explicitly reviewed source change may pin native evidence up
+            # to this existing protected commit. Ordinary writers add no work.
+            # Rejection leaves only unreferenced immutable archive pages.
+            admission = await before_commit(before, after) if before_commit is not None else None
             # Recheck source identity/permissions immediately before the CAS.
             await check_authorization()
+            if admission is not None:
+                admission()  # Synchronous: no departure can race a final await before dispatch.
             if before["revision"] == 0:
                 try:
                     await db[STATES].insert_one(packed)

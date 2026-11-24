@@ -10,6 +10,7 @@ from starlette.requests import Request
 from operational_balance_store import STATES, digest, fail
 from operational_demand_refresh import demand_context, refresh_stage, run_visible_refresh
 from operational_balance_freshness import begin_attempt, finish_attempt, source_warnings
+from operational_ad_correction_routes import AdCorrectionApproval, require_correction_owner
 
 
 _RECEIPT_FAILURES = frozenset({
@@ -67,6 +68,7 @@ class VisibleRefreshInput(BaseModel):
     visible: Literal[True]
     expected_session_scope: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     courier_order_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    ad_correction_approval: AdCorrectionApproval | None = None
 
     @field_validator("visible", mode="before")
     @classmethod
@@ -84,7 +86,15 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
 
         actor, owner, _ = await scope(db, user, "reports")
         actor_id = actor["id"]
+        ad_correction = None
+        if payload.ad_correction_approval is not None:
+            require_correction_owner(actor, owner)
+            if payload.courier_order_id is not None:
+                fail("ad_correction_selection_invalid", "اعتمد تصحيح الإعلان في طلب مستقل", 422)
+            ad_correction = {"actor_id": actor_id, "payload": payload.ad_correction_approval.model_dump()}
         session_scope = digest([owner, actor_id])
+        if ad_correction is not None and ad_correction["payload"]["expected_session_scope"] != session_scope:
+            fail("operational_actor_scope_changed", "تغير الحساب؛ أعد معاينة التصحيح", 403)
         if payload.courier_order_id is not None and payload.expected_session_scope is None:
             fail("operational_actor_scope_required", "أعد فتح التقرير للتحقق من ارتباط الحساب قبل مطابقة الطلب", 400)
         if payload.expected_session_scope is not None and payload.expected_session_scope != session_scope:
@@ -94,6 +104,8 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
             fresh_actor, fresh_owner, _ = await scope(db, user, "reports")
             if (fresh_owner, fresh_actor["id"]) != (owner, actor_id):
                 fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد فتح الصفحة", 403)
+            if ad_correction is not None:
+                require_correction_owner(fresh_actor, fresh_owner)
             # Authorization needs status metadata, not repeated archive decode.
             return await db[STATES].find_one(
                 {"_id": owner, "owner_id": owner},
@@ -126,6 +138,15 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
             refresh_context = demand_context()
             # Start only after the existing lease has admitted the refresh.
             # This metadata records an attempt; it never admits financial work.
+            if ad_correction is not None:
+                from operational_ad_corrections import saved_approval
+                intent = ad_correction["payload"]
+                previous = await saved_approval(db, owner, actor_id, intent["request_id"],
+                    intent["expected_preview_hash"], payload=intent)
+                if previous["status"] == "applied":
+                    return {"status": "refreshed", "as_of": previous["as_of"], "revision": previous["revision"],
+                        "session_scope": session_scope, "native_evidence": {"status": "not_required"},
+                        "ad_correction": previous["receipt"], "replayed": True}
             health_attempt = await begin_attempt(db, owner)
             with refresh_stage("native_evidence"):
                 options = {"courier_order_id": payload.courier_order_id} if payload.courier_order_id is not None else {}
@@ -134,11 +155,19 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
             # outcome is supplied by the adapter after its source-proof CAS.
             completed_receipt = _target_receipt(native_evidence, payload.courier_order_id)
             with refresh_stage("aggregate"):
-                state = await refresh(db, owner)
+                options = {"ad_correction": ad_correction} if ad_correction is not None else {}
+                state = await refresh(db, owner, **options)
             health_warnings = source_warnings(state, native_evidence)
+            correction_receipt = {}
+            if ad_correction is not None:
+                from operational_ad_corrections import approval_receipt
+                saved = approval_receipt(state, ad_correction)
+                if saved is None:
+                    fail("ad_correction_result_mismatch", "لم يتأكد حفظ التصحيح؛ تحقق من الإيصال قبل إعادة المحاولة")
+                correction_receipt["ad_correction"] = saved
             return {"status": "refreshed", "as_of": state.get("engine", {}).get("as_of"),
                     "revision": state.get("revision"), "session_scope": session_scope,
-                    "native_evidence": native_evidence}
+                    "native_evidence": native_evidence, **correction_receipt}
 
         try:
             result = await run_visible_refresh(request, db, owner, actor_id, verify, update)

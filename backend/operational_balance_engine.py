@@ -40,6 +40,71 @@ def amount(value):
     return format(value.quantize(CENT, rounding=ROUND_HALF_UP), ".2f")
 
 
+def advertising_projection(snapshot, state):
+    """Exact confirmed parts for one native day, shared with its review.
+
+    Validate every amount and funding field before the reducer changes a day or
+    records a correction fact. Native precision is retained in source metadata;
+    financial comparisons use every rounded part, not just the rounded total.
+    """
+    value = money(snapshot["amount"])
+    funding = snapshot["funding_type"]
+    if funding not in {"prepaid", "postpaid", "hybrid"}:
+        raise ValueError("advertising_funding_incomplete")
+    wallet_first = snapshot.get("funding_policy") == "wallet_first"
+    if wallet_first:
+        policy = state.get("ad_funding", {}).get(snapshot["account_id"], {})
+        if funding != "hybrid" or policy.get("mode") != "wallet_first" or policy.get("currency") != snapshot["currency"]:
+            raise ValueError("advertising_wallet_policy_incomplete")
+    fraction = ZERO if wallet_first else (money(snapshot.get("wallet_fraction")) if funding == "hybrid" else (Decimal(1) if funding == "prepaid" else ZERO))
+    if fraction > 1:
+        raise ValueError("advertising_hybrid_policy_incomplete")
+    key = "advertising:" + str(snapshot["account_id"]) + ":" + str(snapshot["date"])
+    zone = str(ZoneInfo(snapshot.get("timezone") or state.get("timezone") or "Asia/Riyadh"))
+    metadata = {field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
+        "source_cumulative_amount", "baseline_amount", "hybrid_policy_id", "hybrid_policy_version", "hybrid_policy_evidence",
+        "hybrid_confirmed_at", "hybrid_confirmed_by")}
+    parts = [(key, value, "wallet_first" if wallet_first else funding)]
+    if funding == "hybrid" and not wallet_first:
+        wallet = Decimal(amount(value * fraction))
+        parts = [(key + ":wallet", wallet, "prepaid"), (key + ":credit", value - wallet, "postpaid")]
+    projected = {}
+    for identity, part_value, part_funding in parts:
+        part_metadata = dict(metadata)
+        if funding == "hybrid" and not wallet_first and metadata.get("sar_amount") is not None:
+            sar = money(metadata["sar_amount"])
+            wallet_sar = Decimal(amount(sar * fraction))
+            part_metadata["sar_amount"] = amount(wallet_sar if part_funding == "prepaid" else sar - wallet_sar)
+        projected[identity] = {"id": identity, "kind": "advertising", "party_id": snapshot["account_id"],
+            "party_type": "ad_account", "currency": snapshot["currency"], "expected": "0.00",
+            "confirmed": amount(part_value), "direction": "payable", "business_date": str(day(snapshot["date"])),
+            "funding_type": part_funding, "funding_mode": funding, "wallet_fraction": str(fraction),
+            "ad_day_id": key, "ad_total_amount": amount(value), "original_currency": snapshot["currency"],
+            "timezone": zone, **({"funding_policy": "wallet_first"} if wallet_first else {}), **part_metadata}
+    return projected
+
+
+def advertising_sar_amount(row):
+    value = row.get("sar_amount")
+    if value is None and row.get("currency") == "SAR":
+        value = row.get("confirmed")
+    return None if value is None else amount(money(value))
+
+
+def advertising_fx_basis(row):
+    if row.get("currency") == "SAR":
+        return None  # SAR_identity's observation timestamp is not a conversion.
+    return {field: row.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence")}
+
+
+def advertising_financial_vector(parts):
+    """No source observation timestamp can manufacture a financial difference."""
+    fields = ("id", "party_id", "party_type", "currency", "direction", "business_date",
+              "expected", "confirmed", "funding_type", "funding_mode", "wallet_fraction", "funding_policy")
+    return [{**{field: row.get(field) for field in fields}, "sar_amount": advertising_sar_amount(row),
+             "fx_basis": advertising_fx_basis(row)} for _, row in sorted(parts.items())]
+
+
 def instant(value):
     result = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     if result.tzinfo is None:
@@ -985,54 +1050,53 @@ def reconcile(state, sources, as_of):
             if closed and (not snapshot.get("day_ended") or observed < day_end or now < day_end + timedelta(hours=2)):
                 issue("advertising_close_not_due_or_evidence_incomplete", key)
                 closed = False
-            if prior and prior["closed"] and value != money(prior["amount"]):
-                if not snapshot.get("correction_approved") or not snapshot.get("correction_id"):
-                    raise ValueError("advertising_closed_day_correction_required")
-                fact("ad_correction:" + str(snapshot["correction_id"]), {"day": key, "amount": amount(value)})
-                closed = True
-            elif prior and prior["closed"]:
-                closed = True
-            funding = snapshot["funding_type"]
-            if funding not in {"prepaid", "postpaid", "hybrid"}:
-                raise ValueError("advertising_funding_incomplete")
+            projected = advertising_projection(snapshot, state)
+            first_part = next(iter(projected.values()))
+            funding = first_part["funding_mode"]
             wallet_first = snapshot.get("funding_policy") == "wallet_first"
-            if wallet_first:
-                policy = state.get("ad_funding", {}).get(snapshot["account_id"], {})
-                if funding != "hybrid" or policy.get("mode") != "wallet_first" or policy.get("currency") != snapshot["currency"]:
-                    raise ValueError("advertising_wallet_policy_incomplete")
-            fraction = ZERO if wallet_first else (money(snapshot.get("wallet_fraction")) if funding == "hybrid" else (Decimal(1) if funding == "prepaid" else ZERO))
-            if fraction > 1:
-                raise ValueError("advertising_hybrid_policy_incomplete")
+            fraction = Decimal(first_part["wallet_fraction"])
             if prior and prior["closed"] and (prior.get("funding_type", funding) != funding
                                              or Decimal(prior.get("wallet_fraction", str(fraction))) != fraction
                                              or prior.get("timezone", str(zone)) != str(zone)
                                              or prior.get("funding_policy") != snapshot.get("funding_policy")):
                 raise ValueError("advertising_closed_funding_changed")
+            active_parts = set(projected)
+            previous_parts = {identity: obligations[identity] for identity in active_parts if identity in obligations}
+            if prior and prior["closed"] and any(row.get("currency") != snapshot["currency"] for row in previous_parts.values()):
+                raise ValueError("advertising_closed_currency_changed")
+            if prior and prior["closed"] and any(advertising_fx_basis(row) != advertising_fx_basis(projected[identity])
+                                                   for identity, row in previous_parts.items()):
+                raise ValueError("advertising_closed_fx_changed")
+            # Validate retiring rows before writing either the day or its fact.
+            retired = [identity for identity in (key, key + ":wallet", key + ":credit")
+                       if identity in obligations and identity not in active_parts and money(obligations[identity]["confirmed"]) == ZERO]
+            correction = None
+            if prior and prior["closed"]:
+                changed = (amount(value) != prior["amount"]
+                    or advertising_financial_vector(previous_parts) != advertising_financial_vector(projected))
+                if changed:
+                    correction_id = snapshot.get("correction_id")
+                    if snapshot.get("correction_approved") is not True or not isinstance(correction_id, str) or not correction_id.strip():
+                        raise ValueError("advertising_closed_day_correction_required")
+                    if not closed:
+                        raise ValueError("advertising_correction_close_evidence_required")
+                    correction = ("ad_correction:" + correction_id, {"day": key, "amount": amount(value),
+                        "parts": advertising_financial_vector(projected)})
+                closed = True
+            # No fallible amount/funding preparation remains after this fact.
+            if correction is not None:
+                fact(*correction)
             engine["ad_days"][key] = {"amount": amount(value), "closed": closed, "observed_at": observed.isoformat(),
                                       "funding_type": funding, "wallet_fraction": str(fraction), "timezone": str(zone),
                                       **({"funding_policy": "wallet_first"} if wallet_first else {})}
-            metadata = {field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
-                        "source_cumulative_amount", "baseline_amount", "hybrid_policy_id", "hybrid_policy_version", "hybrid_policy_evidence",
-                        "hybrid_confirmed_at", "hybrid_confirmed_by")}
-            parts = [(key, value, "wallet_first" if wallet_first else funding)]
-            if funding == "hybrid" and not wallet_first:
-                wallet = Decimal(amount(value * fraction))
-                parts = [(key + ":wallet", wallet, "prepaid"), (key + ":credit", value-wallet, "postpaid")]
-            active_parts = {part_key for part_key, _, _ in parts}
-            for old_key in (key, key + ":wallet", key + ":credit"):
-                if old_key in obligations and old_key not in active_parts and money(obligations[old_key]["confirmed"]) == ZERO:
-                    obligations[old_key].update(expected="0.00", superseded=True)
-            for part_key, part_value, part_funding in parts:
-                part_metadata = dict(metadata)
-                if funding == "hybrid" and not wallet_first and metadata.get("sar_amount") is not None:
-                    wallet_sar = Decimal(amount(money(metadata["sar_amount"]) * fraction))
-                    part_metadata["sar_amount"] = amount(wallet_sar if part_funding == "prepaid" else money(metadata["sar_amount"])-wallet_sar)
-                put(part_key, "advertising", snapshot["account_id"], "ad_account", snapshot["currency"],
-                    expected=ZERO if closed else part_value, confirmed=part_value if closed else ZERO,
-                    business_date=ad_date, funding_type=part_funding, funding_mode=funding,
-                    wallet_fraction=str(fraction), ad_day_id=key, ad_total_amount=amount(value),
-                    original_currency=snapshot["currency"], timezone=str(zone),
-                    **({"funding_policy": "wallet_first"} if wallet_first else {}), **part_metadata)
+            for old_key in retired:
+                obligations[old_key].update(expected="0.00", superseded=True)
+            for part_key, part in projected.items():
+                if not closed:
+                    part["expected"], part["confirmed"] = part["confirmed"], "0.00"
+                if obligations.get(part_key, {}).get("name"):
+                    part["name"] = obligations[part_key]["name"]
+                obligations[part_key] = part
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 

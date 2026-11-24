@@ -617,3 +617,66 @@ review in its isolated checkout. Root remains the sole integrator/deployer.
 Next safe action: preserve this WIP checkpoint remotely, validate its stronger
 CI, complete the advertising review, then freeze and verify a new immutable
 source/intent pair under the unchanged original release protocol.
+
+## Final source integration before the v5 release pair
+
+Remote checkpoint `8bc807e24f2258d2ccc95c63292768f451bc3983` completed
+45 checks successfully; six existing conditionally unrelated jobs were skipped.
+The Operational Backend job executed 7,289 cases plus 151 subtests, demand-read
+acceptance executed 106 cases, and Stock executed 5,962 cases plus 97 subtests.
+All mandatory collection/no-skip gates passed. The actual browser job passed
+14 financial-position, 14 simple-balance and eight inventory scenarios,
+including the new short-screen ordinary click and cancelled report consumer.
+
+Reviewed report-only copy source `d9c0676c2f84a0762ed03fca9e5195c5c29c1707`
+preserves all seven protective copies inside `report()`, specializing only
+plain dict/list traversal and exact immutable scalar types. Typed and custom
+objects retain the standard deepcopy memo/hook semantics. No financial write
+or refresh copy changes. Author and independent six-suite acceptance each
+passed 242 cases without skips, with all twelve views byte-identical and inputs
+unchanged. The new CI-selected module has 55 cases. Its final alternating
+synthetic comparison measured 10.97% median wall and 11.59% CPU improvement;
+neither production latency nor RSS improvement is inferred from that fixture.
+
+Closed-ad source `91fce2c513b34570be3e1514ce59e091923b37b1` adds explicit
+owner preview/approval of an original closed advertising day through the
+existing refresh lease and aggregate CAS. Native close proof, full funding
+parts, pinned currency conversion, original IDs/dates, fresh source digest,
+revision and current owner are checked. The approval audit and replay receipt
+are saved with the financial result. A missing FX proof, stale source, changed
+revision, revoked owner or pre-dispatch cancellation/deadline rejects the
+approval. An already dispatched CAS keeps the original joined-result contract.
+No client amount, compensating manual movement or native source write is added.
+
+The author passed 324 adjacent backend cases, including 18 real-Mongo HTTP
+cases, and 89 frontend cases including 13 approval UI cases. The 18 Mongo cases
+also executed under the existing Stock-only URI capability names without a
+skip. Root independently reviewed the runtime/route/UI/commit boundaries and
+the merged copy/correction selection passed all 302 cases in 15.85 seconds.
+The final isolated independent advertising review is recorded in the PR
+continuation before any release freeze. Existing workflows now explicitly
+require the 60 new pure correction, 18 real-Mongo correction, 55 copy and 13 UI
+cases; all prior acceptance requirements remain.
+
+The original guard was read directly again and reported inactive. Shared
+tracked `/app` remained clean at production D, and Emergent still listed the
+previous PR #2101 publish as latest with no active publication. New source
+content is held on the dedicated PR #2102 branch only. Root remains the sole
+merger/deployer and financial writer. The next action is to preserve the final
+reviewed source A remotely, freeze an intent-only B using the pinned governed
+A/B build, require exact B CI, and perform the clean official Emergent adapter
+rehearsal before any original-guard lease or publication. Production recovery,
+source completeness, real page timings and receipts remain separate live
+acceptance steps; the follow-up has not yet changed Production.
+
+The independent closed-ad review subsequently passed on the exact frozen
+`91fce2c513b34570be3e1514ce59e091923b37b1` source with all eight runtime,
+test and UI hashes unchanged. Its first broad run recorded 323 passing cases
+and one existing hospitality-test database-cleanup cancellation during a
+shared executor stall; the completed business assertions were retained. A
+fresh owned replica then passed that exact failed case together with all
+18 Stock-style correction transaction cases (19/19, 21.72 seconds), with both
+demand fixture variables absent. The five frontend suites passed all 89 cases.
+No implementation, fixture assertion or acceptance gate was weakened to
+resolve that failure. All four independent findings were fixed and no review
+blocker remains. Final immutable GitHub and production checks are still required.
