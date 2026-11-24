@@ -107,6 +107,24 @@ def make_mobile_employee_monitoring_workspace_router(
             raise HTTPException(status_code=404, detail={"code": "employee_not_found"})
         return owner_id, monitored_work_account_id(employee)
 
+    @router.get("/preparation/{employee_id}/progress-count")
+    async def employee_progress_count(employee_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id, account_id = await progress_target(employee_id, user)
+        from preparation_progress_counts import progress_count
+        result = await progress_count(db, user_id=owner_id, employee_id=account_id)
+        return {**result, "target_employee_id": employee_id}
+
+    @router.get("/preparation/{employee_id}/progress-day-counts")
+    async def employee_progress_day_counts(
+        employee_id: str,
+        after: str = Query("", pattern=r"^$|^\d{4}-\d{2}-\d{2}$|^__unknown__$"),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner_id, account_id = await progress_target(employee_id, user)
+        from preparation_progress_counts import progress_day_counts
+        result = await progress_day_counts(db, user_id=owner_id, employee_id=account_id, after=after)
+        return {**result, "target_employee_id": employee_id}
+
     @router.get("/preparation/{employee_id}/progress-days")
     async def employee_progress_days(employee_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         owner_id, account_id = await progress_target(employee_id, user)
@@ -115,8 +133,11 @@ def make_mobile_employee_monitoring_workspace_router(
                                    date_basis="employee_assigned_at")
 
     @router.get("/preparation/{employee_id}/progress-workspace")
-    async def employee_progress_workspace(employee_id: str, day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def employee_progress_workspace(employee_id: str, day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), supplier_dates: bool = False, confirmed_counts: bool = False, user: dict = Depends(current_user)) -> dict[str, Any]:
         owner_id, account_id = await progress_target(employee_id, user)
+        if supplier_dates:
+            from preparation_supplier_progress import supplier_progress_workspace
+            return await supplier_progress_workspace(db, user_id=owner_id, employee_id=account_id, day=day, after=after, confirmed_counts=confirmed_counts)
         from preparation_section_reads import progress_workspace
         return await progress_workspace(db, user_id=owner_id, employee_id=account_id, day=day, after=after,
                                         date_basis="employee_assigned_at")
