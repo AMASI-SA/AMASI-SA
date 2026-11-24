@@ -6,17 +6,33 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/dashboard-split-payment-profit-20261124`.
 - Production target: `hotfix/prod-snap-meta-final`.
-- Starting production-branch commit: `c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe`.
-- Observed live frontend source before the change: `a611477be8d52b18f9ad851f44facf9c78be2905`.
-- Verified implementation commit: `05333b6682be0cf5125568503bdd0175b8212121`.
-  The subsequent status-only commit records the local validation and blocker;
-  it is not a Protocol-v5 intent-only B or a remote checkpoint.
-- Remote checkpoint/PR: **blocked by automatic approval review**. The push was
-  rejected because the current user message did not explicitly authorize
-  uploading potentially nonpublic source to GitHub. A read-only `ls-remote`
-  subsequently confirmed that this task branch does not exist remotely.
-- Production changed: **no**. No merge, shared `/app` change, release lease,
-  publish, settings write, tariff change, sync, backfill, or accounting post occurred.
+- Starting and currently observed production-branch commit J:
+  `c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe`.
+- The user explicitly authorized upload, merge and publication on
+  **25 November 2026, Asia/Riyadh**: "نعم ارفع وادمح وانشر".
+  The earlier automatic approval rejection is resolved by that new authorization.
+- The subsequent Git CLI push failed because the local Git credential was
+  unavailable (`could not read Username`), rather than another approval rejection.
+  The authorized upload used the connected GitHub Git Data API.
+- Verified remote source checkpoint before this status update:
+  `6af60231b7a89e789c1f26600dcc8ad60b0589a0`, with sole parent J and tree
+  `210fe97c253e84dcd6798c6d9758cc2f4fe9289e`.
+  All 10 uploaded blob IDs matched local Git objects; the complete remote tree
+  exactly matched preserved local checkpoint
+  `764daef45a768f28bbc13cd103788aaf6316604a`.
+  Independent commit/ref reads and `git ls-remote` confirmed the remote branch.
+- Original local implementation commit
+  `05333b6682be0cf5125568503bdd0175b8212121` and its status-only successor
+  remain preserved on `codex/dashboard-split-payment-profit-local-20261124`.
+  The main task checkout adopted remote `6af60231...` with a clean worktree.
+- [Draft PR #2121](https://github.com/AMASI-SA/AMASI-SA/pull/2121) is open against
+  `hotfix/prod-snap-meta-final`; CI was running at the preceding source checkpoint.
+  Read the exact current PR head for the enclosing source commit containing this
+  status update. This document does not embed its own commit SHA, and this update
+  is not an intent-only Protocol-v5 B commit.
+- Production changed by this task: **no**. No merge, shared `/app` change, release
+  lease, publication, settings write, tariff change, sync, backfill or accounting
+  post has occurred.
 
 ## Confirmed defect
 
@@ -60,29 +76,31 @@ live profit claim.
 
 | Synthetic tender | Fee net | Fee VAT | Fee total |
 | --- | ---: | ---: | ---: |
-| Card145.86 + internal wallet33.01 | 4.21 | 0.63 | 4.84 |
-| Mada329.40 + distinct mada198.72 | 7.28 | 1.09 | 8.37 |
+| Card 145.86 + internal wallet 33.01 | 4.21 | 0.63 | 4.84 |
+| Mada 329.40 + distinct mada 198.72 | 7.28 | 1.09 | 8.37 |
 | Combined | 11.49 | 1.72 | 13.21 |
 
-For the canonical dashboard fixture with full sales706.99, product cost20,
-and no advertising/shipping costs, profit is673.78, internal wallet33.01,
-electronic principal673.98, and expected transfer/electronic net660.77.
+For the canonical dashboard fixture with full sales 706.99, product cost 20,
+and no advertising/shipping costs, profit is 673.78, internal wallet 33.01,
+electronic principal 673.98, and expected transfer/electronic net 660.77.
 
-## Verification completed
+## Historical implementation verification
 
 Original positive cases first reproduced the split-payment block. Cash-basis
 tests also failed before integration: expected transfer incorrectly included
 wallet principal. The frontend regressions first reproduced the generic hint.
 
-The final source passed:
+The reviewed implementation passed **489 tests** in total. These completed
+local checks remain historical evidence for the preserved implementation; final
+source-head CI and the new governed build are still required:
 
-- **300 backend tests**, exit0, including all current payment-fee workflow
+- **300 backend tests**, exit 0, including all current payment-fee workflow
   suites, four canonical read-only cash-basis cases, 45 split-fee cases and the
   seven unchanged legacy same-rail fee cases.
-- **189 frontend tests in seven suites**, exit0, including every current
+- **189 frontend tests in seven suites**, exit 0, including every current
   payment-fee workflow suite and executive-profit arithmetic. Repeated under
-  the pinned Node22.23.2/Yarn1.22.22 release toolchain: 189 passed, exit0.
-- Python syntax checks and `git diff --check`, exit0.
+  the pinned Node 22.23.2/Yarn 1.22.22 release toolchain: 189 passed, exit 0.
+- Python syntax checks and `git diff --check`, exit 0.
 - Independent code review: no remaining blockers. Concrete refund/cancellation,
   projected currency, and wallet-cash findings were fixed and regression-tested.
 
@@ -125,14 +143,14 @@ CI=true node node_modules/react-scripts/scripts/test.js \
   src/lib/demandRead.test.js src/lib/dashboardExecutiveProfit.test.js
 ```
 
-## Release state and next safe action
+## Historical build evidence
 
-Source is verified locally. The governed Node22.23.2/Yarn1.22.22 frozen-lockfile
-installation, two-pass frontend build and `verify_frontend_build.py` all passed
-for implementation commit `05333b6682be0cf5125568503bdd0175b8212121` (exit0).
-The local build used task-owned dependencies preseeded from an existing cache;
-it is **not** a clean-clone adapter rehearsal. The borrowed symlink was removed
-before the copy, and other tasks' caches/checkouts were not changed.
+The governed Node 22.23.2/Yarn 1.22.22 frozen-lockfile installation, two-pass
+frontend build and `verify_frontend_build.py` passed for original implementation
+commit `05333b6682be0cf5125568503bdd0175b8212121` (exit 0). The local build used
+task-owned dependencies preseeded from an existing cache; it was not the
+clean-clone adapter rehearsal. The borrowed symlink was removed before the copy,
+and other tasks' caches/checkouts were not changed.
 
 - Frontend artifact tree:
   `59de118c0e3fc1da1f837d09335725fb24ccd2898de28551f71271d9e756740b`.
@@ -141,25 +159,66 @@ before the copy, and other tasks' caches/checkouts were not changed.
 - Both passes retained the same build-meta SHA256:
   `d6b7e94b78a839c539c170020b7217820e0c166921d2e66cf9ceab9e1d0460b2`.
 
-Remote CI, draft PR, reviewed intent, adapter rehearsal and publication remain
-pending. Ask for explicit permission to push this task branch to
-`AMASI-SA/AMASI-SA`, open the reviewable PR, and publish after required release
-checks. **Do not bypass the rejected push with another API or upload route.**
+The new final remote source A must be rebuilt and verified before freezing a new
+intent-only B. The historical artifacts are not the release identity for that
+new source SHA.
 
-After authorization, fetch/inspect the current remote branch, push the preserved
-task branch and create a draft PR with the exact head. Follow `AGENTS.md` and
-`docs/PRODUCTION_RELEASE_PROTOCOL.md` for source A and intent-only B. Reverify
-the current published base before freezing: the observed live source was from
-PR2113 while the starting production branch already included PR2118 and its
-newer intent. No guessed published-base SHA or rewritten old intent was used.
+## Published-base evidence and shared release coordination
 
-Publishing is a separately authorized step. Before shared `/app` work, its
-actual guard must report inactive; do not reuse or clear another task's lease.
-After authorized publication, require the new deployment success and all three
-official release probes, then check the executive dashboard with current data.
+The initial dashboard diagnosis observed live frontend source
+`a611477be8d52b18f9ad851f44facf9c78be2905`. Later
+[PR #2118 publication evidence](https://github.com/AMASI-SA/AMASI-SA/blob/65b65d107b59ea9ba83e4a891bf24163dacef9f3/docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/STATUS.json)
+reports a newer platform publication:
 
-Issue1006 read attempts returned `Transport closed`. No ledger comment was sent;
-this task status and draft PR preserve the reviewable continuation. Browser
-diagnosis completed before its transport disconnected during tab cleanup; no
-post-release visual claim is made. Other task checkouts and the previous tracked
-release intent remain untouched.
+- Source: `6e25a762b17ad87ce8efeb37f2952a478ae9427b`.
+- Intent-only B: `a0f5bd77f91b85b2d75885aa4173c4e48aa16ad7`.
+- Merge/deployment and current production branch J:
+  `c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe`.
+- Runtime ID:
+  `rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e`.
+- Platform version `eeecd3f`, reported finished 24 November at 23:41 Riyadh.
+
+That immutable PR #2118 record still described its original three-probe verifier
+as running. A later PR #2120 continuation observation at 21:01 UTC reported an
+inactive shared guard. These are other tasks' recorded observations; this task
+has not yet independently confirmed the current shared guard or final live
+identity. The actual original `/app` guard status must be read before any shared
+workspace mutation or release rehearsal. Preserve every other owner's lease.
+
+[PR #2120](https://github.com/AMASI-SA/AMASI-SA/pull/2120) is another open candidate
+with disjoint application changes and its own already frozen A/B pair. It shares
+the production branch and `release/release-intent-v5.json`. The shared production
+intent and publication must be coordinated serially. Root must coordinate the
+serial merge/publication order and re-read J before finalizing this release.
+If the published base or source changes, rebuild and freeze from the new exact
+source; do not rewrite another candidate's reviewed intent or bypass validators.
+
+## Release state and exact next actions
+
+Upload, merge and publication are authorized. Draft PR #2121 and the remote
+checkpoint exist. Required final-head CI/review, the final-source governed build,
+new reviewed intent, original adapter rehearsal and publication verification
+remain pending.
+
+1. Read the remote task branch/PR head after this status-only source commit;
+   verify its tree and sole-parent relationship, then fast-forward the clean
+   task checkout while preserving the backup branch.
+2. Confirm serial ownership with PR #2120 and read the actual current production
+   ref and original shared guard. Proceed with shared work only when the guard
+   reports inactive and the reviewed release order is unchanged.
+3. Follow `AGENTS.md` and `docs/PRODUCTION_RELEASE_PROTOCOL.md`: build the exact
+   final source A with the governed toolchain, validate its candidate, and create
+   B changing only `release/release-intent-v5.json`. Re-read exact-head CI and
+   review evidence before normal merge; preserve A/B ancestry.
+4. Complete the original clean-clone adapter rehearsal and original Release
+   Guard preparation/prepublication steps. Publish once through the authorized
+   production workflow after its concrete checks pass.
+5. Require a newer explicit deployment success and all three original verifier
+   probes with the intended source/runtime identity, then inactive guard status.
+   Check current executive-dashboard payment completeness and profit afterward.
+
+Root owns PR/continuation-ledger updates, final source adoption, intent freeze,
+merge and publication. This status update changes only this document and posts
+no external comments. Browser diagnosis completed before its transport
+disconnected during cleanup; no post-release visual claim is made. Other task
+checkouts and the inherited tracked release intent remain untouched.
