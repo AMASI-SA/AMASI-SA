@@ -34,6 +34,7 @@ def event_record(event: PaymentEvent, *, owner: str, source: str, source_ref: st
         "order_id": event.order_id, "provider": event.provider.strip().lower(),
         "kind": event.kind.value, "currency": event.currency, "amount": amount,
         "transaction_key": decision.idempotency_key,
+        "native_ref": (event.refund_id if event.kind == Kind.REFUND else (event.transaction_id or event.installment_id)),
         "target": decision.balance_bucket, "status": "evidence_received",
     }
 
@@ -65,12 +66,29 @@ def queue_evidence_in_state(state: dict, record: dict, stamp: str) -> dict:
         if proof not in sources:
             sources.append(proof)
         return {"status": "already_received", "key": record["key"]}
+    # Existing canonical capture is already included in the derived provider
+    # balance. Mark it as recognized, not as a new receipt candidate.
+    recognized = False
+    if record["kind"] == "payment":
+        facts = state.get("engine", {}).get("facts", {})
+        if not isinstance(facts, dict):
+            raise ValueError("payment_event_canonical_facts_invalid")
+        canonical = facts.get("capture:" + record["native_ref"])
+        if canonical is not None:
+            if not isinstance(canonical, dict) or (
+                str(canonical.get("order_id")) != record["order_id"]
+                or canonical.get("provider") != record["provider"]
+                or canonical.get("amount") != record["amount"]
+            ):
+                raise ValueError("payment_event_canonical_conflict")
+            recognized = True
     saved = {**record, "created_at": stamp,
+             "status": "already_recognized" if recognized else "evidence_received",
              "sources": [{"source": record["source"], "ref": record["source_ref"]}]}
     saved.pop("source", None)
     saved.pop("source_ref", None)
     inbox[record["key"]] = saved
-    return {"status": "evidence_received", "key": record["key"]}
+    return {"status": saved["status"], "key": record["key"]}
 
 
 async def stage_verified_evidence(db, owner, event: PaymentEvent, *,
