@@ -124,6 +124,24 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
             and a.get("obligation_id") in (obligation_key, "credit:" + obligation_key)
             for a in m.get("allocations", [])) for m in state.get("movements", [])):
         raise InitialCaptureHold("settled_provider_requires_review")
+    if state.get("movements"):
+        # Use the EXACT canonical provider history/pooled payout gate used by
+        # operational_balance_engine.reconcile. An incoming aggregate payout
+        # with incomplete allocation can already contain this order's funds.
+        # The saved provider opening may also have allocations that must be
+        # proven to belong solely to pre-cutover sales. Never infer exclusions.
+        from operational_provider_history import late_payment_blocks
+        source_order = {
+            "id": order_id, "order_number": order_number,
+            "created_at": normalized["order_created_at"], "currency": currency,
+        }
+        source_payment = {
+            **normalized, "provider": provider, "currency": currency,
+            "gross": format(gross, ".2f"),
+        }
+        if late_payment_blocks(state, source_order, source_payment,
+                               obligation_key=obligation_key, through=at):
+            raise InitialCaptureHold("provider_pooled_settlement_review_required")
 
     policies = fee_inputs.get("policies")
     if not isinstance(policies, list) or not policies:
