@@ -44,6 +44,14 @@ ALLOWED_REASONS = frozenset({
     "provider_fee_policy_ambiguous",
     "provider_fee_projection_invalid",
     "capture_identity_conflict",
+    "historical_page_requires_reconciliation",
+    "preexisting_order_provider_effect",
+    "native_capture_already_recognized",
+    "provider_settlement_requires_review",
+    "paid_page_provider_projection_unverified",
+    "paid_page_reference_conflict",
+    "paid_page_reference_reused",
+    "salla_payment_rail_unverified",
 })
 ALLOWED_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan", "paypal", "unknown"})
 ALLOWED_EVENTS = frozenset({"order.created", "order.payment.updated"})
