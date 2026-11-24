@@ -488,3 +488,56 @@ owns integration, merge, deployment and live recovery. No new intent or lease
 has been created. Next safe action: preserve this exact reviewed tree remotely
 on PR #2102, finish and independently review Salla, then run integrated gates
 and the complete new A/B release protocol.
+
+## Source-window, monitor and statement integration checkpoint
+
+The preceding entries are historical. The second remote PR #2102 checkpoint
+is `af0f7f6267ef299958cb22b49a38d15fbc6847f6`, tree
+`67570a8b0b2063e8fce4460975653e268571a22c`. Production remains the previously
+verified PR #2101 identity; no follow-up release intent has been frozen.
+
+Reviewed Salla source commit `6bebde32c04c272fe0fa9ac6f80d76dfa428b326`
+adds a bounded explicit creation-date window, native detail fallback for
+eligible missing-clock candidates, and truthful partial/truncated outcomes.
+Scheduled reconciliation remains update-only. Explicit manual recovery may
+import new orders within the requested window, with original source identity,
+dates, items and the existing component fence. No fence or financial admission
+rule is bypassed. Author verification passed 472 tests with 43 subtests on an
+owned local Mongo replica; independent review passed 147 focused backend,
+14 frontend and all 24 actual transaction cases with zero skips.
+
+Reviewed monitor commit `9d510f67041a5f4561b1db70a258febaf7b159b6` addresses
+the observed whole-history monitor query timeout. Historical counts use a
+covering metadata index; at most one projected latest row per approved event
+is fetched separately. Missing index, timeout or invalid scope gives explicit
+unknown status. A bounded one-shot startup task initializes the index without
+blocking readiness and is cancelled/joined on shutdown. GET performs no index
+or data write. Author and independent runs passed 75 cases each, including
+four real-Mongo cases without skips. The new suite is added to the existing
+Salla recovery CI selection; no acceptance gate is removed.
+
+Statement views and printing now select the existing saved demand-read path
+with the original AbortSignal. Six real-transport fail-first tests reproduced
+the legacy behavior, then passed. Both root and independent review passed
+53 frontend cases; independent backend statement, 360-row chunk parity and
+disconnect checks passed 43 cases without skips. Full periods, money, dates,
+current authorization and print grants are preserved. See the scoped source,
+monitor and statement evidence documents for commands and limitations.
+
+Live owner-authorized automation was enabled after a fresh inactive guard
+check. Two independently scheduled attempts ran after leaving accounting.
+The first failed the bounded primary read. The second completed that read but
+reached the existing 85-second total lifetime during reconciliation. Neither
+committed partial financial output. This is an unresolved release blocker,
+not a successful automation claim. Isolated reviewers are investigating
+repeated snapshot decoding and source/profit construction while retaining
+all deadlines, low-priority execution, complete-source admission and CAS.
+
+The complete initial recovery receipt and independent native source supplement
+are privately archived, with their individual identities and preservation
+checks. No private financial fixtures or evidence are included in this PR.
+Root remains the sole merger, deployer and live writer. Existing shared files,
+other conversations and prior release pairs remain preserved. Next safe action:
+push this verified WIP tree and update the PR continuation, resolve the actual
+automatic-cycle timeout, run all final gates, then freeze a new governed A/B
+pair and follow the unchanged original-guard release procedure.

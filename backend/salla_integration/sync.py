@@ -62,6 +62,8 @@ MAX_PAGES_PER_RUN = 40  # 50 * 40 = 2000 orders / run — protects against runaw
 MAX_RANGE_PAGES_PER_RUN = 120
 MAX_ATTRIBUTION_RECOVERY_DAYS = 3
 MAX_ATTRIBUTION_RECOVERY_ORDERS = 500
+MAX_ORDER_CLOCK_DETAILS_PER_RUN = 500
+MAX_ORDER_RECOVERY_DAYS = 31
 PRODUCTS_PER_PAGE = 60
 MAX_PRODUCT_PAGES = 20
 
@@ -885,8 +887,65 @@ def _scheduled_order_changed_at(raw):
         return None
 
 
+def normalize_order_sync_filters(from_date=None, to_date=None, updated_since_hours=None,
+                                 *, recover_missing_order_clock=False):
+    """Use supported creation dates; never claim a modified-since scan."""
+    if type(recover_missing_order_clock) is not bool:
+        raise ValueError("recover_missing_order_clock must be boolean")
+    if updated_since_hours is not None:
+        if (type(updated_since_hours) is not int or not 1 <= updated_since_hours <= 744
+                or from_date or to_date):
+            raise ValueError("use a date range or one to 744 recent hours, not both")
+        # Preserve legacy clients without sending Salla's unsupported filter.
+        # The resulting window is explicitly labelled creation-date coverage.
+        end = _now().astimezone(ZoneInfo("Asia/Riyadh")).date()
+        days = (updated_since_hours + 23) // 24
+        from_date, to_date = (end-timedelta(days=days-1)).isoformat(), end.isoformat()
+    if from_date or to_date or recover_missing_order_clock:
+        if recover_missing_order_clock and (not from_date or not to_date):
+            raise ValueError("both order creation dates are required")
+        try:
+            start = datetime.strptime(from_date, "%Y-%m-%d").date() if from_date is not None else None
+            end = datetime.strptime(to_date, "%Y-%m-%d").date() if to_date is not None else None
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid order creation date range") from exc
+        if start and end:
+            days = (end-start).days+1
+            if days < 1 or (recover_missing_order_clock and days > MAX_ORDER_RECOVERY_DAYS):
+                raise ValueError("source clock recovery requires one to 31 calendar days")
+        if recover_missing_order_clock and end > _now().astimezone(ZoneInfo("Asia/Riyadh")).date():
+            raise ValueError("source clock recovery cannot include future creation dates")
+        from_date, to_date = start.isoformat() if start else None, end.isoformat() if end else None
+    return from_date, to_date
+
+
+async def _fetch_order_clock_details(db, user_id, identity, reference):
+    """Complete an admitted owner-scoped light row without weakening fences."""
+    from resource_governor import governor, ResourcePressure
+    if governor.peek()[0] in {"blocked", "cancel"}:
+        raise ResourcePressure("resource_pressure")
+    # Pace every detail attempt, including unchanged/ineligible candidates.
+    await asyncio.sleep(0.25)
+    if governor.peek()[0] in {"blocked", "cancel"}:
+        raise ResourcePressure("resource_pressure")
+    response = await call_salla(db, user_id, "GET", f"/orders/{identity}")
+    if governor.peek()[0] in {"blocked", "cancel"}:
+        raise ResourcePressure("resource_pressure")
+    raw = response.get("data") if isinstance(response, dict) else None
+    if (not isinstance(raw, dict) or _str(raw.get("id")) != identity
+            or _str(raw.get("reference_id") or raw.get("order_number")) != reference):
+        raise ValueError("order_clock_details_identity_unproven")
+    return raw
+
+
+def _inside_creation_dates(raw, from_date, to_date):
+    # Parsing creation evidence does not make it an order-update watermark.
+    created = _scheduled_order_changed_at({"updated_at": raw.get("date")})
+    return bool(created and from_date <= created.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat() <= to_date)
+
+
 async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=None):
-    """Bounded refresh using documented list/reference filters, never Details.
+    """Bounded refresh using documented list/reference filters and native clocks.
 
     Salla List Orders has no accepted modified-since filter. Discover recent
     creations plus existing orders with locally verified source activity; old
@@ -900,7 +959,9 @@ async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=No
     log_id = log_id or await create_sync_log(db, user_id, "orders")
     limit = 500
     counts = dict(created=0, updated=0, unchanged=0, skipped=0, missing_existing=0,
-                  incomplete_count=0, errors_count=0, pages_fetched=0, targeted_lookups=0)
+                  incomplete_count=0, errors_count=0, pages_fetched=0, targeted_lookups=0,
+                  details_fetched=0, source_clock_missing_count=0, details_budget_exhausted_count=0,
+                  pending_component_count=0)
     seen, references = set(), set()
     limited = False
     exhausted = False
@@ -932,7 +993,17 @@ async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=No
                     continue
                 changed = _scheduled_order_changed_at(source_row)
                 if changed is None:
+                    if counts["details_fetched"] >= MAX_ORDER_CLOCK_DETAILS_PER_RUN:
+                        counts["incomplete_count"] += 1
+                        counts["details_budget_exhausted_count"] += 1
+                        counts["skipped"] += 1
+                        continue
+                    counts["details_fetched"] += 1
+                    source_row = await _fetch_order_clock_details(db, user_id, identity, reference)
+                    changed = _scheduled_order_changed_at(source_row)
+                if changed is None:
                     counts["incomplete_count"] += 1
+                    counts["source_clock_missing_count"] += 1
                     counts["skipped"] += 1
                     continue
                 if not start <= changed <= end:
@@ -940,8 +1011,12 @@ async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=No
                     continue
                 raw = dict(source_row)
                 raw["items"] = await _fetch_scheduled_order_items(db, user_id, identity)
+                if governor.peek()[0] in {"blocked", "cancel"}:
+                    raise ResourcePressure("resource_pressure")
                 raw = await _enrich_order_receiving_bank(db, user_id, raw)
                 doc = _salla_order_to_doc(raw)
+                if governor.peek()[0] in {"blocked", "cancel"}:
+                    raise ResourcePressure("resource_pressure")
                 result = await _persist_sync_component_snapshot(db, user_id, doc, raw, existing_only=True)
                 if result.get("blocked"):
                     raise RuntimeError("scheduled_snapshot_blocked")
@@ -951,12 +1026,17 @@ async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=No
                 if result.get("unchanged"):
                     counts["unchanged"] += 1
                     continue
+                if (result.get("component_revalidation") or {}).get("accepted") is False:
+                    counts["pending_component_count"] += 1
+                    counts["incomplete_count"] += 1
                 from .paid_sar_sync import observe_list_evidence
                 await observe_list_evidence(db, user_id, source_row)
                 await _refresh_plan_b_status_snapshot(db, user_id, reference, doc,
                                                       allow_handoff_transition=False)
                 counts["updated"] += 1
                 await asyncio.sleep(0.25)
+            except ResourcePressure:
+                raise
             except Exception:
                 counts["errors_count"] += 1
 
@@ -1043,6 +1123,7 @@ async def run_orders_sync(
     recover_marketing_attribution: bool = False,
     refresh_window: Optional[tuple[datetime, datetime]] = None,
     existing_only: bool = False,
+    recover_missing_order_clock: bool = False,
 ) -> dict:
     """Pull orders from Salla and upsert into unified_orders.
 
@@ -1050,17 +1131,24 @@ async def run_orders_sync(
     ----------
     from_date / to_date : optional ISO YYYY-MM-DD bounds (Salla filters by
         creation date when both are present).
-    updated_since_hours : if set, ask Salla for orders updated in the last
-        N hours (uses the `updated_at_gt` filter). Convenient for cron-style
-        incremental syncs.
+    updated_since_hours : legacy compatibility input, normalized to supported
+        Riyadh creation-date bounds. It does not prove modified-order coverage.
+    recover_missing_order_clock : within at most 31 creation days, complete an
+        admitted order's missing native clock from verified details. The manual
+        import contract permits new orders; scheduled refresh remains update-only.
     """
     if type(existing_only) is not bool:
         raise ValueError("existing_only must be boolean")
+    if recover_missing_order_clock and (recover_marketing_attribution or refresh_window):
+        raise ValueError("source clock recovery cannot be combined with other recovery modes")
     if existing_only:
         if (not refresh_window or recover_marketing_attribution or from_date or to_date
-                or updated_since_hours):
+                or updated_since_hours or recover_missing_order_clock):
             raise ValueError("existing-only refresh requires a fixed refresh_window without import filters")
         return await _run_existing_orders_refresh(db, user_id, refresh_window=refresh_window, log_id=log_id)
+    from_date, to_date = normalize_order_sync_filters(
+        from_date, to_date, updated_since_hours,
+        recover_missing_order_clock=recover_missing_order_clock)
     if recover_marketing_attribution:
         if not from_date or not to_date:
             raise ValueError(
@@ -1088,6 +1176,14 @@ async def run_orders_sync(
     created = 0
     updated = 0
     skipped = 0
+    unchanged = 0
+    incomplete_count = 0
+    details_fetched = 0
+    source_clock_missing_count = 0
+    details_budget_exhausted_count = 0
+    creation_window_unproven_count = 0
+    pending_component_count = 0
+    recovered_identities = set()
     errors_count = 0
     errors_sample: list[dict] = []
     pages_fetched = 0
@@ -1098,6 +1194,7 @@ async def run_orders_sync(
     attribution_details_fetched = 0
     attribution_orders_recovered = 0
     attribution_recovery_errors = 0
+    from resource_governor import governor, ResourcePressure
 
     try:
         page = 1
@@ -1107,6 +1204,8 @@ async def run_orders_sync(
             else MAX_PAGES_PER_RUN
         )
         while page <= max_pages:
+            if recover_missing_order_clock and governor.peek()[0] in {"blocked", "cancel"}:
+                raise ResourcePressure("resource_pressure")
             params: dict = {"page": page, "per_page": ORDERS_PER_PAGE, "format": "light"}
             if refresh_window:
                 # Fetch items separately; never open /orders/{id} in background.
@@ -1115,10 +1214,6 @@ async def run_orders_sync(
                 params["from_date"] = from_date
             if to_date:
                 params["to_date"] = to_date
-            if updated_since_hours:
-                params["updated_at_gt"] = (
-                    (_now() - timedelta(hours=updated_since_hours)).strftime("%Y-%m-%d %H:%M:%S")
-                )
 
             try:
                 resp = await call_salla(db, user_id, "GET", "/orders", params=params)
@@ -1170,6 +1265,58 @@ async def run_orders_sync(
             for raw in data:
                 try:
                     list_row = raw
+                    recovered_existing_clock = False
+                    if recover_missing_order_clock and governor.peek()[0] in {"blocked", "cancel"}:
+                        raise ResourcePressure("resource_pressure")
+                    if recover_missing_order_clock and not _inside_creation_dates(raw, from_date, to_date):
+                        skipped += 1
+                        incomplete_count += 1
+                        creation_window_unproven_count += 1
+                        continue
+                    if recover_missing_order_clock:
+                        changed = _scheduled_order_changed_at(raw)
+                        if changed is not None and changed > _now():
+                            skipped += 1
+                            incomplete_count += 1
+                            source_clock_missing_count += 1
+                            continue
+                    if recover_missing_order_clock and _scheduled_order_changed_at(raw) is None:
+                        identity = _str(raw.get("id"))
+                        reference = _str(raw.get("reference_id") or raw.get("order_number"))
+                        if identity in recovered_identities:
+                            skipped += 1
+                            continue
+                        if (not identity or not reference
+                                or details_fetched >= MAX_ORDER_CLOCK_DETAILS_PER_RUN):
+                            skipped += 1
+                            incomplete_count += 1
+                            if details_fetched >= MAX_ORDER_CLOCK_DETAILS_PER_RUN:
+                                details_budget_exhausted_count += 1
+                            continue
+                        # A known existing order must not be recreated if it is
+                        # deleted during the provider read. New manual imports
+                        # still go through the normal owner transaction/upsert.
+                        recovered_existing_clock = bool(await db.unified_orders.find_one(
+                            {"user_id": user_id, "order_number": reference}, {"_id": 1}))
+                        recovered_identities.add(identity)
+                        details_fetched += 1
+                        raw = await _fetch_order_clock_details(db, user_id, identity, reference)
+                        changed = _scheduled_order_changed_at(raw)
+                        if changed is None or changed > _now():
+                            skipped += 1
+                            incomplete_count += 1
+                            source_clock_missing_count += 1
+                            continue
+                        if not _inside_creation_dates(raw, from_date, to_date):
+                            skipped += 1
+                            incomplete_count += 1
+                            creation_window_unproven_count += 1
+                            continue
+                        raw = dict(raw)
+                        raw["items"] = await _fetch_scheduled_order_items(db, user_id, identity)
+                        if governor.peek()[0] in {"blocked", "cancel"}:
+                            raise ResourcePressure("resource_pressure")
+                        list_row = raw
                     if refresh_window:
                         date = raw.get("date")
                         zone = "Asia/Riyadh"
@@ -1227,22 +1374,38 @@ async def run_orders_sync(
                         if refresh_window:
                             raise ValueError("scheduled_order_missing_reference")
                         skipped += 1
+                        incomplete_count += 1
                         continue
-                    res = await _persist_sync_component_snapshot(db, user_id, doc, raw)
+                    if recover_missing_order_clock and governor.peek()[0] in {"blocked", "cancel"}:
+                        raise ResourcePressure("resource_pressure")
+                    res = await _persist_sync_component_snapshot(
+                        db, user_id, doc, raw,
+                        **({"existing_only": True} if recovered_existing_clock else {}))
                     if res.get("blocked") and refresh_window:
                         raise RuntimeError("scheduled_snapshot_blocked")
-                    if res.get("stale") or res.get("blocked"):
+                    if res.get("stale") or res.get("blocked") or res.get("skipped"):
                         skipped += 1
+                        if res.get("blocked") or res.get("skipped"):
+                            incomplete_count += 1
                         continue
+                    if res.get("unchanged"):
+                        unchanged += 1
+                        continue
+                    if (res.get("component_revalidation") or {}).get("accepted") is False:
+                        pending_component_count += 1
+                        incomplete_count += 1
                     from .paid_sar_sync import observe_list_evidence
                     await observe_list_evidence(db, user_id, list_row)
                     await _refresh_plan_b_status_snapshot(
-                        db, user_id, doc["order_number"], doc
+                        db, user_id, doc["order_number"], doc,
+                        **({"allow_handoff_transition": False} if recover_missing_order_clock else {})
                     )
                     if res.get("created"):
                         created += 1
                     else:
                         updated += 1
+                except ResourcePressure:
+                    raise
                 except Exception as exc:  # pragma: no cover — defensive
                     errors_count += 1
                     if len(errors_sample) < 20:
@@ -1267,8 +1430,18 @@ async def run_orders_sync(
         # Hitting the page cap without an observed end is incomplete even
         # when the provider omitted its total-pages metadata.
         truncated = not pagination_exhausted or not pagination_consistent
-        await finish_sync_log(db, log_id, "partial" if refresh_window and (truncated or errors_count) else "completed", extra={
+        partial = bool(truncated or errors_count or incomplete_count or attribution_recovery_errors)
+        coverage = {"window_clock": "provider_order_created_at",
+                    "coverage_reason": "creation_window_only" if from_date and to_date else "bounded_order_listing",
+                    "coverage_complete": not partial, "from_date": from_date, "to_date": to_date,
+                    "source_clock_missing_count": source_clock_missing_count,
+                    "details_budget_exhausted_count": details_budget_exhausted_count,
+                    "creation_window_unproven_count": creation_window_unproven_count,
+                    "pending_component_count": pending_component_count}
+        await finish_sync_log(db, log_id, "partial" if partial else "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
+            "unchanged": unchanged, "incomplete_count": incomplete_count,
+            "details_fetched": details_fetched, **coverage,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
             "source_total_pages": last_total_pages,
@@ -1282,6 +1455,12 @@ async def run_orders_sync(
         await finish_sync_log(db, log_id, "interrupted", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count,
+            "unchanged": unchanged, "incomplete_count": incomplete_count,
+            "details_fetched": details_fetched,
+            "source_clock_missing_count": source_clock_missing_count,
+            "details_budget_exhausted_count": details_budget_exhausted_count,
+            "creation_window_unproven_count": creation_window_unproven_count,
+            "pending_component_count": pending_component_count,
             "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
             "last_error": "sync_task_cancelled_before_completion",
@@ -1294,6 +1473,12 @@ async def run_orders_sync(
         await finish_sync_log(db, log_id, "failed", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count + 1,
+            "unchanged": unchanged, "incomplete_count": incomplete_count,
+            "details_fetched": details_fetched,
+            "source_clock_missing_count": source_clock_missing_count,
+            "details_budget_exhausted_count": details_budget_exhausted_count,
+            "creation_window_unproven_count": creation_window_unproven_count,
+            "pending_component_count": pending_component_count,
             "errors_sample": (errors_sample + [{"error": str(exc)[:300]}])[:20],
             "pages_fetched": pages_fetched,
             "last_error": str(exc)[:500],
@@ -1308,6 +1493,10 @@ async def run_orders_sync(
         "created": created,
         "updated": updated,
         "skipped": skipped,
+        "unchanged": unchanged,
+        "incomplete_count": incomplete_count,
+        "details_fetched": details_fetched,
+        **coverage,
         "errors_count": errors_count,
         "pages_fetched": pages_fetched,
         "source_total_pages": last_total_pages,

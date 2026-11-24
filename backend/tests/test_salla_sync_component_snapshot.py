@@ -139,6 +139,87 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
             observer.assert_not_awaited()
         await self.assert_inventory_unchanged()
 
+    async def assert_native_clock_fallback_repeat_is_noop(self, *, manual, new=False):
+        from datetime import datetime, timedelta, timezone
+        from resource_governor import governor
+        from salla_integration import paid_sar_sync
+        if new:
+            await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
+            payload = self.source_payload(status="completed")
+            self.inventory = {name: await self.db[name].find({}).to_list(100)
+                              for name in (PLANS, UNITS, LOCATIONS, fulfillment.WORKFLOWS)}
+            self.assertEqual(await self.db.unified_orders.count_documents({"user_id": "owner"}), 0)
+        else:
+            payload = await self.seed()
+        payload["updated_at"] = "2026-09-26T12:00:10+00:00"
+        payload["date"] = {"date": "2026-09-26 12:00:00", "timezone": "UTC"}
+        end = datetime(2026, 9, 26, 13, tzinfo=timezone.utc)
+        light = {key: value for key, value in payload.items() if key not in {"updated_at", "items"}}
+        async def provider(db, user, method, path, **kwargs):
+            self.assertEqual(user, "owner")
+            self.assertEqual(method, "GET")
+            if path == "/orders":
+                return {"data": [light], "pagination": {"totalPages": 1, "currentPage": 1}}
+            if path == f"/orders/{payload['id']}":
+                return {"data": {key: value for key, value in payload.items() if key != "items"}}
+            self.assertEqual(path, "/orders/items")
+            return {"data": payload["items"]}
+        kwargs = ({"from_date": "2026-09-26", "to_date": "2026-09-26", "recover_missing_order_clock": True}
+                  if manual else {"refresh_window": (end-timedelta(hours=24), end), "existing_only": True})
+        preserved_collections = ("operational_balance_states_v1", "accounting_journal_groups_v2",
+            "accounting_general_ledger_v2", "accounting_audit_log_v2", "mz2_shipping_accounting_events",
+            "warehouse_location_events", "mezan_preparation_piece_events_v1", "order_activity_events_v2",
+            "mezan_component_prebuilt_claims_v1", "mezan_inventory_receipts_v2", "payment_transactions")
+        preserved = {name: await self.db[name].find({}).to_list(100) for name in preserved_collections}
+        with patch.object(sync, "call_salla", provider), \
+             patch.object(sync, "_now", return_value=end), \
+             patch.object(sync, "_enrich_order_receiving_bank", AsyncMock(side_effect=lambda db, owner, raw: raw)), \
+             patch.object(sync, "_refresh_plan_b_status_snapshot", AsyncMock()), \
+             patch.object(paid_sar_sync, "observe_list_evidence", AsyncMock()), \
+             patch.object(governor, "peek", return_value=("allowed", None)), \
+             patch.object(sync.asyncio, "sleep", AsyncMock()), \
+             patch("accounting_shipping_native_observer.observe_delivery", AsyncMock()) as observer:
+            first = await sync.run_orders_sync(self.db, "owner", **kwargs)
+            self.assertEqual(first["created"], 1 if new else 0, first)
+            self.assertEqual(first["updated"], 0 if new else 1, first)
+            before = await self.db.unified_orders.find_one({"user_id": "owner"})
+            components = await self.db[fulfillment.COMPONENT_LIFECYCLES].find({}).to_list(100)
+            second = await sync.run_orders_sync(self.db, "owner", **kwargs)
+            after = await self.db.unified_orders.find_one({"user_id": "owner"})
+            if new:
+                # Existing acceptance policy retries pending component metadata;
+                # a source import must not clear that fence or claim completion.
+                self.assertEqual(second["created"], 0, second)
+                self.assertEqual(second["pending_component_count"], 1, second)
+                self.assertFalse(second["coverage_complete"])
+                self.assertEqual((await self.db.salla_sync_logs.find_one({"id": second["log_id"]}))["status"], "partial")
+                observational = {"updated_at", "data_sources", "last_salla_direct_sync_at", "last_source",
+                    "updated_by_source", "qoyod_followup_revision", "g47_salla_snapshot"}
+                self.assertEqual({k: v for k, v in after.items() if k not in observational},
+                                 {k: v for k, v in before.items() if k not in observational})
+                self.assertEqual({k: v for k, v in after["g47_salla_snapshot"].items() if k != "revision"},
+                                 {k: v for k, v in before["g47_salla_snapshot"].items() if k != "revision"})
+                self.assertTrue(after["g47_salla_snapshot"]["component_pending"])
+            else:
+                self.assertEqual(second["unchanged"], 1, second)
+                self.assertEqual(second["updated"], 0, second)
+                self.assertEqual(after, before)
+            self.assertEqual(await self.db[fulfillment.COMPONENT_LIFECYCLES].find({}).to_list(100), components)
+            self.assertEqual(await self.db.unified_orders.count_documents({"user_id": "owner"}), 1)
+            observer.assert_not_awaited()
+        for name, rows in preserved.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), rows, name)
+        await self.assert_inventory_unchanged()
+
+    async def test_manual_clock_recovery_repeat_preserves_source_and_stock(self):
+        await self.assert_native_clock_fallback_repeat_is_noop(manual=True)
+
+    async def test_scheduled_clock_recovery_repeat_preserves_source_and_stock(self):
+        await self.assert_native_clock_fallback_repeat_is_noop(manual=False)
+
+    async def test_manual_clock_recovery_imports_new_order_once_without_stock_work(self):
+        await self.assert_native_clock_fallback_repeat_is_noop(manual=True, new=True)
+
     async def test_single_resync_cancellation_stays_blocked_without_stock_work(self):
         payload = await self.seed()
         payload.update(updated_at="2026-09-26T12:00:10+00:00", status={"slug": "canceled"})

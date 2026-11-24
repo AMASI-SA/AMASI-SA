@@ -89,11 +89,13 @@ jobs:
             tests/test_salla_abandoned_cart_order_reconciliation.py \
             tests/test_salla_webhook_deferred_outbox.py \
             tests/test_salla_webhook_monitor_queue.py \
+            tests/test_salla_webhook_monitor_reads.py \
             tests/test_salla_paused_webhook_http.py \
             tests/test_salla_manual_sync_serialization.py \
             tests/test_salla_scheduled_reconciliation.py \
             tests/test_salla_sync_component_snapshot.py \
             tests/test_salla_orders_sync_pagination_evidence.py \
+            tests/test_salla_source_window_repair.py \
             tests/test_salla_raw_snapshot_preservation.py \
             tests/test_salla_stale_creation_options.py \
             tests/test_cost_option_auto_recovery.py \

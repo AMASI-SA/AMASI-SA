@@ -558,6 +558,10 @@ async def test_older_created_order_needs_verified_provider_update_in_window(monk
         if path == '/orders':
             assert params['reference_id'] == 'old-order'
             return {'data': [raw]}
+        if path == '/orders/old-native':
+            # The details fallback still cannot invent a missing order clock.
+            assert provider_clock in {'missing', 'customer_only', 'naive'}
+            return {'data': raw}
         assert path == '/orders/items' and provider_clock == 'recent'
         return {'data': [{'id': 'old-line', 'quantity': 1}]}
     persist = AsyncMock(return_value={'created': False})
@@ -581,4 +585,6 @@ async def test_older_created_order_needs_verified_provider_update_in_window(monk
         persist.assert_not_awaited()
         assert result['updated'] == 0
         assert result['incomplete_count'] == (0 if provider_clock == 'outside' else 1)
-        assert [path for path, _ in calls] == ['/orders', '/orders']
+        assert [path for path, _ in calls] == (
+            ['/orders', '/orders'] if provider_clock == 'outside'
+            else ['/orders', '/orders', '/orders/old-native'])

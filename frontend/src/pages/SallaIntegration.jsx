@@ -25,6 +25,35 @@ function riyadhTodayISO() {
     return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
+function daysBefore(date, days) {
+    const value = new Date(`${date}T12:00:00Z`);
+    value.setUTCDate(value.getUTCDate() - days);
+    return value.toISOString().slice(0, 10);
+}
+
+function syncLogIsPartial(log) {
+    return log.status === "partial" || (log.status === "completed" && (
+        log.truncated === true || log.coverage_complete === false
+        || Number(log.errors_count) > 0 || Number(log.incomplete_count) > 0
+        || Number(log.attribution_recovery_errors) > 0
+    ));
+}
+
+function syncLogCoverage(log) {
+    const reasons = [];
+    if (log.truncated) reasons.push("لم تُقرأ جميع الصفحات؛ اختر فترة أقصر");
+    if (log.source_clock_missing_count) reasons.push("وقت تحديث بعض الطلبات غير مثبت من سلة");
+    if (log.details_budget_exhausted_count) reasons.push("بلغ حد قراءة التفاصيل؛ اختر فترة أقصر");
+    if (log.creation_window_unproven_count) reasons.push("تاريخ إنشاء بعض الطلبات خارج الفترة أو غير مثبت");
+    if (log.pending_component_count) reasons.push("بعض الطلبات تحتاج استكمال اعتماد المكونات");
+    if (log.coverage_reason === "provider_modified_since_filter_unavailable") {
+        reasons.push("تغييرات الطلبات الأقدم غير محصورة بالكامل");
+    } else if (log.coverage_reason === "creation_window_only") {
+        reasons.push(`طلبات منشأة من ${log.from_date} إلى ${log.to_date}`);
+    }
+    return reasons.join(" — ");
+}
+
 /**
  * /settings/salla — "ربط متجر سلة"
  *
@@ -119,6 +148,8 @@ export default function SallaIntegration() {
     const [cartStatus, setCartStatus] = useState(null);
     const [webhookMonitor, setWebhookMonitor] = useState(null);
     const [syncToDate, setSyncToDate] = useState(riyadhTodayISO);
+    const [sourceFromDate, setSourceFromDate] = useState(() => daysBefore(riyadhTodayISO(), 4));
+    const [sourceToDate, setSourceToDate] = useState(riyadhTodayISO);
     const hasRunningOrderSync = syncLogs.some(
         (log) => log.kind === "orders"
             && log.status === "running"
@@ -301,8 +332,11 @@ export default function SallaIntegration() {
     const handleSyncOrders = async () => {
         setBusy(b => ({ ...b, syncOrders: true }));
         try {
+            const today = riyadhTodayISO();
             const { data } = await api.post("/salla/sync/orders", {
-                updated_since_hours: 24 * 30, // last 30 days by default
+                from_date: daysBefore(today, 29),
+                to_date: today,
+                recover_missing_order_clock: true,
             });
             toast.success(
                 data.already_running
@@ -316,6 +350,32 @@ export default function SallaIntegration() {
             toast.error(msg);
             await load();
         } finally {
+            setBusy(b => ({ ...b, syncOrders: false }));
+        }
+    };
+
+    const handleRecoverSourceWindow = async () => {
+        const days = (Date.parse(`${sourceToDate}T12:00:00Z`)
+            - Date.parse(`${sourceFromDate}T12:00:00Z`)) / 86_400_000 + 1;
+        if (!Number.isInteger(days) || days < 1 || days > 31 || sourceToDate > riyadhTodayISO()) {
+            toast.error("حدد فترة من يوم إلى 31 يومًا، تنتهي اليوم أو قبله");
+            return;
+        }
+        setBusy(b => ({ ...b, syncOrders: true }));
+        try {
+            const { data } = await api.post("/salla/sync/orders", {
+                from_date: sourceFromDate,
+                to_date: sourceToDate,
+                recover_missing_order_clock: true,
+            });
+            toast.success(data.already_running
+                ? "مزامنة الطلبات تعمل بالفعل في الخلفية"
+                : "بدأت مزامنة طلبات الفترة؛ راجع الأعداد والتغطية في السجل");
+        } catch (error) {
+            const detail = error?.response?.data?.detail;
+            toast.error(typeof detail === "string" ? detail : "تعذر بدء مزامنة الفترة");
+        } finally {
+            await load();
             setBusy(b => ({ ...b, syncOrders: false }));
         }
     };
@@ -824,6 +884,32 @@ export default function SallaIntegration() {
                         </p>
                     </div>
                     <div className="p-5 space-y-3">
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3" data-testid="salla-source-window-sync">
+                            <h4 className="font-bold text-sm text-slate-800">مزامنة طلبات فترة محددة</h4>
+                            <p className="text-xs text-slate-600 mt-1 mb-3">
+                                يشمل الطلبات المنشأة في الفترة بتوقيت الرياض، حتى 31 يومًا. لا يثبت حصر تغييرات جميع الطلبات الأقدم. تظهر القراءة غير المكتملة في السجل لتضييق الفترة وإكمالها.
+                            </p>
+                            <div className="flex flex-wrap items-end gap-3">
+                                <label className="text-xs font-bold text-slate-600">من تاريخ الإنشاء
+                                    <input type="date" value={sourceFromDate} max={sourceToDate}
+                                        onChange={e => setSourceFromDate(e.target.value)}
+                                        data-testid="salla-source-from-date"
+                                        className="block px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono mt-1" />
+                                </label>
+                                <label className="text-xs font-bold text-slate-600">إلى تاريخ الإنشاء
+                                    <input type="date" value={sourceToDate} min={sourceFromDate} max={riyadhTodayISO()}
+                                        onChange={e => setSourceToDate(e.target.value)}
+                                        data-testid="salla-source-to-date"
+                                        className="block px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono mt-1" />
+                                </label>
+                                <button type="button" onClick={handleRecoverSourceWindow}
+                                    disabled={busy.syncOrders || hasRunningOrderSync || !sourceFromDate || !sourceToDate}
+                                    data-testid="salla-source-window-btn"
+                                    className="px-4 py-2 rounded-lg bg-amber-700 text-white font-bold text-sm disabled:opacity-50">
+                                    {busy.syncOrders || hasRunningOrderSync ? "جاري المزامنة…" : "مزامنة طلبات هذه الفترة"}
+                                </button>
+                            </div>
+                        </div>
                         <div
                             className="flex flex-wrap items-end gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3"
                             data-testid="salla-date-range-sync"
@@ -894,7 +980,7 @@ export default function SallaIntegration() {
                             data-testid="salla-sync-orders-btn"
                         >
                             <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""} />
-                            {busy.syncOrders || hasRunningOrderSync ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
+                            {busy.syncOrders || hasRunningOrderSync ? "جاري المزامنة…" : "مزامنة الطلبات المنشأة آخر 30 يومًا"}
                         </button>
                         <button
                             type="button"
@@ -937,8 +1023,12 @@ export default function SallaIntegration() {
                                             <th className="text-right px-3 py-2">الحالة</th>
                                             <th className="text-right px-3 py-2">جديد</th>
                                             <th className="text-right px-3 py-2">محدّث</th>
+                                            <th className="text-right px-3 py-2">دون تغيير</th>
+                                            <th className="text-right px-3 py-2">متجاوز</th>
+                                            <th className="text-right px-3 py-2">غير مكتمل</th>
                                             <th className="text-right px-3 py-2">أخطاء</th>
                                             <th className="text-right px-3 py-2">صفحات</th>
+                                            <th className="text-right px-3 py-2">التغطية</th>
                                             <th className="text-right px-3 py-2">بدأت</th>
                                         </tr>
                                     </thead>
@@ -947,15 +1037,20 @@ export default function SallaIntegration() {
                                             <tr key={log.id} className="hover:bg-white">
                                                 <td className="px-3 py-2 font-bold">{log.kind === "orders" ? "طلبات" : log.kind === "products" ? "منتجات" : log.kind === "abandoned_carts" ? "سلات متروكة" : log.kind}</td>
                                                 <td className="px-3 py-2">
-                                                    {log.status === "completed" && <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">✓ مكتمل</span>}
+                                                    {log.status === "completed" && !syncLogIsPartial(log) && <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">✓ مكتمل</span>}
+                                                    {syncLogIsPartial(log) && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">⚠ جزئي</span>}
                                                     {log.status === "running" && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">⏳ جارٍ</span>}
                                                     {log.status === "failed" && <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold" title={log.last_error || ""}>✗ فشل</span>}
                                                     {log.status === "interrupted" && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold" title={log.last_error || ""}>■ متوقفة</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-emerald-700 font-bold">{log.created || 0}</td>
                                                 <td className="px-3 py-2 text-sky-700 font-bold">{log.updated || 0}</td>
+                                                <td className="px-3 py-2 text-slate-600">{log.unchanged || 0}</td>
+                                                <td className="px-3 py-2 text-slate-600">{log.skipped || 0}</td>
+                                                <td className="px-3 py-2 text-amber-800 font-bold">{log.incomplete_count || 0}</td>
                                                 <td className="px-3 py-2 text-rose-700 font-bold">{log.errors_count || 0}</td>
-                                                <td className="px-3 py-2 text-slate-500">{log.pages_fetched || 0}</td>
+                                                <td className="px-3 py-2 text-slate-500">{log.pages_fetched || 0}{log.source_total_pages > 0 ? ` / ${log.source_total_pages}` : ""}</td>
+                                                <td className="px-3 py-2 text-slate-600">{syncLogCoverage(log) || "—"}</td>
                                                 <td className="px-3 py-2 text-slate-500 text-[11px]" dir="ltr">
                                                     {log.started_at ? new Date(parseServerDateTime(log.started_at)).toLocaleString("en-US") : "—"}
                                                 </td>
