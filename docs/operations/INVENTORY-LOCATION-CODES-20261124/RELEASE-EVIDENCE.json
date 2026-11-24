@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 18:33:35 UTC",
+  "observed_at_utc": "2026-11-24 18:44:29 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "CAPACITY_ARCHIVE_PREPARATION_REVIEWED_READY",
+  "state": "CAPACITY_ARCHIVES_VERIFIED_PACK_PREPARATION_PENDING",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Stage exact reviewed archive helper via private /tmp bare object database (app objectstore read-only alternate), execute preparation only from/app, read exact compressed sizes/proof. Independently review pack preparation. No capacity mutation until evidence-backed plan.",
+  "next_safe_action": "Complete independent pack-preparation review and run read-only preparation under original lock. Measure exact new pack size, then independently review narrow capacity application preserving archives/all logical Git objects and metadata. No blind build retry or publication.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1601,10 +1601,17 @@
     },
     "numbering_related_host_worktrees": [],
     "capacity_changes_performed": false,
-    "foreign_cleanup_performed": false
+    "foreign_cleanup_performed": false,
+    "latest_observation": {
+      "observed_at_utc": "2026-11-24T18:39:32.584486+00:00",
+      "app_bytes_available": 85327872,
+      "app_inodes_available": 146358,
+      "capacity_mutation_by_this_task": false,
+      "cause_of_available_space_change": "not established"
+    }
   },
   "capacity_archive_preparation": {
-    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "state": "PASS_NO_SPACE_RECLAIMED",
     "helper": {
       "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_prepare_capacity_archives.py",
       "bytes": 14107,
@@ -1617,7 +1624,69 @@
     "targets": [
       "/app/.git/mezan-pr2113-recover-d-cm4y9sgc/backups/frontend--node_modules",
       "/app/frontend/node_modules"
-    ]
+    ],
+    "execution": {
+      "evidence_sha": "54dfce566e5205c4e5717f31aebe4c27aa8187f5",
+      "operator_stage": "/tmp/mezan-pr2113-capacity-operator-4qx59frr",
+      "staged_at_utc": "2026-11-24T18:34:02.765328+00:00",
+      "exact_bytes": 14107,
+      "terminal": "owned Terminal3",
+      "observed_at_utc": "2026-11-24T18:36:02.894137+00:00",
+      "stage": "/tmp/mezan-pr2113-capacity-dgydmx2f",
+      "receipt": {
+        "path": "/tmp/mezan-pr2113-capacity-dgydmx2f/receipt.json",
+        "bytes": 6016,
+        "sha256": "f72a3ed9744a81d17c2aa383d76a17daae8f822858051b0a663cb8d79dd2352f"
+      },
+      "status": "PASS",
+      "archives": [
+        {
+          "label": "original-node-modules-backup",
+          "archive": "/tmp/mezan-pr2113-capacity-dgydmx2f/original-node-modules-backup.tar.gz",
+          "archive_bytes": 19991544,
+          "sha256": "f82674d9dc48b59ff06ca2e84a3013caf2e34c10fc4d045348fd565075eb7270",
+          "mode": 384,
+          "source_entries": 11483,
+          "source_regular_bytes": 60704294,
+          "verified_members": 11483,
+          "known_backup_manifest_matches": true,
+          "source_manifest_stable": true,
+          "elapsed_seconds": 3.719,
+          "status": "PASS"
+        },
+        {
+          "label": "failed-install-node-modules",
+          "archive": "/tmp/mezan-pr2113-capacity-dgydmx2f/failed-install-node-modules.tar.gz",
+          "archive_bytes": 84395938,
+          "sha256": "31436b8ca8e5c15737e68458b5975904d30b674a652be3a0a21bafb5e8c2ecbc",
+          "mode": 384,
+          "source_entries": 61806,
+          "source_regular_bytes": 365420199,
+          "verified_members": 61806,
+          "source_manifest_stable": true,
+          "elapsed_seconds": 19.366,
+          "status": "PASS"
+        }
+      ],
+      "foreign_preservation": {
+        "paths": 432,
+        "identical_entries": 432,
+        "append_only_path": null,
+        "scope": "fresh existing-D recovery baseline only"
+      },
+      "steps": {
+        "PASS": 22,
+        "FAILED": 0,
+        "RUNNING": 0
+      },
+      "app_data_mutation": false,
+      "deletion_performed": false,
+      "git_mutation": false,
+      "git_packing_performed": false,
+      "space_reclaimed_bytes": 0,
+      "lease_created": false,
+      "published": false
+    }
   },
   "capacity_pack_plan": {
     "status": "PRELIMINARY_ACCEPT_PENDING_PREP_HELPER_REVIEW_AND_MEASUREMENT",

@@ -100,3 +100,14 @@ No capacity changes, foreign cleanup, ownlease or publication occurred. Preserve
 [Archive preparation helper](operators/pr2113_prepare_capacity_archives.py):14,107bytes, SHA256 `ef26f2b6b6583fea369619b9e7bd685adb37521180fcb38d3e6135e21a5ce18a`; independent fullbyte/AST reviewPASS. It only reads/app and writes two private archives/receipts under unique/tmp. It does not extract, delete, build or packGit. Exactmember types/modes/content hashes/symlinkvalues, stable source manifests and the known original backup manifest are verified under the original guard and fresh432entry preservation checks.
 
 A separately reviewed capacity route may pack all5,760loose Git objects (includingunreachable), verify every object, install a protected pack/index and remove only redundant loose copies. No logical object, ref, index, worktree or existing pack may be removed. This remains a preparation/measurement plan; no capacity mutation has occurred. The original/app canonicalbuild requirement remains in place.
+
+## Archive preparation verified
+Archive helper executed once with exactbytes from E13, staged at/tmp/mezan-pr2113-capacity-operator-4qx59frr. **PASS** at18:36:02 UTC; receipt:/tmp/mezan-pr2113-capacity-dgydmx2f/receipt.json,6,016bytes,SHA256`f72a3ed9744a81d17c2aa383d76a17daae8f822858051b0a663cb8d79dd2352f`.
+
+- Original backup archive:19,991,544bytes,SHA256`f82674d9dc48b59ff06ca2e84a3013caf2e34c10fc4d045348fd565075eb7270`;11,483members,60,704,294sourcebytes,knownmanifest/stability/exactmember checksPASS.
+- Own failed-install archive:84,395,938bytes,SHA256`31436b8ca8e5c15737e68458b5975904d30b674a652be3a0a21bafb5e8c2ecbc`;61,806members,365,420,199sourcebytes,stability/exactmember checksPASS.
+-22/22steps passed;432foreign entries identical, no append. Noappmutation, extraction, deletion, Gitpacking, lease orpublication. **Space reclaimed by this task:0.**
+
+The original backup archive must be copied, hash-verified and fsynced durably inside/app/.git before any raworiginal-backup removal. The failed generated-install archive may remain in/tmp; its pre-build original backup remains preserved independently. No foreign worktree cleanup is authorized by this plan.
+
+At18:39:32 UTC a fresh read showed85,327,872bytes available on/app without any task capacity mutation; the cause is not established. Apply fresh checks and measure actualheadroom before retrying the unchanged/appcanonicaladapter.
