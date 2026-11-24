@@ -151,6 +151,9 @@ test.each([null, 850])("incomplete fee authority suppresses fallback or stale nu
 test.each([
     [[], "بانتظار اكتمال بيانات عمولات الدفع"],
     [["fee_policy_missing"], "بانتظار اكتمال بيانات عمولات الدفع"],
+    [["provider_split_payment_review_required"], "بانتظار مطابقة الدفعات المتعددة لبعض الطلبات"],
+    [["provider_split_payment_review_required", "fee_policy_missing"], "بانتظار مطابقة الدفعات المتعددة لبعض الطلبات واستكمال بيانات عمولات الدفع"],
+    [["payment_awaiting_collection", "provider_split_payment_review_required"], "بانتظار تحصيل بعض الطلبات ومطابقة الدفعات المتعددة"],
     [["payment_awaiting_collection", "fee_policy_missing"], "بانتظار تحصيل بعض الطلبات واستكمال بيانات عمولات الدفع"],
 ])("fee review reason %p stays distinct from collection pending", (reasons, message) => {
     act(() => root.render(<ProfitSummaryCard totals={{ payment_fees_complete: false, payment_fee_review_reasons: reasons }} />));
