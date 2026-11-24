@@ -1,0 +1,33 @@
+{
+  "task_id": "OPERATIONAL-RUNTIME-RECOVERY-20261124",
+  "status": "WIP_NOT_RELEASE_READY",
+  "base_commit": "80341983cf7e89145e4101b408ab68bb45f379cf",
+  "branch": "codex/operational-runtime-recovery-20261124",
+  "root_responsibility": "Sole integrator, merger, deployer and live financial writer",
+  "prior_release": {
+    "pr": 2102,
+    "deployment": "9ff36c3",
+    "source": "b5c13c4147abbd3444a18c57f288145efcf42ce2",
+    "original_guard_verified": true,
+    "three_consecutive_probes": true,
+    "lease_active": false
+  },
+  "findings": [
+    "The installed Qoyod payment-freshness wrapper rejects allow_handoff_transition during bounded Salla recovery after source persistence.",
+    "Identical source retry currently skips incomplete followups; safe source-bound completion requires review.",
+    "Operational report latency remains material; metadata reads can unnecessarily return stale large headers."
+  ],
+  "verification": {
+    "before_branch_creation": "Original guard inactive; shared tracked tree clean; fetched production branch and shared HEAD equal exact base; no active publication observed."
+  },
+  "production_changed_by_this_followup": false,
+  "financial_recovery_claim": false,
+  "preserved": [
+    "Prior merged release and immutable intent",
+    "All shared untracked files",
+    "Other task branches and worktrees",
+    "Pending source admission and manual financial records"
+  ],
+  "next_safe_action": "Integrate isolated reviewed candidates; run actual composed runtime and real-Mongo regressions and all required gates before a new immutable A/B pair.",
+  "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00"
+}
