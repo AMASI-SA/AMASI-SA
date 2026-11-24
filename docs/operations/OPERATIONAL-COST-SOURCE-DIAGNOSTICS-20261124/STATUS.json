@@ -1,0 +1,115 @@
+{
+  "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
+  "status": "WIP: reviewed combined cost diagnostics and delivery-context source on the latest production branch; immutable release gates and live observation remain pending",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/operational-cost-report-release-20261124",
+  "source_base_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
+  "checkpoint_identity": "The task branch commit and Draft PR record the exact full SHA containing this status file.",
+  "scope": "Name the sanitized source collection and error code when the first open-cost load_collections call fails. Preserve the same exception, arguments, string, HTTP failure, source reads, cancellation and deadlines.",
+  "observed_problem": "A live legacy cost report failed inside load_collections before the catalogue-index stage. SourceReadError retains the collection attribute, but its existing traceback string exposes only the failure code. The platform log view retains only its last 100 lines. The responsible collection is not yet observed.",
+  "changed_files": [
+    "backend/operational_open_cost_exposure.py",
+    "backend/operational_source_diagnostics.py",
+    "backend/tests/test_operational_balance_cost_source_diagnostics.py",
+    "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/STATUS.json",
+    "backend/operational_financial_position_core.py",
+    "backend/tests/test_operational_balance_delivery_context_index.py",
+    "docs/operations/OPERATIONAL-REPORT-DELIVERY-INDEX-20261124/STATUS.json"
+  ],
+  "behavior": [
+    "Catch only SourceReadError from the initial collection load; use the existing strict allowlist sanitizer for cause and collection, then re-raise the original exception.",
+    "Emit one bounded warning and append the same sanitized note to the exception when note support is available. The note stays at the end of a long traceback; logger or note failures cannot replace the source failure.",
+    "Recognize the static mezan_products_v2 collection name, the only source in this report's READS missing from the existing presentation allowlist.",
+    "Do not record owner IDs, documents, query values, credentials, exception attributes or raw exception text in the new diagnostic. Unknown diagnostic fields remain unknown.",
+    "Make no projection, query, index, caching, financial, timeout, permission or release changes. This is diagnosis, not a fix for the source timeout."
+  ],
+  "verification": [
+    {
+      "kind": "red_on_unchanged_base_runtime",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q 'backend/tests/test_operational_balance_cost_source_diagnostics.py::test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_products_v2]' backend/tests/test_operational_balance_cost_source_diagnostics.py::test_every_cost_source_has_a_fixed_safe_name backend/tests/test_operational_balance_cost_source_diagnostics.py::test_note_survives_a_long_traceback_tail --tb=short",
+      "exit_code": 1,
+      "result": "3 expected failures in 2.02 seconds: missing collection in the traceback, missing safe catalogue name, and missing source note at the end of a traceback longer than 100 lines."
+    },
+    {
+      "kind": "focused_green",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py --tb=short",
+      "exit_code": 0,
+      "result": "22 passed in 1.62 seconds, no skips. Covers all 12 source names; same exception identity/type/args/string; sanitized log and final traceback note; unknown/hostile fields; logger/note failure injection; actual read deadline and joined cleanup; caller cancellation; unchanged non-debug ASGI 500 status/body/content type."
+    },
+    {
+      "kind": "affected_and_adjacent",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py backend/tests/test_operational_balance_source_diagnostics.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_exposure_catalog_index.py backend/tests/test_operational_read_runtime.py --tb=short",
+      "exit_code": 0,
+      "result": "357 passed in 14.87 seconds, no skips. Existing cost results, catalogue-index parity, source diagnostics and owned-read deadline/cancellation contracts remain passing."
+    },
+    {
+      "kind": "whitespace",
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "kind": "independent_focused_validation",
+      "reviewed_local_commit": "6f8b1bddfffb4acc57b9aff05b722ee4ca8891d6",
+      "reviewed_local_tree": "08fa6895962cc9b7f23ed4b98c371081d2f3fc3a",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py --tb=short",
+      "exit_code": 0,
+      "result": "Independent reviewer observed 22 passed in 1.71 seconds, zero skips, and confirmed the exact three runtime/test blobs. No blocker. Only this status document changed after the reviewed source checkpoint."
+    },
+    {
+      "kind": "independent_actual_router_parity",
+      "reviewed_local_commit": "6f8b1bddfffb4acc57b9aff05b722ee4ca8891d6",
+      "exit_code": 0,
+      "result": "A second reviewer compared base M2 and the candidate in memory through make_operational_balance_router, native/page guards, run_visible_report_read and SnapshotReadCache, using ReadOnlyDB. Both returned identical 500 status, Internal Server Error body and text/plain;charset=utf-8 content type, made identical reads and preserved exception identity/args/string. No data writes, remaining tasks or cache entries; only the candidate emitted the safe note/warning. Private fixture absent. Python 3.12.14, 4.43 seconds; no blocker."
+    }
+  ],
+  "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards.",
+  "ci_state": "Current combined-source CI and future immutable intent-commit CI are not yet claimed. The Draft PR records final canonical source identity and subsequent evidence.",
+  "merge_state": "Source integration checkpoint only; not merged into production by this task.",
+  "release_state": "No new intent, lease, shared-host mutation or publication for the combined source. PR2113 belongs to another owner and is preserved.",
+  "production_changed": false,
+  "limitations": [
+    "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
+    "A logger line may leave the platform's last-100-line view. On runtimes supporting exception notes, the same sanitized data remains at the end of the traceback; otherwise logging is the fallback.",
+    "This local check used real asyncio read ownership and non-debug ASGI middleware with isolated source readers. It did not query production or rerun the separate real-Mongo HTTP suite.",
+    "No runtime latency reduction, source completeness or financial recovery is claimed.",
+    "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
+  ],
+  "next_safe_action": "Publish this fresh combined source on the new task branch and open a Draft PR linking PR2114 and PR2116. Verify the canonical full tree, the empty J..A intent-path history and current-source checks. Once cb98 or the subsequently re-reviewed production intent base is actually published and its original guard is inactive, freeze a new reviewed A/B pair, obtain exact-B required checks, and perform the separately authorized normal merge and guarded deployment. Never reuse the earlier identity.",
+  "integration": {
+    "coordinator": "/root",
+    "production_branch_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "base_tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
+    "base_publication": "PR2113 is merged; its live deployment is not yet established by this checkpoint. Wait for its owner to finish original-guard verification before freezing or rehearsing another release.",
+    "prs": [
+      2114,
+      2116
+    ],
+    "method": "New linear source commit with sole parent cb98, carrying exactly the reviewed runtime/test blobs and both source status records. The earlier source branches and PRs remain preserved; no frozen A/B history is rewritten.",
+    "inherited_intent_blob": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7",
+    "runtime_test_blobs": {
+      "backend/operational_financial_position_core.py": "4cbd2595a0a8280e693b57b4acc49d1e03842f84",
+      "backend/operational_open_cost_exposure.py": "aa7f0ea3a5f0e0fc117cb362376d9565fa2f691c",
+      "backend/operational_source_diagnostics.py": "4426d17e121d2139b5dec4fdec5d9bfc7a00b2fb",
+      "backend/tests/test_operational_balance_cost_source_diagnostics.py": "0d9c8780dff82584de84ac99314353e39ed7a9e9",
+      "backend/tests/test_operational_balance_delivery_context_index.py": "cd94f6af0b2cab3564ec2a051cbcfacc12dd4a3a"
+    },
+    "combined_behavior": "Add the reviewed diagnostic and the lazy invocation-local ordered shipping-context lookup, preserving original equality/ambiguity and falling back for non-exact-string identities. Both slices keep their independently reviewed runtime and tests unchanged.",
+    "independent_tree_review": "release_audit PASS: all 6586 base entries and the 6590 staged entries were compared by mode and blob; exactly seven expected paths differ. Every PR2113 path and the inherited intent are retained. No conflict stages or unstaged changes. This coordinator update is STATUS-only.",
+    "integration_tests": {
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py backend/tests/test_operational_balance_source_diagnostics.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_exposure_catalog_index.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_balance_delivery_context_index.py backend/tests/test_operational_balance_financial_position.py backend/tests/test_operational_financial_position_views.py backend/tests/test_operational_balance_driver_review_report.py backend/tests/test_operational_balance_delivery_report_coverage.py backend/tests/test_operational_balance_report_copy.py backend/tests/test_operational_balance_financial_position_routes.py --tb=short",
+      "python": "3.12.14",
+      "exit_code": 0,
+      "passed": 613,
+      "skipped": 0,
+      "seconds": 32.76
+    },
+    "prior_ci": "The separate PR2114 source passed 21 applicable checks with 6 conditional skips, including 7565 operational tests plus 151 subtests, 6238 stock tests plus 97 subtests and all six real-Mongo cost HTTP cases. These are historical slice evidence. PR2116 old-source Frontend readiness failed because cb98 was not an ancestor; do not rerun that unchanged source or treat it as a delivery-index assertion failure.",
+    "live_limit": "PR2109 was verified live by its original guard with three checks and inactive lease. The subsequent cost report still failed after an observed 23924 ms. A fresh cause is not available; this candidate makes no claim to resolve it or to improve production latency.",
+    "ownership": "Root alone owns final source integration, intent freeze, merge, shared-host actions, publication and financial recovery. Preserve other tasks and release leases.",
+    "source_checkpoints": [
+      "6d09f23cec9a808b4425f95da67d27767b85bd7f",
+      "5b3899ea0d673819c136583ebbaf48be3ccb7844"
+    ],
+    "history_gate": "The initial unpushed integration attempt b9675bea83bd2881cdf8fbd828a1f2a6562ac873 retained both earlier branches as parents but was rejected by the original full-history intent-path condition despite equal final intent bytes. It remains local only and will not be released. This fresh linear source avoids bringing old-intent branch history into J..A; keep the validator unchanged."
+  }
+}

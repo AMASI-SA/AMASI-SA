@@ -589,6 +589,19 @@ def _cod_table(obligations, details, prestart=None, customer=None, *, coverage=N
     return result
 
 
+def _shipping_context_index(shipping):
+    """Group existing contexts without interpreting their financial evidence."""
+    indexed = {}
+    for context in shipping:
+        preparation_checkpoint()
+        order = context[0]
+        if type(order) is not str:
+            # Preserve the original equality scan for noncanonical identities.
+            return None
+        indexed.setdefault(order, []).append(context)
+    return indexed
+
+
 def _deliveries(obligations, details, currency, names, source_issues, *, coverage_note=None):
     facts = details.get("facts") or {}
     metrics = {key: value for key, value in (details.get("cod_reports") or {}).items() if value.get("currency") == currency}
@@ -619,13 +632,19 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                 and (frozen.get("fee_currency") or proof.get("currency")) == currency):
             shipping.setdefault((order, proof["party_type"], proof["party_id"]), [])
     collections = {}
+    shipping_indexed, shipping_by_order = False, None
     for key, source in metrics.items():
         preparation_checkpoint()
         order = str(source.get("order_id") or key.removeprefix("cod:"))
         cod = cod_obligations.get(key) or {}
         context = (order, source.get("party_type") or cod.get("party_type"), source.get("party_id") or cod.get("party_id"))
         if not context[1] or not context[2]:
-            known = [candidate for candidate in shipping if candidate[0] == order
+            if type(order) is str and not shipping_indexed:
+                shipping_by_order = _shipping_context_index(shipping)
+                shipping_indexed = True
+            candidates = (shipping if type(order) is not str or shipping_by_order is None
+                          else shipping_by_order.get(order, ()))
+            known = [candidate for candidate in candidates if candidate[0] == order
                      and (not context[1] or candidate[1] == context[1])
                      and (not context[2] or candidate[2] == context[2])]
             if len(known) == 1:

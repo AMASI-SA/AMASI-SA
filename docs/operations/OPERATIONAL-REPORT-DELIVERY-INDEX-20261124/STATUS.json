@@ -1,0 +1,141 @@
+{
+  "task_id": "OPERATIONAL-REPORT-DELIVERY-INDEX-20261124",
+  "status": "WIP: source verified; integration, exact release CI, freeze, and deployment remain coordinator-owned",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/operational-report-delivery-index-20261124",
+  "base_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+  "base_tree": "5f6ab712785d772fe22461d9d08a4693e992fbcd",
+  "runtime_checkpoint": {
+    "canonical_sha": "ab4cc7a977642d4b894b13a6599c88ef47c8bc73",
+    "local_sha": "79bbdfb7a7150941a4a4dda12cd5bd6c20d89940",
+    "tree": "835ba006a8d7232fca936bdca4131a02da5f07ec",
+    "parent_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "identity_note": "Connector commit metadata differs from local Git; the complete runtime trees are identical.",
+    "blobs": {
+      "backend/operational_financial_position_core.py": "4cbd2595a0a8280e693b57b4acc49d1e03842f84",
+      "backend/tests/test_operational_balance_delivery_context_index.py": "cd94f6af0b2cab3564ec2a051cbcfacc12dd4a3a"
+    }
+  },
+  "changed_files": [
+    "backend/operational_financial_position_core.py",
+    "backend/tests/test_operational_balance_delivery_context_index.py",
+    "docs/operations/OPERATIONAL-REPORT-DELIVERY-INDEX-20261124/STATUS.json"
+  ],
+  "scope": {
+    "symptom": "For each COD record with incomplete collection party identity, _deliveries scanned all shipping contexts to locate a unique compatible context.",
+    "implementation": "After all shipping obligations and delivery events have supplied their contexts, lazily build one order-to-ordered-contexts index at the first canonical missing-party lookup. Filter that order's contexts with the original equality predicates and retain the original unique-only binding.",
+    "lifetime": "One _deliveries invocation and its currency only; no process, revision, actor, or request spanning cache.",
+    "fallback": "Any non-exact-str shipping order disables the index for that invocation. A non-exact-str query order always uses the original full scan, even when a canonical index already exists.",
+    "complete_party": "No index is prepared when collection identity is already complete, including identity supplied by an existing COD obligation.",
+    "invariants": [
+      "Preserve context insertion order, duplicate fee grouping, unique-versus-ambiguous matching, and existing collections overwrite order.",
+      "Preserve all financial amounts, dates, proof fields, row identities, completeness, notes, tables, and output ordering.",
+      "Preserve missing and falsey identity semantics without normalization or choosing the first ambiguous candidate.",
+      "Keep all source data and report inputs unchanged; keep existing permission, source binding, worker isolation, and deadline behavior.",
+      "Check cancellation for each index entry; a cancelled invocation retains no partial shared value."
+    ],
+    "excluded": [
+      "No permanent cache, decoded-state sharing, worker lifecycle change, eager cross-view computation, or timeout increase.",
+      "No source projection, Mongo index, financial mutation, production resource, billing, or provider change.",
+      "No edits to PR #2114, release intent, production branch, shared /app, or browser."
+    ]
+  },
+  "verification": {
+    "python": "Python 3.12.14",
+    "python_path": "/workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python",
+    "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 /workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_delivery_context_index.py backend/tests/test_operational_balance_financial_position.py backend/tests/test_operational_financial_position_views.py backend/tests/test_operational_balance_driver_review_report.py backend/tests/test_operational_balance_delivery_report_coverage.py backend/tests/test_operational_balance_report_copy.py backend/tests/test_operational_balance_financial_position_routes.py --tb=short",
+    "final": {
+      "exit_code": 0,
+      "passed": 256,
+      "skipped": 0,
+      "seconds": 28.96
+    },
+    "new_unit_cases": 40,
+    "original_red": {
+      "base_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "test": "test_missing_collection_parties_do_not_scan_every_unrelated_shipment",
+      "exit_code": 1,
+      "failed": 1,
+      "seconds": 1.73,
+      "reason": "Doubling both orders and shipping contexts exceeded the 2.5x allowed work growth: 22,283 to 77,323 iterator advances."
+    },
+    "independent_review_regression": {
+      "test": "test_noncanonical_collection_order_also_uses_original_scan",
+      "red_exit_code": 1,
+      "red_seconds": 2.1,
+      "red_reason": "Full output differed for a noncanonical query order whose custom equality matched a canonical shipping order but whose hash did not.",
+      "resolution": "Use the legacy scan for non-exact-str query orders before indexed lookup.",
+      "fixture_note": "An initial assertion that CPython must emit a deprecation warning was corrected; the recorded product RED is the later full-output mismatch."
+    },
+    "operation_count": {
+      "definition": "FOR_ITER advances in the complete financial-position core module during _deliveries, including index creation, candidate filtering, validation, and row formatting. This is deterministic algorithmic work, not production CPU or elapsed time.",
+      "rows": [
+        {
+          "orders": 64,
+          "baseline": 7051,
+          "candidate": 3084
+        },
+        {
+          "orders": 128,
+          "baseline": 22283,
+          "candidate": 6156
+        },
+        {
+          "orders": 256,
+          "baseline": 77323,
+          "candidate": 12300
+        }
+      ],
+      "scope": "Synthetic one-shipping-context-per-order workload with missing COD party identity. Worst-case work within a single ambiguous order remains proportional to that order's contexts."
+    },
+    "exact_baseline_parity": {
+      "source": "git show 20fc28f3432a78996f1d70f3356a38bd78b0309e:backend/operational_financial_position_core.py, compiled in memory as an independent module",
+      "baseline_source_sha256": "d54464a3122a71531ef3c282b7af6263ca1ac07558fdd3457ab7c9e63fb964a4",
+      "exit_code": 0,
+      "delivery_cases_byte_equal": 122,
+      "complete_report_views_byte_equal": [
+        "summary",
+        "all",
+        "couriers",
+        "drivers",
+        "expected"
+      ],
+      "inputs_unchanged": true,
+      "report_json_sha256": {
+        "summary": "4588f3d7eba48795e130ddae0f7a2fca1abdaab3c6e9620bb37a12206e153f8c",
+        "all": "f91a6f66a6c748bf659b423c4e57c4f22c963d627911231503e9bc31a99c33c1",
+        "couriers": "ac49b6437a2a0115de67b0f59bfafeaddf2798137b2b293e2ecdc1313287b2d1",
+        "drivers": "ad34b031ae58b3cc56a9e53c69b0a4d9dd477f9eeebc6f9e4cda336e6b96d74d",
+        "expected": "c85ad0b49f90208d58a09c36870720c02cc297d9baa0b24850997e20749448d7"
+      }
+    },
+    "diff_check": {
+      "exit_code": 0
+    }
+  },
+  "independent_review": {
+    "reviewer": "/root/recovery_evidence",
+    "verdict": "PASS; no remaining blocker after query-side fallback",
+    "runtime_tree": "835ba006a8d7232fca936bdca4131a02da5f07ec",
+    "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 /workspace/scratch/021675d08c11/location-codes-testenv/python/bin/python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_delivery_context_index.py backend/tests/test_operational_balance_financial_position.py backend/tests/test_operational_financial_position_views.py backend/tests/test_operational_balance_daily_read_lifetime.py --tb=short",
+    "result": {
+      "exit_code": 0,
+      "passed": 125,
+      "skipped": 0,
+      "seconds": 17.11
+    },
+    "identity_linkage": "Reviewer independently matched the committed runtime and test blob hashes to the exact files tested.",
+    "additional_reviewer": "/root/release_audit: read-only review requested; any later result is recorded in the Draft PR."
+  },
+  "release": {
+    "draft_pr": "Pending creation after this continuity document; exact final source identity and PR number are recorded in the PR body.",
+    "ci": "Not yet claimed for final source or a future intent commit.",
+    "intent": "Not created or changed by this task.",
+    "merge": "Not performed; root alone owns integration.",
+    "deployment": "Not performed by this task.",
+    "production_changed_by_this_task": false,
+    "live_performance_claim": "None. Production missing-party cardinality and the share of observed 17.123s upper-bound report latency are unknown.",
+    "continuity": "Use this status document and the Draft PR; root previously directed PR continuity because Issue #1006 reached its comment capacity."
+  },
+  "next_action": "Coordinator may combine this reviewed source with PR #2114 before a new source freeze, then run exact-source/release checks and govern any later deployment. Do not alter another lease or create an intent from this branch."
+}
