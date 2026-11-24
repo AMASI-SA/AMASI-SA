@@ -104,6 +104,7 @@ async def post_first_paid_page(db, owner, merchant_id, order_number, *,
                 "paid_page_provider_projection_unverified",
                 "paid_page_reference_conflict",
                 "paid_page_reference_reused",
+                "paid_page_original_capture_date_required",
                 "salla_payment_rail_unverified",
             }:
                 return {"status":"review_required","reason_code":str(exc),
