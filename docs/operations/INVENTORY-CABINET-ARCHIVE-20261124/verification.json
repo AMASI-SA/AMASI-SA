@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "task_id": "INVENTORY-CABINET-ARCHIVE-20261124",
+  "observed_at_utc": "2026-11-24 21:01:45 UTC",
+  "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+  "source_tree": "0f86e247f16bdf6aef45561fb6c92be3d88d37b4",
+  "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "backend_integrated": {
+    "exit_code": 0,
+    "passed": 189,
+    "skipped": 0,
+    "failed": 0,
+    "errors": 0,
+    "duration_seconds": 18.82,
+    "files": [
+      {
+        "path": "cabinet-archive-integrated.log",
+        "sha256": "a457ab550849034797c172db5379716aa5225b2901012ea5242567d57114b00e"
+      },
+      {
+        "path": "cabinet-archive-integrated.xml",
+        "sha256": "206c76206468b43b79499f83f77a98ef9330750c8ce5f9724356e8435c0e14e4"
+      }
+    ],
+    "command": "env -u MONGO_URL -u MONGODB_URI -u DEMAND_READ_TEST_MONGO_URI PYTHONPATH=backend:backend/tests PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 DEMAND_READ_TEST_MONGOD=<owned MongoDB 7.0.14 binary> <isolated Python> -B -m pytest --noconftest -p pytest_asyncio.plugin --asyncio-mode=auto -p no:cacheprovider -q --tb=short --junitxml=<evidence>/cabinet-archive-integrated.xml backend/tests/test_warehouse_cabinet_*.py backend/tests/test_warehouse_short_codes.py backend/tests/test_warehouse_location_routes.py backend/tests/test_bundle_catalog_v2.py backend/tests/test_product_inventory_receipt_routes.py"
+  },
+  "frontend": {
+    "node": "22.23.2",
+    "yarn": "1.22.22",
+    "exit_code": 0,
+    "suites": 2,
+    "passed": 26,
+    "skipped": 0,
+    "failed": 0,
+    "duration_seconds": 5.699,
+    "evidence_kind": "root-observed tool output; raw log not retained",
+    "command": "env CI=true PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=<owned cache> python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/WarehouseHierarchyWorkspace.test.jsx src/pages/WarehouseHierarchyWorkspace.archive.test.jsx"
+  },
+  "independent_source_review": "PASS",
+  "release_guard": {
+    "command": "cd /app && PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status",
+    "active": false,
+    "evidence_kind": "original command output observed in editor terminal"
+  },
+  "production_changed": false,
+  "live_cabinet_mutations": 0,
+  "changed_source_files": [
+    {
+      "path": ".github/workflows/warehouse-cabinet-archive.yml",
+      "size": 5280,
+      "blob": "09b4ba789576296cb5edd1743ae5e4ce0a599a67",
+      "sha256": "cc1cc4353e7e037b682b9943801307f894eb1d06bbf22e32dd6e42f63a6b3e5f"
+    },
+    {
+      "path": "backend/accounting_onboarding_domains.py",
+      "size": 10898,
+      "blob": "65151f7ee5803c181923c11145398021bd3ddd55",
+      "sha256": "1ec756e6b65e6a6238565b3f1da775711594e70d5d80f348db8795b9e96e39a5"
+    },
+    {
+      "path": "backend/bundle_catalog_v2.py",
+      "size": 67487,
+      "blob": "c9382121148c31c78fb48b21af8a07ee01732c4d",
+      "sha256": "2ec608ee28f0c166a054653df8cc2123967d522e331a82bed205be0647f7ec70"
+    },
+    {
+      "path": "backend/bundle_fulfillment_v2.py",
+      "size": 45140,
+      "blob": "6ac3691f849811686562e504dc4771929af6b973",
+      "sha256": "f3f7a25f6a56a955e1b64b21866758839b90d1dd286966ad8371998f643abcae"
+    },
+    {
+      "path": "backend/fulfillment_v2_routes.py",
+      "size": 153201,
+      "blob": "7d837ddb15da050b9dbc490d0dbeb45fdd863b8b",
+      "sha256": "e9008ca36ee05b4f2c56eb19306f1b397f187d463e8c16763e5f87fa74b3f503"
+    },
+    {
+      "path": "backend/inventory_receipt_service.py",
+      "size": 2931,
+      "blob": "6fe7910ee9319b474aa731b9bd1472a8905a150e",
+      "sha256": "8c8add44097c7f91127c47eb8468fce2b03a77675c71336132f5518d0e6264d8"
+    },
+    {
+      "path": "backend/inventory_stocktake_service.py",
+      "size": 40370,
+      "blob": "ca721e0cdbc83e4a785de14fb9569b77cc3ceb79",
+      "sha256": "b161248f234bb9ab54b5a25e0dce7c7124d5abeca41d5e139a7f6936d5ee5393"
+    },
+    {
+      "path": "backend/opening_inventory_service.py",
+      "size": 20512,
+      "blob": "b6a5d003782a8a70221691caf3444d2ffb8ff84a",
+      "sha256": "3cabfedf6b193b6fb7eaa1630be8cb8e14d963f0237864eea379049796068700"
+    },
+    {
+      "path": "backend/operational_atomic.py",
+      "size": 56023,
+      "blob": "f0517318a9144fdb31fdabd08c5187295da98eed",
+      "sha256": "e4b438884e9b53b035e7a90cb770db84c33f67f243a79f04d835302826f84078"
+    },
+    {
+      "path": "backend/operational_opening_inventory.py",
+      "size": 35853,
+      "blob": "7727b36652df61a26cd6953164acc99bf8bbdc52",
+      "sha256": "8db60eca722e4014ab50c971de27424c7905f93dd338e93560a001f6e421185d"
+    },
+    {
+      "path": "backend/operational_purchase_metadata.py",
+      "size": 15084,
+      "blob": "5ca18b89f824ec8cc747c14939dc2a965a78dd9d",
+      "sha256": "d3fb2598f9bbddac18fd64905e78e50db1f42ada5385d8ff070467625c348f25"
+    },
+    {
+      "path": "backend/product_inventory_receipt_routes.py",
+      "size": 35856,
+      "blob": "2027684e8dff7d34e7916db3ef71edb62eca04cb",
+      "sha256": "9ca492642a32ea91294de89e010f7c9cdd9698119bc8228c2cf105917a19e89f"
+    },
+    {
+      "path": "backend/purchase_invoices_routes.py",
+      "size": 19342,
+      "blob": "6b5f281d9ce511ed25900f8092880763e9a0c159",
+      "sha256": "d33b512364dbd74e316f87845ee39d1fc3b4646d7f7896569d8621ee6f4d8b00"
+    },
+    {
+      "path": "backend/purchase_receiving_service.py",
+      "size": 31788,
+      "blob": "69f7d53ab7f8fcb8118b82192956854c35f2f101",
+      "sha256": "82ad428bd3457c14708069d4735a53908ba04c839919c7b1964e2bab906c87cb"
+    },
+    {
+      "path": "backend/stock_component_consumption_service.py",
+      "size": 45517,
+      "blob": "d81764a6dcb54c60f2ae14082ad93ed73846a0c8",
+      "sha256": "04f24fef6e7ace4c82181181e80c14b3eade060c7d8f4d7a96ee55f230845510"
+    },
+    {
+      "path": "backend/stock_preparation_order_routes.py",
+      "size": 61131,
+      "blob": "862c8366585c590f623beb07526b8109a4c27b63",
+      "sha256": "426413ccf94a3aa7bc7e6503f5c69dcadbb7fab3551f0d2c91110acd0fd330a9"
+    },
+    {
+      "path": "backend/tests/test_warehouse_cabinet_archive.py",
+      "size": 3255,
+      "blob": "fabaf9619c46b604247305057771313b1d06ba3f",
+      "sha256": "f39ccc99e251b6c1c68802c29bba0e056ca0681267af23eb495a07d2cce869d8"
+    },
+    {
+      "path": "backend/tests/test_warehouse_cabinet_archive_mongo.py",
+      "size": 22683,
+      "blob": "3c10cb6d11f62d2855032efb518be3df43c257e0",
+      "sha256": "2ea8b852c32b2bba0bc59e35b128dee96723c56b19c71007d5b4dfc2d1a92268"
+    },
+    {
+      "path": "backend/warehouse_cabinet_lifecycle.py",
+      "size": 19594,
+      "blob": "4252fdbbacb3323fae35c97db5aac4ba1722917e",
+      "sha256": "1bc7d2d75a0b2b5cf1275506be5c1817e45269924c4d03770b606e8213c39d9c"
+    },
+    {
+      "path": "backend/warehouse_location_routes.py",
+      "size": 16075,
+      "blob": "6467cfb16cabf661fac684e2ea59785760eb7995",
+      "sha256": "08c88ba4bc328222447fc41d5e4842abd2128827fd97064cf49838d74dd365fa"
+    },
+    {
+      "path": "backend/warehouse_location_v2_routes.py",
+      "size": 15759,
+      "blob": "f6060f75c150d1e43104ae4c392a14f82efbd426",
+      "sha256": "fbd9209129225d4b1faab2557318aa8e4a2e837b1dac9c36151f4c089016aeaf"
+    },
+    {
+      "path": "backend/warehouse_room_routes.py",
+      "size": 16574,
+      "blob": "8e5e6a2c27da6e2cd4f43d9d1b54ae87bf825493",
+      "sha256": "e9a34a605c0e723d395b531d3690fc5db1078efd28ce7b633876b0272f48400c"
+    },
+    {
+      "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/STATUS.md",
+      "size": 9418,
+      "blob": "778af5d15908919100481f393e6c93b426fd3dc5",
+      "sha256": "5ad2a209f0ae5318df65e1c8d3ecb6720b24234978bbbcb9f1f400ac00422de5"
+    },
+    {
+      "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/backend-focused.log",
+      "size": 180,
+      "blob": "37ba230fdf9c767a0e14afcab8ebbb115aec788d",
+      "sha256": "f69a5756be355512dcdcc39d3570254f17e781a24e90c46e44b16aa4af02812f"
+    },
+    {
+      "path": "frontend/src/pages/WarehouseHierarchyWorkspace.archive.test.jsx",
+      "size": 14687,
+      "blob": "68cabe4215510dd05e1d875cfa188a7e30316355",
+      "sha256": "9fb69f46e8519bac7efd3dee99b36c458242be5e3bfe40ca484db915868044ff"
+    },
+    {
+      "path": "frontend/src/pages/WarehouseHierarchyWorkspace.jsx",
+      "size": 53551,
+      "blob": "d9f36892d1c2e1aca52477e74ac0a9033275863f",
+      "sha256": "2c91962d3efb61a128ec016991090774f83f4e1eb1a5cf186aa0eae94b223f66"
+    },
+    {
+      "path": "frontend/src/pages/warehouseHierarchy.css",
+      "size": 16654,
+      "blob": "238872194aaadde2a5014b7b3c354d18f5aacd35",
+      "sha256": "d0820c065fefa6f0437bb5b85b268f71d38f03f5d859f748b0a9dbd0e550a308"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 ## Current state
 
-**SOURCE REVIEWED — focused tests passed; governed release pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**SOURCE FROZEN — 189 integrated backend tests and 26 frontend tests passed; governed release pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -74,3 +74,11 @@ The new workflow checks the actual PR head, uses a checksum-pinned owned Mongo b
 ## Next safe action
 
 Checkpoint this reviewed source, run the relevant existing regression contracts and final-head CI, and complete the original two-commit release protocol. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
+
+## Release checkpoint E1 — 2026-11-24 21:01 UTC
+
+Reviewed source A: `b236f51bb6c52e6f5d14a136db92f7474e4f5873`; tree `0f86e247f16bdf6aef45561fb6c92be3d88d37b4`; prior governed production J: `c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe`. Remote task ref and local clean HEAD agree. The equivalent local checkpoint remains preserved on `codex/inventory-cabinet-archive-local-checkpoint-20261124`.
+
+Root ran the archive and numbering Mongo tests, short-code and warehouse generation tests, existing bundle catalog tests, and product receipt tests on this exact clean A: **189 passed in 18.82 seconds, exit 0**. The JUnit XML confirms 189 cases with zero skips/errors/failures. Logs, XML, exact commands and the 27-path source snapshot are retained beside this document. The original `/app` release guard `status` command completed and displayed `active:false` before release bootstrap. No lease was created and no `/app` source or production data was changed by this task.
+
+Next: original governed A/B artifact build, freeze an external intent against J/A, create intent-only B, final-head CI and review, normal merge, clean adapter rehearsal, then prepare/prepublish only for the authorized publish. Keep all later status updates on this separate evidence branch; source A is frozen and the deployment task branch may change only its release intent after A.
