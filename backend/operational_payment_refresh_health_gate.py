@@ -57,3 +57,17 @@ def require_healthy_source(state, health, *, at):
         # stable posted snapshot. Require the definitive aggregate receipt.
         raise RefreshHealthHold("payment_refresh_success_receipt_mismatch")
     return True
+
+
+async def require_current_refresh_health(db, owner, state, *, at):
+    """Run the same owner-scoped read at preparation and immediately before CAS."""
+    from operational_balance_freshness import HEALTH
+    from operational_balance_store import fail
+    try:
+        health = await db[HEALTH].find_one(
+            {"_id": owner, "owner_id": owner},
+            {"_id": 0, "owner_id": 1, "last_success_at": 1, "last_attempt": 1},
+        )
+        require_healthy_source(state, health, at=at)
+    except RefreshHealthHold as exc:
+        fail(str(exc), "نتيجة تحديث المصادر غير سليمة؛ أوقف الترحيل المالي حتى نجاح التحديث", 409)
