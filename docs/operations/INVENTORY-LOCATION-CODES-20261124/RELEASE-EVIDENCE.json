@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24T18:04:26.354148+00:00",
+  "observed_at_utc": "2026-11-24T18:09:00Z",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "HOST_REHEARSAL_INTERRUPTED_AFTER_HOST_RECONNECT",
+  "state": "STRICT_D_RECOVERY_OPERATOR_REVIEWED_READY",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Independently review and persist separate strict-D recovery operator, fresh host preflight, execute canonical original adapter under original lock with verified current backups and fresh foreign-file preservation baseline; then own prepare/prepublish, one authorized Republish, new explicit platform success, original three-probe verification and live form preview/cancel.",
+  "next_safe_action": "Stage exact reviewed recovery-helper and envelope bytes under a fresh private /app/.git directory after fresh original guard/source checks. Execute once from /app. Preserve source A/B/D unchanged. Require recovery PASS before own lease/publication.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1475,10 +1475,52 @@
     "preservation_scope": "Lost pre-interruption snapshots cannot prove before/after byte preservation. New recovery must use a fresh current baseline."
   },
   "host_recovery": {
-    "state": "NARROW_OPERATOR_IMPLEMENTATION_AND_INDEPENDENT_REVIEW",
-    "plan": "Create separate strict-D recovery operator, retain J2 identity base and all original lock/backup/preservation/build/verification checks; omit FF; keep private stage/backups under real /app/.git so IDE /tmp loss does not erase evidence.",
+    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "helper": {
+      "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_recover_d_rehearsal.py",
+      "bytes": 23977,
+      "sha256": "4fe5070533e8f6308fc88516d1af80f8fa12f5523e7ecf8a7777317a4182b798",
+      "git_blob": "70b22d0996e91b5f3e3eca837cbdefbba8535fe2"
+    },
+    "starting_head": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "reviewed_source_base": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "envelope": {
+      "bytes": 429,
+      "sha256": "7f806d949e255c252097cabafa43851f63d932660396c5de7840ff33de865f0a",
+      "git_blob": "d8f89ae6b2eff5a3774f09e36216aa26ff9543a0",
+      "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113-reviewed-envelope.json"
+    },
+    "independent_review": {
+      "status": "PASS",
+      "reviewer": "numbering_release_review",
+      "method": "Independent exact diff and AST review; twenty function bodies identical. Only protected_rehearsal startD/noFF/persistent.git stage, main receipt initialD and preserve_foreign fresh-only metadata changed.",
+      "retained": "Original guard bytes/status/operation lock, ancestry, intent, four cleanup-target backups, foreign-file preservation, canonical adapter, validators, final production fetch and no-lease checks."
+    },
+    "preservation_scope": "fresh current existing-D baseline only; prior interrupted snapshots unavailable",
     "source_changed": false,
     "new_candidate_required": false,
     "new_ci_required": false
+  },
+  "recovery_preflight": {
+    "observed_at_utc": "2026-11-24T18:07:39.280742+00:00",
+    "head": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_clean": true,
+    "nonignored_untracked_count": 432,
+    "original_guard_active": false,
+    "python_optimize": 0,
+    "bootstrap_present": false,
+    "git_directory_real": true,
+    "current_cgroup_memory_limit_bytes": 8589934592,
+    "current_cgroup_memory_current_bytes": 2007683072,
+    "current_cgroup_memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "limitation": "Current cgroup readings do not establish the prior disconnection cause."
   }
 }

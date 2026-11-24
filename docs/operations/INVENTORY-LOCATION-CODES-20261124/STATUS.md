@@ -68,13 +68,18 @@ The original helper was staged and launched with reviewed bytes from evidence co
 
 At **17:55:33 UTC**, /app was exact D on the Production branch, tracked-clean, with432 non-ignored untracked entries and original guard inactive. At **18:04:26 UTC**, read-only checks found frontend/build, frontend/.release and backend/release_identity.json missing; frontend/node_modules remained a real0755 directory. No matching old helper, original adapter, Vite or yarn build process remained.
 
-The old J2-only helper must not be rerun on D. No reset or rollback is planned. A separate strict-D recovery operator is being implemented and independently reviewed. It retains J2 as the reviewed source base, all original operation-lock, verified-backup, foreign-file preservation, canonical adapter and identity/proof/package checks, and omits only the already completed FF step. Its private stage and backups will be beneath the real /app/.git rather than /tmp.
+The old J2-only helper must not be rerun on D. No reset or rollback is planned. A separate strict-D recovery operator has passed independent review. It retains J2 as the reviewed source base, all original operation-lock, verified-backup, foreign-file preservation, canonical adapter and identity/proof/package checks, and omits only the already completed FF step. Its private stage and backups will be beneath the real /app/.git rather than /tmp.
 
 The interrupted run's pre-change snapshot/backups are unavailable. We will not claim historical byte preservation from the surviving count alone. Recovery will preserve and verify a fresh current non-ignored-file baseline. No source, candidate or CI change is needed: the exact A/B/D identities and successful gates above remain frozen.
 
 ## Exact next safe actions
-1. Finish independent recovery-operator review, persist the operator on this separate evidence branch and stage exact verified bytes after fresh original guard/source/precondition checks.
+1. Stage the exact reviewed recovery-operator and envelope bytes after fresh original guard/source/precondition checks.
 2. Run the original canonical adapter build at exact D under the original operation lock with fresh verified cleanup-target backups and foreign-file preservation. Require final PASS and independently review the receipt.
 3. Prepare this task's own lease, prepublish immediately before one authorized Republish, require a newer explicit successful deployment, run original three-probe production verification and confirm final inactive guard.
 4. Read-only live cabinet form check: verify row/column labels and short-number guidance, preview one row without saving, cancel. No creation/deletion.
 Publication authorization persists; no new approval is pending. Do not reset source, weaken guard checks, delete foreign data or record the interrupted run as successful.
+
+## Reviewed recovery operator
+[Strict-D recovery helper](operators/pr2113_recover_d_rehearsal.py): **23,977 bytes**, SHA256 `4fe5070533e8f6308fc88516d1af80f8fa12f5523e7ecf8a7777317a4182b798`, Git blob `70b22d0996e91b5f3e3eca837cbdefbba8535fe2`. Independent exact-diff and AST review **PASS**:20function bodies identical; only existing-D start/noFF/private.git stage, initial-head receipt and fresh-preservation scope metadata changed. Original controls remain intact. The seven-field429byte envelope is unchanged.
+
+Fresh read-only preflight **18:07:39 UTC**: exactD/prodbranch/trackedclean,432non-ignored untracked entries, original guard inactive, Python optimization0, bootstrap absent and real.git directory. Current cgroup8GiB limit, about2GB use and zero OOM counters do not establish the cause of the earlier disconnect. Repeat mutable conditions before execution. Helper not yet executed.
