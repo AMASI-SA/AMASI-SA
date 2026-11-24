@@ -2,7 +2,7 @@
 
 ## Current state
 
-**HOST REHEARSAL COMPLETE / INDEPENDENT REVIEW PASS — both original adapters, final preservation and exact materialized identity passed. Original prepare/prepublish and production publication remain pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**PUBLICATION SUBMITTED ONCE — original prepare/prepublish passed for exact D/A/RID; platform reports Publishing. Await explicit newer deployment success and original production verification.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -165,3 +165,12 @@ Independent final receipt review PASS checked the complete receipt against the u
 The original public guard subsequently returned `active:false`; fresh host HEAD is D on hotfix/prod-snap-meta-final with no tracked changes. At 22:24:29 UTC the three materialized files matched exact expected sizes/hashes: backend/release_identity.json 504,391 bytes / `ea81c0571b05bf9263f1fdb0f69ffd82385128fcbc5fb683dac383626983a97b`; frontend/build/build-meta.json 592,074 / `b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2`; frontend/.release/reproducible-build.json 1,521 / `bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8`. See `host-post-rehearsal-identity.json`. A supplemental read-only check first used a mistaken proof filename and returned FileNotFound; it was corrected from the original adapter constant. No generated artifact or source was edited.
 
 The observed platform baseline remains the 100th publish eeecd3f, last finished Nov24 11:41PM Riyadh. No publication has been submitted for PR2120 and no cabinet mutation has occurred. Next: original prepare with task actor, fresh original prepublish, one authorized platform publication, a newer explicit Deployment Succeeded, then original three-probe production verify and closed-lease status before guarded live d1 archive. Do not rerun completed tests or alter frozen source.
+
+
+## Release checkpoint E11 — original lease prepared and publication submitted once
+
+Original prepare exited zero and created this task's lease at `2026-11-24T22:29:50.804025+00:00`, actor `chatgpt-inventory-cabinet-archive-20261124-pr2120`, exact A/D/RID and protocol5. Complete prepare stdout is retained in the owned stage (668,210 bytes, SHA-256 `3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061`); stderr is empty. No original control was modified.
+
+Original prepublish exited zero and returned ready_to_publish:true at 22:30:44 UTC. Clicking Republish opened the known free-republish confirmation. A second fresh original prepublish passed at `2026-11-24T22:31:39.075030+00:00` with exact A/D/RID; then Publish changes was clicked once. The platform visibly changed to disabled Publishing. Both complete prepublish outputs and summaries are retained in the owned stage; the exact returned output SHA-256 is `9c8bc138df73bd78a8c6a39974bb1881a2557a3bfb8df37b7cacaaa778fe5775`.
+
+See `publication-submission.json`. This is submission evidence, not deployment success. The prior baseline is eeecd3f/100th publish, last finish Nov24 11:41PM Riyadh. Observe this existing job, do not republish again, do not clear another lease, and do not mutate live cabinets until an explicitly newer Deployment Succeeded and original three-probe verify/closed lease have passed. No live cabinet action has occurred.
