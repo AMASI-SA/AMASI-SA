@@ -64,3 +64,16 @@ Implemented `GET /api/operational-balances/payment-events/integrity-preview` as 
 Operational Payment Event Policy CI passed on commit `2b33ff6c26148f88c701facbee8b1b6d0df4a85b` (run 45447385570). No end-to-end Preview execution yet.
 
 **Activation blockers still present:** authoritative proof ingestion from new Salla events; validated, owner-scoped transactional posting into the existing operational CAS (including concurrency and duplicate exclusion); provider-native event identity for Tabby/Tamara CSV refund/installment rows; daily scheduler; historical side-by-side reconciliation; checking production version and release guard. Keep the feature disabled and leave existing confirmed balances unchanged.
+
+
+## Verified payment webhook integration / CAS evidence inbox
+As of 2026-11-24, the verified `order.payment.updated` retry inbox now calls a **feature-flagged** hook after an accepted or stale canonical Salla order sync. New files:
+- `backend/operational_payment_salla_event_capture.py`: extracts only normalized, time-stamped, provider-confirmed SAR captures, rejecting status-only/order-total-only observations.
+- `backend/operational_payment_evidence_inbox.py`: records bounded source observations using the **existing operational balance Mongo CAS aggregate**; it treats an already-recognized `capture:<reference>` as already accounted, never as new money; two distinct payment references stay separate. It rejects conflicting order/provider/amount reuse.
+- Existing `salla_integration/payment_update_inbox.py` retries evidence staging failures instead of marking the event complete. All proof observations are non-money; current balances/settlements remain unchanged.
+- `operational_payment_snapshot_integrity.py` now reports pending-projection and already-recognized proof counts to the owner's read-only integrity preview.
+- CI: Operational Payment Event Policy **PASS** on commit `eb11e70cd70d81b006c0e4feebcb0cb8ad602126` (workflow run 45449680733).
+
+**Activation contract**: `OPERATIONAL_PAYMENT_EVIDENCE_CAPTURE_ENABLED` defaults to OFF. Do not set it to 1 in production yet. This flag enables *evidence staging only*, NOT automatic balance posting. A separate audited, tenant-bound balance-posting adapter must be written and reconciled before automatic receipts can be considered functional. Never count proof inbox entries as available bank/provider funds.
+
+**Unresolved**: this is not a no-duplication cutover for old orders; no per-order targeted balance posting exists; no cross-provider statement event ID in existing Tabby/Tamara native exports; daily automatic exception review still lacks a live scheduler. Preview coverage, production SHA identification, and release guard remain outstanding.
