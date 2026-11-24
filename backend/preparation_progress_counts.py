@@ -32,11 +32,15 @@ def _member_ids(row):
     ])
 
 
-def _current_member(piece, dispatch, employee, members):
-    return (piece.get("responsible_employee_id") == employee
-            and piece.get("supplier_dispatch_id") == dispatch.get("id")
+def _dispatch_member(piece, dispatch, members):
+    return (piece.get("supplier_dispatch_id") == dispatch.get("id")
             and piece.get("supplier_id") == dispatch.get("supplier_id")
             and piece.get("piece_id") in members)
+
+
+def _current_member(piece, dispatch, employee, members):
+    return (piece.get("responsible_employee_id") == employee
+            and _dispatch_member(piece, dispatch, members))
 
 
 def _chunks(values):
@@ -120,20 +124,24 @@ async def _received_by_day(db, owner, employee, keys):
                           for identity, row in by_dispatch.items()}
             if not by_dispatch:
                 continue
-            pieces = db[PIECES].find({
-                "user_id": owner, "responsible_employee_id": employee,
-                "supplier_dispatch_id": {"$in": list(by_dispatch)},
-            }, _projection(PIECE_FIELDS)).batch_size(CHUNK)
-            try:
-                async for piece in pieces:
-                    identity = piece.get("supplier_dispatch_id")
-                    row = by_dispatch.get(identity)
-                    if (row and _current_member(piece, row, employee, membership[identity])
-                            and not piece.get("experiment_archived_at")
-                            and _piece_received_from_dispatch_supplier(piece, row)):
-                        result[progress_day(row.get("sent_at"))].add(piece["piece_id"])
-            finally:
-                await pieces.close()
+            # Receipt may transfer custody to a different employee. The
+            # committed supplier file and exact current dispatch identity
+            # attribute it to its sender without counting old reassignments.
+            for ids in _chunks(set().union(*membership.values())):
+                pieces = db[PIECES].find({
+                    "user_id": owner, "piece_id": {"$in": ids},
+                    "supplier_dispatch_id": {"$in": list(by_dispatch)},
+                }, _projection(PIECE_FIELDS)).batch_size(CHUNK)
+                try:
+                    async for piece in pieces:
+                        identity = piece.get("supplier_dispatch_id")
+                        row = by_dispatch.get(identity)
+                        if (row and _dispatch_member(piece, row, membership[identity])
+                                and not piece.get("experiment_archived_at")
+                                and _piece_received_from_dispatch_supplier(piece, row)):
+                            result[progress_day(row.get("sent_at"))].add(piece["piece_id"])
+                finally:
+                    await pieces.close()
     finally:
         await cursor.close()
     return result
