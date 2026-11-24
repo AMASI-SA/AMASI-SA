@@ -80,9 +80,9 @@ async def require_current_refresh_health(db, owner, state, *, at):
         # Source freshness is separate from aggregate completion. The actual
         # owner Salla scheduled reconciliation can fail even after a successful
         # 74-second operational engine refresh. Read only this bounded source.
-        from operational_source_freshness import _salla
+        from operational_source_freshness import _salla, _safe
         source_now = _stamp(at)
-        salla = await _salla(db, owner, source_now)
+        salla = await _safe("salla", lambda: _salla(db, owner, source_now))
         require_salla_current(salla)
     except RefreshHealthHold as exc:
         fail(str(exc), "نتيجة تحديث المصادر غير سليمة؛ أوقف الترحيل المالي حتى نجاح التحديث", 409)
