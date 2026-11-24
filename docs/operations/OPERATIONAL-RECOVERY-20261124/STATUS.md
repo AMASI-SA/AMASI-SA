@@ -360,3 +360,42 @@ Next safe action: preserve this ordinary source follow-up on PR #2101, run
 focused isolated Mongo verification and all exact-head gates, rebuild the new
 source with the governed toolchain, then freeze an intent-only B. The exact
 new commit SHA and subsequent status must be recorded in the PR continuation.
+
+## Isolated Mongo verification and all-entry read correction
+
+Source A2 `19281dd87b14c86f9899e157e7f8f3adcc14e598` is preserved remotely;
+its tree is `e084987ab2a9e579804669150f30e57569986a38`. Its governed A/B
+build and source verification passed with Node 22.23.2/Yarn 1.22.22. Full-history
+J-to-A2 intent cleanliness independently passed. No intent was frozen.
+
+On Emergent, a new isolated clone at exactly A2 ran all 20 modified real-Mongo
+acceptance cases plus the related pure workspace case: **21 passed, zero
+failed, zero skipped, 13.75 seconds**, Python 3.11.18. The inherited environment
+was cleared before fixture imports, dotenv disabled, and the repository-owned
+fixture created and stopped its own loopback mongod. Each case used its own
+UUID test database. No production database or financial action was used.
+A2 CI then completed successfully: operational contracts 7,219 passed with
+151 passing subtests; durable demand-read/child/HTTP/builder contracts 106
+passed; shipping-preservation 16 passed with 18 passing subtests; eligibility
+5,892 passed with 97 passing subtests. Frontend, browser/mobile, worker,
+readiness, security and CodeQL gates also passed. Existing path-conditioned
+skips were unchanged. The independent auditor inspected the completed backend
+logs and found no additional failure.
+
+A final direct page audit found a remaining old report-entry path: the legacy
+and employee-app mounts of OperationalBalances could still request a source
+refresh because saved-on-open depended on one URL/source combination. The
+follow-up removes that exception for all mounts. Entry, tab return, visibility
+resume and saved movement rereads now read the saved snapshot. Only the
+explicit refresh button and the successful explicit wallet-source update keep
+their existing deliberate refresh. The old on-open-calculation header is
+corrected. No backend/authentication policy changes are included.
+
+The new fail-first entry cases reproduced one unwanted refresh each. All four
+focused frontend suites then passed 145 tests; an independent overlapping
+selection passed 170 tests, with no review blocker. Exactly the component and
+its existing read-load test change, in addition to this status record.
+The next source commit must be rebuilt and get its own intent/proof; A2's proof
+is not reusable. Final reviewed B CI and the official clean-clone Emergent
+rehearsal remain mandatory. No merge, publish, source-sync, financial refresh
+or automation enable by this task has occurred.
