@@ -1,6 +1,9 @@
 """First-order Salla page balance shares canonical projection, not captured_at."""
 import copy
+import sys
+import types
 import unittest
+from unittest.mock import patch
 from operational_payment_direct_order_page import FirstPageHold, apply_first_paid_order_page
 from test_operational_payment_salla_order_page import sample, source, STAMP
 
@@ -30,9 +33,16 @@ def paid_source():
 
 
 def post(s, raw=None, as_of="2026-11-24T03:00:00+03:00"):
-    return apply_first_paid_order_page(
-        s, raw=raw or paid_source(), source=source(), owner="merchant1",
-        order_number="301556476",as_of=as_of)
+    # The isolated policy workflow intentionally doesn't install FastAPI or
+    # Motor. Stub only the provider-history import needed by observed_balance,
+    # and run it with movements=[] so its settlement shortcut is never used.
+    # Actual history/settlement integration still requires Preview UAT.
+    history = types.ModuleType("operational_provider_history")
+    history.late_payment_blocks = lambda *args, **kwargs: False
+    with patch.dict(sys.modules, {"operational_provider_history":history}):
+        return apply_first_paid_order_page(
+            s, raw=raw or paid_source(), source=source(), owner="merchant1",
+            order_number="301556476",as_of=as_of)
 
 
 class DirectPaidPageTests(unittest.TestCase):
