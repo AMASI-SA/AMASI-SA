@@ -104,7 +104,6 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_native_capture_candidate.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_native_capture_read.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_full_refresh_parity.py' -v
-          python3 -m unittest discover -s tests -p 'test_operational_payment_real_reducer_parity.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_first_capture_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_salla_order_page.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_direct_order_page.py' -v
@@ -115,3 +114,15 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_salla_event_source_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_salla_event_source_integration.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
+
+  real-reducer-parity-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install minimal financial reducer runtime dependencies
+        run: python3 -m pip install --quiet fastapi pymongo motor
+      - name: Compare direct payment against actual canonical reducer
+        working-directory: backend
+        run: |
+          python3 -m unittest discover -s tests -p 'test_operational_payment_real_reducer_parity.py' -v
