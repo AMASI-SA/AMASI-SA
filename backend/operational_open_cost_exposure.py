@@ -6,6 +6,7 @@ payables. Current amounts come from the reconciled operational engine only.
 from operational_financial_activity_runtime import preparation_checkpoint, prepare_in_thread
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 import asyncio
+import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -19,6 +20,7 @@ from operational_courier_tariffs import matches as matches_courier_key, with_tar
 from operational_product_cost_policy import unreceived_eligible
 from operational_remaining_bundle_sources import load_remaining_bundles
 from operational_read_runtime import SourceReadError, SnapshotReadCache, load_collections, source_read_budget
+from operational_source_diagnostics import source_failure_detail
 
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
@@ -41,6 +43,7 @@ READS = ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_products_v2"
 POOL_NAME = "منتجات لم تُستلم من المورد"
 _READ_CACHE = SnapshotReadCache(ttl=20, max_entries=32)
 READ_TIMEOUT = 45
+_LOG = logging.getLogger(__name__)
 
 
 def _fmt(value):
@@ -156,7 +159,23 @@ async def _project(db, owner, state, *, as_of=None):
     stamp = instant(as_of or datetime.now(timezone.utc))
     if stamp < started:
         raise ValueError("operational_work_forecast_time_invalid")
-    data = await load_collections(db, owner, READS, reader=rows)
+    try:
+        data = await load_collections(db, owner, READS, reader=rows)
+    except SourceReadError as error:
+        try:
+            detail = source_failure_detail(error.code, error.collection)
+            note = ("operational_cost_source_read_failure stage=source_collection outcome=failed "
+                    f"cause={detail['cause']} source_collection={detail['source_collection']}")
+            try:
+                # A long traceback can evict the log line from the platform's
+                # tail. Exception notes retain the safe source at its end.
+                error.add_note(note)
+            except Exception:
+                pass  # Optional on runtimes without exception-note support.
+            _LOG.warning("%s", note)
+        except Exception:
+            pass  # Diagnostics must not replace the original source failure.
+        raise
     # Index only this immutable source read; prices and validation remain per item.
     cost_catalog_index = await prepare_in_thread(build_cost_catalog_index, data, unique_index)
     issues = Counter()
