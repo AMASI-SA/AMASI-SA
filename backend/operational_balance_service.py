@@ -21,6 +21,7 @@ from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION 
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
 
 _LOG = logging.getLogger(__name__)
+_REPORT_PARTY_KEY_CACHE_LIMIT = 4096
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_workspace_source_insufficient", "operational_prepaid_source_invalid", "operational_pos_bank_confirmation_required",
@@ -780,11 +781,20 @@ async def refresh(db, owner, *, clock=None):
                 # claim retains fresh request/lease admission and store arbitration.
                 await checkpoint()
                 credit = order["bank_credit"]
+                from operational_bank_credit_recognition import REVIEW_ACTIONS, original_bank_occurrence
+                try:
+                    occurred_at = original_bank_occurrence(order, result, stamp)
+                except ValueError as exc:
+                    code = str(exc)
+                    result["engine"]["issues"].append({"code": code, "source_id": order["id"],
+                        "order_number": order["order_number"], "party_type": "bank", "party_id": credit["bank_id"],
+                        "status": "pending", "required_action": REVIEW_ACTIONS[code]})
+                    continue
                 operation = await claim_movement(db, owner, 'operational_order_worker', payload)
                 item = {**payload, 'id': operation, 'party_type': 'bank', 'party_id': credit['bank_id'],
                         'bank_kind': 'bank', 'bank_name': credit['bank_name'], 'name': credit['bank_name'],
                         'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
-                        'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
+                        'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': occurred_at, 'recorded_at': stamp,
                         'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
                 if credit.get('bank_transaction_reference'):
                     item['bank_transaction_reference'] = credit['bank_transaction_reference']
@@ -804,6 +814,10 @@ async def refresh(db, owner, *, clock=None):
                 except ValueError:
                     names[kind] = {}
             await run_calculation(_apply_refreshed_party_names, result, names)
+        from operational_entity_freshness import FIELD, build_coverage
+        result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
+        from operational_balance_recovery_proof import FIELD as PROOF_FIELD, build_recovery_proof
+        result["engine"][PROOF_FIELD] = await run_calculation(build_recovery_proof, state, result, sources, stamp)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()
@@ -866,6 +880,11 @@ def paypal_available(computed):
 def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False, paypal_sar=False, workspace_provider=None):
     from operational_financial_activity_runtime import preparation_checkpoint
     preparation_checkpoint()
+    # Revision-bound health and recovery receipts have their own owner-only
+    # readers. They are not financial report data, and copying/returning them
+    # would change an otherwise identical report on every successful refresh.
+    state = {**state, "engine": {key: value for key, value in state.get("engine", {}).items()
+             if key not in {"automatic_source_coverage", "recovery_proof_v1"}}}
     state = reconcile_credits(deepcopy(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
     valuations = usable_bases(state) if provider_balances_sar or paypal_sar else {}
@@ -883,8 +902,20 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             key = entry["obligation_id"]
             allocated[key] = allocated.get(key, Decimal(0)) + Decimal(entry["amount"])
     parties = {}
+    # Saved histories revisit the same parties on every money movement. Keep
+    # only canonical string identities in this bounded, report-local memo;
+    # all output keys still use the original digest and the original ordering.
+    party_keys = {}
     def get(kind, identity, currency, name=None):
-        key = party_key(kind, identity, currency)
+        if type(kind) is str and type(identity) is str and type(currency) is str:
+            components = (kind, identity, currency)
+            key = party_keys.get(components)
+            if key is None:
+                key = party_key(kind, identity, currency)
+                if len(party_keys) < _REPORT_PARTY_KEY_CACHE_LIMIT:
+                    party_keys[components] = key
+        else:
+            key = party_key(kind, identity, currency)
         if key not in parties:
             parties[key] = {"party_type": kind, "party_id": identity, "currency": currency,
                             "name": name or identity, **{f: Decimal(0) for f in (

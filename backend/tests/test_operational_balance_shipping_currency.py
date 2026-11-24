@@ -9,6 +9,7 @@ from operational_balance_sources import collect_sources
 from operational_courier_tariffs import terms
 from test_operational_balance_source_fixes import rich_rate, shipping_data
 from test_operational_balance_sources import HardBoundaryDB, START, NOW, run
+from operational_test_delivery import native_delivery
 
 
 def initial():
@@ -164,7 +165,7 @@ def complete_commission(sources):
 def test_later_complete_commission_includes_the_fixed_part_once_and_keeps_native_rounding(delivered):
     sources = foreign_order_sources(cod=True, fixed="2")
     if delivered:
-        sources["orders"][0].update(status="delivered", delivered_at="2026-10-06T12:00:00+00:00")
+        native_delivery(sources["orders"][0], "2026-10-06T12:00:00+00:00")
     partial = reconcile(initial(), sources, NOW)
     complete = complete_commission(sources)
     result = reconcile(partial, complete, NOW)
@@ -182,7 +183,7 @@ def test_later_complete_commission_includes_the_fixed_part_once_and_keeps_native
 
 def test_saved_whole_commission_does_not_gain_a_second_fixed_fee_from_partial_source():
     partial = foreign_order_sources(cod=True, fixed="2")
-    partial["orders"][0].update(status="delivered", delivered_at="2026-10-06T12:00:00+00:00")
+    native_delivery(partial["orders"][0], "2026-10-06T12:00:00+00:00")
     prior = reconcile(initial(), complete_commission(partial), NOW)
     result = reconcile(prior, partial, NOW)
     assert result["engine"]["facts"] == prior["engine"]["facts"]
@@ -197,7 +198,7 @@ def test_open_fixed_estimate_is_not_duplicated_when_delivery_and_complete_fee_ar
     if allocated:
         prior["movements"] = [payment("shipping:100:cod_fixed_commission", currency="SAR")]
     complete = complete_commission(partial)
-    complete["orders"][0].update(status="delivered", delivered_at="2026-10-06T12:00:00+00:00")
+    native_delivery(complete["orders"][0], "2026-10-06T12:00:00+00:00")
     result = reconcile(prior, complete, NOW)
     rows = {k: r for k, r in result["engine"]["obligations"].items() if r["kind"] == "shipping"}
     if allocated:
@@ -261,7 +262,7 @@ def test_allocated_old_estimate_is_held_for_review_without_relabelling_payment_o
 def test_legacy_confirmed_fee_keeps_its_currency_amount_and_facts_until_explicit_review(settled):
     sources = foreign_order_sources()
     source_order = sources["orders"][0]
-    source_order.update(status="delivered", delivered_at="2026-10-06T12:00:00+00:00")
+    native_delivery(source_order, "2026-10-06T12:00:00+00:00")
     prior = reconcile(initial(), sources, NOW)
     # Reproduce the persisted pre-fix shape: facts had no fee currency and the
     # payable inherited the customer's currency.
@@ -285,7 +286,7 @@ def test_legacy_confirmed_fee_keeps_its_currency_amount_and_facts_until_explicit
 
 def test_new_delivery_freezes_contract_currency_and_keeps_foreign_cod_separate():
     sources = foreign_order_sources(cod=True)
-    sources["orders"][0].update(status="delivered", delivered_at="2026-10-06T12:00:00+00:00")
+    native_delivery(sources["orders"][0], "2026-10-06T12:00:00+00:00")
     result = reconcile(initial(), sources, NOW)
     base = result["engine"]["obligations"]["shipping:100:base_shipping"]
     cod = result["engine"]["obligations"]["cod:100"]

@@ -86,6 +86,7 @@ def test_order_bearing_route_uses_real_canonical_label_reader_without_changing_m
     from operational_balance_engine import reconcile
     from operational_financial_position import build_financial_position
     from test_operational_balance_financial_order_labels import ReadOnlyDB as LabelDB, source
+    from operational_test_delivery import native_delivery
 
     monkeypatch.setitem(sys.modules, "operational_open_cost_exposure", None)
 
@@ -112,6 +113,7 @@ def test_order_bearing_route_uses_real_canonical_label_reader_without_changing_m
                  "gross": "300.00", "collected": "100.00", "outstanding": "200.00",
                  "custody_amount": "200.00", "payment_method": "cod", "evidence_ids": [],
                  "evidence_complete": True}}
+    native_delivery(order, "2026-11-01T00:30:00+03:00")
     db.data[STATES][0] = reconcile(original, {"orders": [order]}, original["engine"]["as_of"])
     before = deepcopy(db.data)
     identities_before = deepcopy(db.order_identities.records)

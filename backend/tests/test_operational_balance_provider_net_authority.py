@@ -17,6 +17,10 @@ def test_provider_net_display_preserves_gross_settlement_and_collection_once(kin
     async def scenario(db):
         await started(db)
         document = order_document("tamara_installment", "100.00", None, number="provider-net-synthetic")
+        raw = document["raw_by_source"]["salla_direct"]
+        raw["payment"] = {"method": "tamara_installment", "status": "captured",
+                          "reference": "native-provider-net-" + document["order_number"],
+                          "paid_amount": "100.00", "paid_at": "2026-10-05T12:00:00+00:00"}
         await db.unified_orders.insert_one(document)
         await db.settings.insert_one({"user_id": "owner", "updated_at": START,
             "payment_methods": [{"name": "تمارا", "commission_percent": "10", "fixed_fee": "0", "vat_percent": "0"}]})

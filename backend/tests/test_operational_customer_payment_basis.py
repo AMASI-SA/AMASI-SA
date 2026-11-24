@@ -36,10 +36,10 @@ def document(total="199.20", paid="200.00", refund="0.80", *, captured=False):
     return raw, source
 
 
-def normalize(raw, source):
+def normalize(raw, source, rows=()):
     return normalize_operational_payment(raw, "SAR", raw["total"], CREATED, AS_OF,
         owner="owner", order_number=raw["reference_id"], provider_order_id=raw["id"],
-        source=source, rows=[])
+        source=source, rows=rows)
 
 
 @pytest.mark.parametrize("captured", [False, True])
@@ -58,7 +58,25 @@ def test_refund_hint_keeps_original_paid_principal_and_is_not_execution(captured
     order = {"id": raw["id"], "order_number": raw["reference_id"], "currency": "SAR",
              "created_at": CREATED, "updated_at": UPDATED, "payment": payment}
     result = reconcile(state, {"orders": [order]}, AS_OF)
+    if not captured:
+        # The paid principal and refund suggestion do not prove its posting
+        # date. A separate authenticated transaction supplies that evidence.
+        from order_activity_v1 import normalize_transaction_row
+        assert not result["engine"]["obligations"] and not result["engine"]["facts"]
+        assert any(i["code"] == "provider_original_capture_date_unproven" for i in result["engine"]["issues"])
+        native = normalize_transaction_row({"id": "native-synthetic-capture",
+            "references": {"order_id": raw["id"], "transaction": "synthetic-capture"},
+            "payment_method": {"slug": "mada"}, "status": {"slug": "captured"},
+            "total": {"amount": "200.00", "currency": "SAR"}, "paid_at": CREATED},
+            order_number=raw["reference_id"], provider_order_id=raw["id"])
+        native.update(user_id="owner", native_transaction_evidence=[native["native_transaction_evidence"]])
+        payment, issues = normalize(raw, source, [native])
+        assert payment is not None and not issues
+        order["payment"] = payment
+        result = reconcile(result, {"orders": [order]}, AS_OF)
     assert result["engine"]["obligations"]["provider:" + raw["id"]]["confirmed"] == "200.00"
+    assert result["engine"]["obligations"]["provider:" + raw["id"]]["business_date"] == "2026-11-01"
+    assert {key for key in result["engine"]["facts"] if key.startswith("capture:")} == {"capture:synthetic-capture"}
     assert not any(key.startswith("refund:") for key in result["engine"]["facts"])
     repeated = reconcile(result, {"orders": [order]}, AS_OF)
     assert repeated == result
@@ -93,7 +111,7 @@ def test_independent_payment_fallback_preserves_identity_and_evidence_guards(mut
 
 
 def test_same_reference_total_edit_keeps_existing_claim_and_does_not_create_second_capture():
-    raw, source = document(total="200.00", refund="0.00")
+    raw, source = document(total="200.00", refund="0.00", captured=True)
     initial_payment, issues = normalize(raw, source)
     assert initial_payment is not None, issues
     state = {"owner_id": "owner", "status": "active", "started_at": "2026-10-31T10:00:00+00:00",
@@ -101,13 +119,17 @@ def test_same_reference_total_edit_keeps_existing_claim_and_does_not_create_seco
     order = {"id": raw["id"], "order_number": raw["reference_id"], "currency": "SAR",
              "created_at": CREATED, "updated_at": UPDATED, "payment": initial_payment}
     first = reconcile(state, {"orders": [order]}, UPDATED)
-    edited, source = document(total="199.20", refund="0.80")
+    edited, source = document(total="199.20", refund="0.80", captured=True)
     edited["updated_at"] = AS_OF
     payment, issues = normalize(edited, source)
     assert payment is not None, issues
     second = reconcile(first, {"orders": [{**order, "updated_at": AS_OF, "payment": payment}]}, AS_OF)
     claim = second["engine"]["obligations"]["provider:" + raw["id"]]
     assert claim["confirmed"] == "200.00" and not claim.get("incomplete")
+    assert claim["business_date"] == "2026-11-01"
+    assert second["engine"]["obligations"] == first["engine"]["obligations"]
+    assert second["engine"]["facts"] == first["engine"]["facts"]
+    assert {key for key in second["engine"]["facts"] if key.startswith("capture:")} == {"capture:synthetic-capture"}
     assert not any(key.startswith("refund:") for key in second["engine"]["facts"])
     assert second["movements"] == []
 

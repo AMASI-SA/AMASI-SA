@@ -49,7 +49,7 @@ describe('authoritative source freshness', () => {
   test('shows saved metadata before the POST and invalidates only after confirmed saved success', async () => {
     const pending = deferred(), env = setup();
     env.refresh.mockReturnValueOnce(pending.promise);
-    const run = env.attach().check();
+    const run = env.attach().check(true);
     await tick();
     expect(env.onChange.mock.calls.some(([state]) => state.snapshot?.as_of === OLD && state.phase === 'refreshing')).toBe(true);
     expect(env.onConfirmed).not.toHaveBeenCalled();
@@ -69,6 +69,19 @@ describe('authoritative source freshness', () => {
       expect(env.refresh).not.toHaveBeenCalled();
     }
   });
+  test.each([
+    health(),
+    health({ as_of: '2026-11-23T20:59:59Z', generated_at: '2026-11-23T21:00:00Z' }),
+  ])('opening an overdue balance page only reads; navigation cannot initiate financial work', async saved => {
+    const env = setup({ reads: [saved, saved] });
+    const first = env.attach();
+    await first.check(); first.close();
+    await env.attach().check();
+    expect(env.read).toHaveBeenCalledTimes(2);
+    expect(env.refresh).not.toHaveBeenCalled();
+    expect(env.onConfirmed).not.toHaveBeenCalled();
+    expect(env.onChange.mock.calls.at(-1)[0].phase).toBe('stale');
+  });
   test('explicit owner source refresh may POST with fresh as_of; automatic open remains read-only', async () => {
     const fresh = health({ as_of: CURRENT });
     const updated = health({ as_of: '2026-11-23T14:00:00Z', revision: 11 });
@@ -87,13 +100,13 @@ describe('authoritative source freshness', () => {
   });
   test('explicit retry reconciles an ambiguous attempt from a newly advanced fresh snapshot without another POST', async () => {
     const env = setup({ response: { refresh_warning: 'timeout' } }); const client = env.attach();
-    await client.check(); env.advance(100000); await client.check(true);
+    await client.check(true); env.advance(100000); await client.check(true);
     expect(env.refresh).toHaveBeenCalledTimes(1); expect(env.onConfirmed).toHaveBeenCalledTimes(1);
   });
   test('one same-scope physical flight survives another consumer closing; observers do not own a POST', async () => {
     const pending = deferred(), env = setup(); env.refresh.mockReturnValueOnce(pending.promise);
     const first = env.attach(), second = env.attach(), observer = env.attach({ canRefresh: false });
-    const run = first.check(); second.check(); await tick();
+    const run = first.check(true); second.check(); await tick();
     expect(env.refresh).toHaveBeenCalledTimes(1);
     const signal = env.refresh.mock.calls[0][0].signal;
     first.close(); expect(signal.aborted).toBe(false);
@@ -103,7 +116,7 @@ describe('authoritative source freshness', () => {
   });
   test('an abort can commit server-side; automatic remount confirms newer saved state without another POST', async () => {
     const pending = deferred(), env = setup(); env.refresh.mockReturnValueOnce(pending.promise);
-    const client = env.attach(), run = client.check(); await tick(); client.close();
+    const client = env.attach(), run = client.check(true); await tick(); client.close();
     pending.resolve(receipt); await run;
     expect(env.onConfirmed).not.toHaveBeenCalled();
     await env.attach().check();
@@ -113,7 +126,7 @@ describe('authoritative source freshness', () => {
   test('unknown outcome does not retry automatically or on revision-only changes; explicit retry waits 90s and re-reads', async () => {
     const env = setup({ reads: [health(), health({ revision: 12 }), health({ revision: 12 }), health({ revision: 12 }), health({ as_of: CURRENT, revision: 14 })],
       response: { refresh_warning: 'انتهت المهلة' } });
-    const first = env.attach(); await first.check(); first.close();
+    const first = env.attach(); await first.check(true); first.close();
     const second = env.attach(); await second.check(); await second.check(true);
     expect(env.refresh).toHaveBeenCalledTimes(1);
     env.advance(90000);
@@ -125,7 +138,7 @@ describe('authoritative source freshness', () => {
   });
   test('explicit retry cannot start until the previous physical POST settles even after 90s', async () => {
     const pending = deferred(), env = setup(); env.refresh.mockReturnValueOnce(pending.promise);
-    const first = env.attach(), run = first.check(); await tick(); first.close(); env.advance(100000);
+    const first = env.attach(), run = first.check(true); await tick(); first.close(); env.advance(100000);
     const second = env.attach(); second.check(true); await tick();
     expect(env.read).toHaveBeenCalledTimes(1); expect(env.refresh).toHaveBeenCalledTimes(1);
     pending.resolve(receipt); await run; second.close();
@@ -144,20 +157,20 @@ describe('authoritative source freshness', () => {
     { refresh_warning: 'busy' }, { ...receipt, status: 'accounting_active' }, { ...receipt, session_scope: 'other' },
     { ...receipt, as_of: OLD }, { ...receipt, revision: 1 },
   ])('a fulfilled warning or invalid receipt is not success: %j', async response => {
-    const env = setup({ response }); await env.attach().check();
+    const env = setup({ response }); await env.attach().check(true);
     expect(env.onConfirmed).not.toHaveBeenCalled(); expect(env.read).toHaveBeenCalledTimes(1);
     expect(env.onChange.mock.calls.at(-1)[0].phase).toBe('unknown');
   });
   test('valid receipt followed by failed confirmation remains unknown', async () => {
     const env = setup({ reads: [health()] }); env.read.mockRejectedValueOnce(new Error('offline'));
-    await env.attach().check(); expect(env.onConfirmed).not.toHaveBeenCalled();
+    await env.attach().check(true); expect(env.onConfirmed).not.toHaveBeenCalled();
     expect(env.onChange.mock.calls.at(-1)[0].phase).toBe('unknown');
   });
   test('aggregate recovery keeps every failing source and issue available to the persistent notice', async () => {
     const issue = { code: 'ads_source_stale', source: 'snapchat', severity: 'error', message: 'سناب متأخر', last_success_at: OLD };
     const source = { key: 'snapchat', label: 'سناب', state: 'failed', last_success_at: OLD, data_through: '2026-11-20', expected_through: '2026-11-22', message: 'رفض المصدر' };
     const env = setup({ reads: [health(), health({ as_of: CURRENT, revision: 11, freshness: { state: 'failed', max_age_seconds: 7200 }, sources: [source], issues: [issue] })] });
-    await env.attach().check();
+    await env.attach().check(true);
     const state = env.onChange.mock.calls.at(-1)[0];
     expect(state.snapshot.sources).toEqual([source]); expect(state.snapshot.issues).toEqual([issue]);
     expect(env.onConfirmed).toHaveBeenCalledTimes(1);

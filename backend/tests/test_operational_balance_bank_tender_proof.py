@@ -331,7 +331,7 @@ class MixedBankTransactionTests(unittest.IsolatedAsyncioTestCase):
 
 
 
-def test_replayed_refresh_of_bank_and_bnpl_moves_only_bank_share():
+def test_replayed_refresh_of_bank_and_bnpl_waits_for_original_bank_leg_date():
     import asyncio
 
     from operational_balance_service import refresh
@@ -360,8 +360,9 @@ def test_replayed_refresh_of_bank_and_bnpl_moves_only_bank_share():
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         state = await read(db, 'owner')
         assert state['engine']['obligations'] == obligations
-        assert [(m['order_number'], m['bank_id'], m['amount']) for m in state['movements']] == [
-            ('998301', 'account:rajhi', '150.66')]
+        assert state['movements'] == []
+        pending, = [i for i in state['engine']['issues'] if i['code'] == 'operational_order_bank_occurrence_unproven']
+        assert (pending['order_number'], pending['party_id'], pending['status']) == ('998301', 'account:rajhi', 'pending')
         await refresh(db, 'owner', clock=NOW)
         assert (await read(db, 'owner'))['movements'] == state['movements']
 
@@ -409,8 +410,9 @@ def test_existing_provider_share_can_coexist_only_when_proved_same_payment():
                 'raw_by_source.salla_direct':raw, 'g47_salla_snapshot.source_updated_at':raw['updated_at']}})
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         result = await read(db, 'owner')
-        assert sorted((m['order_number'], m['amount']) for m in result['movements']) == [
-            ('998311','150.66'), ('998312','150.66')], result['engine']['issues']
+        assert result['movements'] == []
+        assert sorted(i['order_number'] for i in result['engine']['issues']
+                      if i['code'] == 'operational_order_bank_occurrence_unproven') == ['998311', '998312']
         assert any(i['code'] == 'operational_order_bank_credit_conflict' and i.get('order_number') == '998313'
                    for i in result['engine']['issues'])
         assert result['engine']['obligations'] == prior['engine']['obligations']

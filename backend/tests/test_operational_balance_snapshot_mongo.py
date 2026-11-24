@@ -21,6 +21,10 @@ def test_large_current_maps_refresh_and_settle_once_with_all_proofs_retained():
         assert MAX_STATE_BYTES < encoded_size < 16 * 1024 * 1024
         await db[STATES].replace_one({'_id': 'owner', 'owner_id': 'owner'}, legacy)
         order = order_document('tamara_installment', '100.00', '0.00')
+        raw = order['raw_by_source']['salla_direct']
+        raw['payment'] = {'method': 'tamara_installment', 'status': 'captured',
+                          'reference': 'native-packed-current-' + order['order_number'],
+                          'paid_amount': '100.00', 'paid_at': '2026-10-05T12:00:00+00:00'}
         await db.unified_orders.insert_one(order)
 
         first = await refresh(db, 'owner', clock=T1)

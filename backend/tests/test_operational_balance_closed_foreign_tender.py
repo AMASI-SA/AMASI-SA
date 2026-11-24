@@ -16,8 +16,16 @@ KEY = "provider:71"
 FACT = "provider_order_balance:71"
 
 
-def source(gross="16.41", paid="16.40", sar="198.21"):
-    payment, issues = foreign_payment(order=gross, paid=paid)
+def native_payment(paid="16.40"):
+    from operational_provider_transaction_evidence import VERSION
+    return {"user_id": "owner", "source": "salla_transactions", "order_number": "825",
+        "provider_order_id": "71", "transaction_id": "native-payment", "native_transaction_evidence": [{
+            "schema": VERSION, "provider_order_id": "71", "provider": "salla", "transaction_id": "native-payment",
+            "reference": "native-cc-reference", "status": "paid", "paid_at": STAMP, "currency": "KWD", "amount": paid}]}
+
+
+def source(gross="16.41", paid="16.40", sar="198.21", *, captured=False):
+    payment, issues = foreign_payment(order=gross, paid=paid, rows=[native_payment(paid)] if captured else [])
     assert payment is not None and not issues
     return {"id": "71", "order_number": "825", "currency": "KWD", "created_at": CREATED,
             "updated_at": STAMP, "payment": payment,
@@ -35,10 +43,10 @@ def state():
     ("43.84", "43.82", "529.36", "10.28", "519.08"),
 ])
 def test_proved_paid_claim_uses_exact_sar_basis_and_saved_fee_once(gross, paid, sar, fees, net):
-    order = source(gross, paid, sar)
+    order = source(gross, paid, sar, captured=True)
     payment = order["payment"]
     page = payment["order_page_balance"]
-    assert payment["gross"] == paid and not payment.get("captures")
+    assert payment["gross"] == paid and payment["captures"][0]["captured_at"] == STAMP
     assert (page["gross"], page["paid"], page["remaining"]) == (gross, paid, None)
     assert page["source"] == "canonical_salla_closed_tender"
     assert page["transaction_reference"] == "native-cc-reference"
@@ -49,8 +57,9 @@ def test_proved_paid_claim_uses_exact_sar_basis_and_saved_fee_once(gross, paid, 
     result = reconcile(state(), sources, NOW)
     assert result["engine"]["obligations"][KEY]["confirmed"] == paid
     assert result["engine"]["obligations"][KEY]["expected"] == "0.00"
-    assert result["engine"]["facts"][FACT]["remaining"] is None
-    assert not any(key.startswith("capture:") for key in result["engine"]["facts"])
+    assert FACT not in result["engine"]["facts"]
+    assert result["engine"]["facts"]["capture:native-cc-reference"]["amount"] == paid
+    assert result["engine"]["obligations"][KEY]["business_date"] == "2026-11-02"
     assert sources == before and not result["movements"] and not result["openings"]
     assert reconcile(result, sources, NOW) == result
     view = report(result, provider_balances_sar=True, provider_balances_net=True)
@@ -60,18 +69,20 @@ def test_proved_paid_claim_uses_exact_sar_basis_and_saved_fee_once(gross, paid, 
     assert view["summary"]["actual_liquidity"] == "0.00"
     pages, totals = provider_customer_payments(view)
     assert totals["KWD"] == [{"provider": "salla", "name": "سلة", "orders": 1, "paid": paid}]
-    assert pages["KWD"][0]["remaining"] is None
+    assert not pages["KWD"]  # The dated capture does not synthesize a page snapshot.
+    assert page["remaining"] is None
 
 
 def test_native_fee_policy_uses_the_proved_tender_instead_of_the_larger_order_total():
-    order = source()
+    order = source(captured=True)
     policy = {"id": "native-fee", "provider": "salla", "currency": "KWD", "status": "active",
               "effective_from": "2026-01-01", "percentage": "100", "fixed_amount": "0",
               "vat_treatment": "exempt", "refund_fee_treatment": "retain", "cancellation_fee_treatment": "retain"}
     result = reconcile(state(), {"orders": [order], "fee_policies": [policy]}, NOW)
     projection = result["engine"]["provider_reports"][KEY]
     assert projection["gross"] == "16.40" and projection["estimated_fees"] == "16.40"
-    assert result["engine"]["facts"][FACT]["gross"] == "16.41"
+    assert order["payment"]["order_page_balance"]["gross"] == "16.41"
+    assert result["engine"]["facts"]["capture:native-cc-reference"]["amount"] == "16.40"
 
 
 @pytest.mark.parametrize("currency,allocations", [
@@ -132,7 +143,7 @@ def test_a_fully_allocated_opening_payout_cannot_hide_a_proved_post_start_order(
     original["movements"] = [{"id": "opening-payout", "kind": "settlement", "direction": "incoming",
         "party_type": "provider", "party_id": "salla", "currency": "SAR", "amount": "900.00",
         "actual_fee_amount": "0.00", "allocations": [{"obligation_id": "opening:salla", "amount": "900.00"}]}]
-    sources = {"orders": [source()]}
+    sources = {"orders": [source(captured=True)]}
     result = reconcile(original, sources, NOW)
     assert result["engine"]["obligations"][KEY]["confirmed"] == "16.40"
     assert result["openings"] == original["openings"] and result["movements"] == original["movements"]
@@ -149,15 +160,15 @@ def test_invalid_closed_tender_envelope_cannot_enter_the_engine(field, value):
 
 
 def test_later_real_capture_corroborates_the_same_tender_without_rebooking_it():
-    from operational_provider_transaction_evidence import VERSION
-
     order = source()
-    first = reconcile(state(), {"orders": [order]}, NOW)
-    native = {"user_id": "owner", "source": "salla_transactions", "order_number": "825",
-        "provider_order_id": "71", "transaction_id": "native-payment", "native_transaction_evidence": [{
-            "schema": VERSION, "provider_order_id": "71", "provider": "salla", "transaction_id": "native-payment",
-            "reference": "native-cc-reference", "status": "paid", "paid_at": STAMP, "currency": "KWD", "amount": "16.40"}]}
-    payment, issues = foreign_payment(order="16.41", paid="16.40", rows=[native])
+    # Persisted pre-upgrade page claim; native evidence may corroborate it but
+    # recovery must neither recreate nor move its already recorded money.
+    first = state()
+    first["engine"].update(facts={FACT: {**order["payment"]["order_page_balance"], "observed_at": STAMP}},
+        obligations={KEY: {"id": KEY, "kind": "provider", "party_type": "provider", "party_id": "salla",
+            "currency": "KWD", "direction": "receivable", "confirmed": "16.40", "expected": "0.00",
+            "business_date": "2026-11-02", "fee_estimate_complete": False}}, order_versions={"71": STAMP})
+    payment, issues = foreign_payment(order="16.41", paid="16.40", rows=[native_payment()])
     assert payment is not None and not issues and payment["captures"][0]["captured_at"] == STAMP
     order["payment"] = payment
     second = reconcile(first, {"orders": [order]}, NOW)

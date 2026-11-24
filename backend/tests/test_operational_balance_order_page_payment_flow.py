@@ -49,12 +49,12 @@ def provider_view(state, provider):
 
 
 @pytest.mark.parametrize(("method", "provider", "paid", "remaining", "outstanding", "status"), [
-    ("mada", "salla", "100.00", None, "600.00", "paid"),
-    ("tamara_installment", "tamara", "45.00", "55.00", "545.00", "partial"),
-    ("tabby_installment", "tabby", "100.00", "0.00", "600.00", "paid"),
+    ("mada", "salla", "100.00", None, "500.00", "paid"),
+    ("tamara_installment", "tamara", "45.00", "55.00", "500.00", "partial"),
+    ("tabby_installment", "tabby", "100.00", "0.00", "500.00", "paid"),
     ("mada", "salla", "0.00", "100.00", "500.00", "unpaid"),
 ])
-def test_saved_order_page_balance_flows_to_right_platform_without_a_transaction_fetch(method, provider, paid, remaining, outstanding, status):
+def test_saved_order_page_display_does_not_confirm_money_without_original_capture_time(method, provider, paid, remaining, outstanding, status):
     async def scenario(db):
         initial = await start(db, provider)
         doc = order_document(method, paid, remaining)
@@ -66,6 +66,9 @@ def test_saved_order_page_balance_flows_to_right_platform_without_a_transaction_
             status, float(paid), float(remaining or 0))
         state = await refresh(db, "owner", clock=T1)
         assert provider_view(state, provider)["outstanding_receivable"] == outstanding
+        if Decimal(paid) > 0:
+            assert any(i["code"] == "provider_original_capture_date_unproven" for i in state["engine"]["issues"])
+            assert "provider:" + doc["salla_order_id"] not in state["engine"]["obligations"]
         assert report(state)["summary"]["actual_liquidity"] == "1000.00"
         facts = deepcopy(state["engine"].get("facts", {}))
         repeated = await refresh(db, "owner", clock=T2)
@@ -76,7 +79,7 @@ def test_saved_order_page_balance_flows_to_right_platform_without_a_transaction_
     run(scenario)
 
 
-def test_unpaid_then_partial_then_fully_paid_credits_the_delta_and_settlement_only_once():
+def test_partial_and_full_observations_wait_for_dated_capture_then_settlement_is_once():
     async def scenario(db):
         initial = await start(db, "salla")
         doc = order_document("mada", "0.00", "100.00")
@@ -84,8 +87,8 @@ def test_unpaid_then_partial_then_fully_paid_credits_the_delta_and_settlement_on
         await db.unified_orders.insert_one(doc)
         for updated_at, observed, paid, remaining, balance in [
             (CREATED, T1, "0.00", "100.00", "500.00"),
-            (T2, T2, "45.00", "55.00", "545.00"),
-            (T3, T3, "100.00", None, "600.00"),
+            (T2, T2, "45.00", "55.00", "500.00"),
+            (T3, T3, "100.00", None, "500.00"),
         ]:
             raw["updated_at"] = updated_at
             raw["payment_actions"]["remaining_action"] = remaining_action(paid, remaining)
@@ -95,6 +98,16 @@ def test_unpaid_then_partial_then_fully_paid_credits_the_delta_and_settlement_on
             assert provider_view(state, "salla")["outstanding_receivable"] == balance
             assert state["movements"] == [] and state["openings"] == initial
             assert report(state)["summary"]["actual_liquidity"] == "1000.00"
+
+        # A separately supplied native paid timestamp establishes the original
+        # financial day. Neither observation timestamp above is used as proof.
+        raw["payment"] = {"method": "mada", "status": "captured", "reference": "native-paid-8101",
+                          "paid_amount": "100.00", "paid_at": T3}
+        await db.unified_orders.update_one({"user_id": "owner", "order_number": doc["order_number"]},
+                                          {"$set": {"raw_by_source.salla_direct": raw}})
+        state = await refresh(db, "owner", clock=T4)
+        assert provider_view(state, "salla")["outstanding_receivable"] == "600.00"
+        assert state["engine"]["obligations"]["provider:" + raw["id"]]["business_date"] == "2026-10-06"
 
         payout = movement()
         payout.update(request_id="paid-out-once", party_type="provider", party_id="salla", direction="incoming",
@@ -115,6 +128,10 @@ def test_unseen_post_start_payment_joins_balance_once_while_prestart_order_stays
         await refresh(db, "owner", clock=T2)
         docs = [order_document("mada", "100.00", None, created=created, number=id_)
                 for created, id_ in (("2026-10-04T12:00:00+00:00", "8102"), (CREATED, "8103"))]
+        for doc in docs:
+            raw = doc["raw_by_source"]["salla_direct"]
+            raw["payment"] = {"method": "mada", "status": "captured", "paid_amount": "100.00",
+                              "paid_at": raw["created_at"], "reference": "native-paid-" + doc["order_number"]}
         await db.unified_orders.insert_many(docs)
         state = await refresh(db, "owner", clock=T3)
         assert provider_view(state, "salla")["outstanding_receivable"] == "600.00"

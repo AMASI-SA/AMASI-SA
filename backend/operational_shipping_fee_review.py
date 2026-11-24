@@ -189,6 +189,10 @@ class DriverEarnings:
                     or (not previous and {key, key + ":base_shipping"} & self.allocation_keys)):
                 raise ValueError("driver_fee_saved_conflict")
             saved_facts = self.state.get("facts", {})
+            from operational_driver_original_dates import PREFIX as ORIGINAL_EARNING, earning_fact
+            original = saved_facts.get(ORIGINAL_EARNING + oid)
+            if original is not None and original != earning_fact(self.owner, order, {**info, "earned_at": earned.isoformat()}):
+                raise ValueError("driver_fee_saved_conflict")
             frozen = saved_facts.get(key)
             if frozen and (frozen.get("party_type") != "store_driver" or frozen.get("id") != a["driver_id"]
                         or (not (frozen.get("recognition_basis") == info.get('recognition_basis')

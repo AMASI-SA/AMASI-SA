@@ -29,6 +29,31 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     if owner_rule_active(state, owner):
         candidate = approved_aramex_charge(data, setup, source, raw, owner, start, end, current, prepaid)
         if candidate is not None:
+            # The approved status policy must not conceal a genuine completion
+            # timestamp acquired later. Bind the same carrier/waybill and price
+            # that event at its original time before considering observation.
+            try:
+                from operational_delivery_assignment_index import has_active_assignment_for_number
+                if has_active_assignment_for_number(data['store_delivery_assignments'],
+                        str(raw.get('reference_id') or raw.get('order_number')), owner=owner,
+                        assignment_index=assignment_index):
+                    return False, None
+                native_current, shipment, waybill = _current_shipping(raw, source, require_delivered=False, require_label=False)
+                if (shipment and ('shipment', shipment) in shipment_conflicts
+                        or waybill and ('waybill', waybill) in shipment_conflicts):
+                    raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')
+                at = completion_time(raw, source, history, end)
+                bind_completed_waybill(raw, native_current, shipment, waybill, at)
+            except ValueError:
+                return True, candidate  # The writer keeps this undated pair pending.
+            if at < start:
+                return True, None
+            original = priced_event(data, setup, raw, owner, start, at, candidate['party_id'],
+                candidate['source_carrier_key'], shipment, waybill, {}, prepaid)
+            if original is not None:
+                if not review_only:
+                    require_admission(state, original, review_index=review_index)
+                return True, original
             return True, candidate
     keys = {str(key).casefold() for rate in prepaid for key in rate.get('keys', [])}
     if not any(str(current.get(key) or '').casefold() in keys for key in ('company_code', 'company_name')):
@@ -193,6 +218,15 @@ def apply_events(state, events, start, now, issue):
             if fact_id in facts:
                 if facts[fact_id] != event:
                     raise ValueError('operational_prepaid_shipping_recorded_evidence_changed')
+                continue
+            # An observation proves a present status, not when the expense and
+            # cash payment happened. Keep the entire new pair pending until a
+            # native completion time is available; existing immutable pairs
+            # were handled above and are never removed or redated.
+            if event.get('recognition_basis') or not event.get('completed_at'):
+                issue('operational_prepaid_shipping_original_date_unproven', oid,
+                      party_type=event.get('party_type'), party_id=event.get('party_id'),
+                      missing_fields=['completion_timestamp'])
                 continue
             require_admission(state, event, review_index=review_index)
             if event.get('recognition_basis') == OWNER_STATUS_BASIS and not owner_rule_active(state, state['owner_id']):

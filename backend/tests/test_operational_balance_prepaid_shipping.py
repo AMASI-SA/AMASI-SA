@@ -250,12 +250,16 @@ def test_idle_worker_never_posts_and_explicit_refresh_cas_records_completed_char
         assert (await read(db, 'owner'))['movements'] == []
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         saved = await read(db, 'owner')
-        assert len(saved['movements']) == 1 and saved['movements'][0]['amount'] == '34.50'
-        assert saved['engine']['obligations']['shipping-prepaid:100']['confirmed'] == '34.50'
-        fact = saved['engine']['facts']['prepaid_shipping:100']
         if undated_status is not None:
-            assert fact['completed_at'] is None and fact['recorded_at'] == NOW
-            assert fact['recognition_basis'] == 'aramex_status_created_after_start'
+            assert saved['movements'] == [] and 'shipping-prepaid:100' not in saved['engine']['obligations']
+            assert 'prepaid_shipping:100' not in saved['engine']['facts']
+            assert any(issue['code'] == 'operational_prepaid_shipping_original_date_unproven'
+                       for issue in saved['engine']['issues'])
+        else:
+            assert len(saved['movements']) == 1 and saved['movements'][0]['amount'] == '34.50'
+            assert saved['movements'][0]['occurred_at'] == COMPLETED
+            assert saved['engine']['obligations']['shipping-prepaid:100']['confirmed'] == '34.50'
+            assert saved['engine']['facts']['prepaid_shipping:100']['completed_at'] == COMPLETED
         await tick(db)
         await refresh(db, 'owner', clock=NOW)
         assert (await read(db, 'owner'))['movements'] == saved['movements']

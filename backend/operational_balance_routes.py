@@ -1462,6 +1462,10 @@ def make_operational_balance_router(db, current_user):
     attach_demand_refresh_routes(router, db, current_user, scope)
     from operational_balance_freshness_routes import attach_freshness_routes
     attach_freshness_routes(router, db, current_user, scope)
+    from operational_balance_automation_routes import attach_automation_routes
+    attach_automation_routes(router, db, current_user, scope)
+    from operational_balance_recovery_routes import attach_recovery_routes
+    attach_recovery_routes(router, db, current_user, scope)
     from operational_provider_statement_routes import attach_provider_statement_routes
     attach_provider_statement_routes(router, db, current_user, scope, guarded)
     from operational_balance_access_routes import install_access_routes

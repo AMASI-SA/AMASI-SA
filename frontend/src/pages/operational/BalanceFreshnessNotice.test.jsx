@@ -93,3 +93,35 @@ test('unknown issue identifiers use a human family label rather than exposing ke
   expect(collapsedText()).not.toContain('internal_');
   expect(host.querySelector('details').textContent).toContain('internal_timeout_v2');
 });
+
+test('entity warning exposes separate account currencies, original missing days and elapsed time', async () => {
+  const row = { key: 'snap-usd', label: 'سناب الدولار', entity_type: 'ad_account', currency: 'USD',
+    state: 'stale', last_success_at: LAST, last_financial_day: '2026-11-23', expected_through: '2026-11-23',
+    stale_for_seconds: 183600, calendar: 'ad_closed_days', missing_days: ['2026-11-21', '2026-11-22'],
+    missing_days_count: 2, missing_days_truncated: false, message: 'توجد أيام لم يثبت اكتمالها.' };
+  await render({ state: { phase: 'fresh', message: '', snapshot: { ...snapshot, stale: false,
+    as_of: snapshot.generated_at, asOf: Date.parse(snapshot.generated_at),
+    reference: Date.parse(snapshot.generated_at), observedAt: Date.now(),
+    freshness: { state: 'current', max_age_seconds: 7200 }, last_attempt: null, sources: [], issues: [],
+    entity_coverage: { state: 'stale', rows: [row], omitted_entities: 0, message: '' } } } });
+  expect(host.querySelector('section').getAttribute('role')).toBe('alert');
+  expect(collapsedText()).toContain('سناب الدولار (USD)');
+  const details = host.querySelector('details');
+  expect(details.textContent).toContain('آخر يوم مثبت ماليًا: 2026-11-23');
+  expect(details.textContent).toContain('2026-11-21، 2026-11-22');
+  expect(details.textContent).toContain('2 يوم، 3 ساعة، 0 دقيقة');
+  expect(details.textContent).toContain(row.message);
+});
+
+test('unknown entity coverage never displays missing days or duration as a known zero', async () => {
+  await render({ state: { phase: 'fresh', message: '', snapshot: { ...snapshot,
+    entity_coverage: { state: 'unknown', omitted_entities: 4, message: 'المطابقة غير مكتملة.', rows: [
+      { key: 'staff', label: 'موظف التجربة', currency: 'SAR', state: 'unknown', last_success_at: null,
+        stale_for_seconds: null, calendar: 'salary_days', missing_days: [], missing_days_count: null,
+        message: 'العقد غير مكتمل.' }] } } } });
+  const text = host.querySelector('details').textContent;
+  expect(text).toContain('الأيام الناقصة غير متحققة');
+  expect(text).toContain('لا يوجد نجاح مالي مثبت سابق');
+  expect(text).toContain('لم تُعرض 4 جهات بسبب حد العرض');
+  expect(text).not.toContain('أيام لم يثبت اكتمالها: 0');
+});

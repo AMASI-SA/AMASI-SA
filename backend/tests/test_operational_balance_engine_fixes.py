@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from operational_balance_engine import reconcile
+from operational_test_delivery import native_delivery
 
 
 START = "2026-10-05T00:00:00+00:00"
@@ -93,6 +94,7 @@ def test_driver_cod_custody_uses_native_method_and_clears_previous_expected(meth
     order.update(status="delivered", cod_amount=custody,
                  cod={"gross": "300", "collected": "300", "outstanding": "0", "custody_amount": custody,
                       "payment_method": method, "evidence_ids": ["collection"]})
+    native_delivery(order, "2026-10-06T12:00:00+00:00")
     output = reconcile(current, {"orders": [order]}, NOW)
     obligation = output["engine"]["obligations"]["cod:o"]
     assert obligation["expected"] == "0.00"
@@ -122,6 +124,7 @@ def test_cod_survives_missing_fee_and_components_confirm_independently_once():
     order={'id':'o','created_at':'2026-10-06T01:00:00+00:00','status':'delivered','currency':'SAR','items':[],
            'carrier':{'id':'c','kind':'courier','cost':None,'fee_complete':False},'cod_amount':'200',
            'cod':{'gross':'300','collected':'100','outstanding':'200','custody_amount':'200'}}
+    native_delivery(order, "2026-10-06T12:00:00+00:00")
     result=reconcile(state(),{'orders':[order]},NOW)
     assert result['engine']['obligations']['cod:o']['confirmed']=='200.00'
     assert 'shipping:o' not in result['engine']['obligations']
