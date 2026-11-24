@@ -29,6 +29,7 @@ class Evidence(str, Enum):
     PROVIDER_SUCCESS = "provider_success"
     MATCHED_PROVIDER_STATEMENT = "matched_provider_statement"
     MATCHED_BANK_STATEMENT = "matched_bank_statement"
+    MATCHED_POS_STATEMENT = "matched_pos_statement"
     ACCOUNTANT_APPROVED = "accountant_approved"
     COURIER_CASH_COLLECTED = "courier_cash_collected"
     ORDER_STATUS_ONLY = "order_status_only"
@@ -82,8 +83,10 @@ def decide(event: PaymentEvent) -> PostingDecision:
             authorized = event.evidence == Evidence.COURIER_CASH_COLLECTED
             bucket = "courier_receivable"
         else:
+            expected_statement = (Evidence.MATCHED_BANK_STATEMENT if method == "bank"
+                                  else Evidence.MATCHED_POS_STATEMENT)
             authorized = event.evidence == Evidence.ACCOUNTANT_APPROVED or (
-                event.evidence == Evidence.MATCHED_BANK_STATEMENT and event.statement_match_verified
+                event.evidence == expected_statement and event.statement_match_verified
             )
             bucket = "bank" if method == "bank" else "pos_receivable"
             if not authorized:
