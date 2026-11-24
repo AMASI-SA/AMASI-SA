@@ -96,6 +96,19 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn({"code": "payment_evidence_conflict"}, result["issues"])
         self.assertFalse(result["safe_for_automatic_posting"])
 
+    def test_unverified_paid_event_is_visible_as_financial_review_only(self):
+        snapshot = state()
+        snapshot["payment_evidence_review_inbox"] = {
+            "unique": {"order_id": "o-123", "status": "pending_evidence"}
+        }
+        previous = copy.deepcopy(snapshot)
+        result = audit_payment_snapshot(snapshot)
+        self.assertEqual(result["counts"]["payment_review_needs_evidence"], 1)
+        self.assertIn({"code": "payment_review_needs_evidence",
+                       "order_number": "o-123"}, result["issues"])
+        self.assertEqual(snapshot, previous)
+        self.assertFalse(result["safe_for_automatic_posting"])
+
     def test_invalid_scope_fails_closed(self):
         with self.assertRaises(ValueError):
             audit_payment_snapshot({"engine": {}, "customer_collections": "not a list"})
