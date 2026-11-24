@@ -1,0 +1,20 @@
+{
+  "task": "INVENTORY-CABINET-ARCHIVE-20261124",
+  "status": "HOST_OPERATOR_RUNNING",
+  "operator_commit": "11586fcfd3c7be101e38b5b91dff67569b1e7386",
+  "operator_sha256": "18a8cf2e09605947263999cd897ac680507c4fbbabffc0ffb4568f606ed6b703",
+  "envelope_sha256": "c67cbf86ad270185505c7cb8653e741b968a07ed917c9e9ed7762bbc0d06f37b",
+  "download_dir": "/tmp/mezan-cabinet-archive-operator-eziq9yqb",
+  "stage": "/tmp/mezan-cabinet-archive-release-3yhk4dkk",
+  "original_guard": {
+    "active": false
+  },
+  "latest_step": "initial foreign path snapshot",
+  "latest_receipt_status": "RUNNING",
+  "source_head_at_start": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "intended_deployment": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "lease_created": false,
+  "publish_submitted": false,
+  "live_mutations": false,
+  "resume": "Read existing receipt and process first. Do not start a second operator or reuse an incomplete run as proof. Do not call public guard status while this operator holds its original operation lock."
+}

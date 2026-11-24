@@ -1,0 +1,1595 @@
+{
+  "schema_version": 1,
+  "kind": "PR2120_exact_D_push_readonly_CI_review",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2120,
+  "verdict": "PASS_ALL_ACTUAL_PUSH_GATES",
+  "fetched_at_utc": "2026-11-24T21:31:35.264Z",
+  "generated_at_utc": "2026-11-24T21:33:22.154Z",
+  "expected": {
+    "source_A": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "source_base_J": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "reviewed_B": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+    "deployment_D": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+    "build_meta": {
+      "bytes": 592074,
+      "sha256": "b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2"
+    },
+    "reproducibility_proof": {
+      "bytes": 1521,
+      "sha256": "bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8"
+    },
+    "reviewed_intent_sha256": "f27abedb9ff7ecf9cc8a3c92ec127628a6091842db522e81e1f79b40cdd2a57e"
+  },
+  "summary": {
+    "actual_check_records": 11,
+    "check_success": 11,
+    "check_skipped": 0,
+    "check_pending": 0,
+    "check_failure": 0,
+    "check_neutral": 0,
+    "actual_push_workflows": 3,
+    "workflow_success": 3,
+    "workflow_pending": 0,
+    "all_heads_exact_D": true,
+    "all_workflow_events": "push",
+    "all_run_attempts": 1,
+    "production_ref_at_snapshot": "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+  },
+  "required_checks": {
+    "protection": {
+      "enabled": true,
+      "required_status_checks": {
+        "enforcement_level": "everyone",
+        "contexts": [
+          "Backend preflight",
+          "Backend security contracts",
+          "Frontend build",
+          "Frontend dependency and CSP checks"
+        ],
+        "checks": [
+          {
+            "context": "Backend preflight",
+            "app_id": 15368
+          },
+          {
+            "context": "Backend security contracts",
+            "app_id": 15368
+          },
+          {
+            "context": "Frontend build",
+            "app_id": 15368
+          },
+          {
+            "context": "Frontend dependency and CSP checks",
+            "app_id": 15368
+          }
+        ]
+      }
+    },
+    "records": [
+      {
+        "id": 138787453126,
+        "name": "Frontend build",
+        "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-24T21:24:01Z",
+        "completed_at": "2026-11-24T21:25:02Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787453126",
+        "app_id": 15368,
+        "app_slug": "github-actions"
+      },
+      {
+        "id": 138787452962,
+        "name": "Backend security contracts",
+        "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-24T21:23:55Z",
+        "completed_at": "2026-11-24T21:25:39Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452962",
+        "app_id": 15368,
+        "app_slug": "github-actions"
+      },
+      {
+        "id": 138787452581,
+        "name": "Frontend dependency and CSP checks",
+        "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-24T21:23:22Z",
+        "completed_at": "2026-11-24T21:26:35Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452581",
+        "app_id": 15368,
+        "app_slug": "github-actions"
+      },
+      {
+        "id": 138787452406,
+        "name": "Backend preflight",
+        "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-24T21:23:25Z",
+        "completed_at": "2026-11-24T21:23:44Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452406",
+        "app_id": 15368,
+        "app_slug": "github-actions"
+      }
+    ]
+  },
+  "check_records": [
+    {
+      "id": 138789824899,
+      "name": "Emergent manual redeploy required",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:27:15Z",
+      "completed_at": "2026-11-24T21:27:18Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138789824899",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138788528783,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:25:04Z",
+      "completed_at": "2026-11-24T21:26:48Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138788528783",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138788528756,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:25:04Z",
+      "completed_at": "2026-11-24T21:27:13Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138788528756",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787453126,
+      "name": "Frontend build",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:24:01Z",
+      "completed_at": "2026-11-24T21:25:02Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787453126",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787452962,
+      "name": "Backend security contracts",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:55Z",
+      "completed_at": "2026-11-24T21:25:39Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452962",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787452873,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:56Z",
+      "completed_at": "2026-11-24T21:24:13Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452873",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787452872,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:33Z",
+      "completed_at": "2026-11-24T21:23:54Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452872",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787452581,
+      "name": "Frontend dependency and CSP checks",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:22Z",
+      "completed_at": "2026-11-24T21:26:35Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452581",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787452406,
+      "name": "Backend preflight",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:25Z",
+      "completed_at": "2026-11-24T21:23:44Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452406",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787452008,
+      "name": "CodeQL (python)",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:40Z",
+      "completed_at": "2026-11-24T21:30:23Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630/job/138787452008",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    },
+    {
+      "id": 138787451441,
+      "name": "CodeQL (javascript-typescript)",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-24T21:23:20Z",
+      "completed_at": "2026-11-24T21:25:44Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630/job/138787451441",
+      "app_id": 15368,
+      "app_slug": "github-actions"
+    }
+  ],
+  "workflow_runs": [
+    {
+      "id": 45490564672,
+      "name": "Security Gate",
+      "path": ".github/workflows/security-gate.yml",
+      "event": "push",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "created_at": "2026-11-24T21:23:13Z",
+      "updated_at": "2026-11-24T21:26:36Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672",
+      "check_ids": [
+        138787452962,
+        138787452581
+      ]
+    },
+    {
+      "id": 45490564713,
+      "name": "Mezan Release Readiness",
+      "path": ".github/workflows/mezan-production-release.yml",
+      "event": "push",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "created_at": "2026-11-24T21:23:13Z",
+      "updated_at": "2026-11-24T21:27:19Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713",
+      "check_ids": [
+        138789824899,
+        138788528783,
+        138788528756,
+        138787453126,
+        138787452873,
+        138787452872,
+        138787452406
+      ]
+    },
+    {
+      "id": 45490564630,
+      "name": "CodeQL",
+      "path": ".github/workflows/codeql.yml",
+      "event": "push",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "created_at": "2026-11-24T21:23:13Z",
+      "updated_at": "2026-11-24T21:30:24Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630",
+      "check_ids": [
+        138787452008,
+        138787451441
+      ]
+    }
+  ],
+  "workflow_job_step_records": [
+    {
+      "id": 138787452406,
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Compile backend Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Run frontend identity and release guard unit suites",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        }
+      ]
+    },
+    {
+      "id": 138787452872,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Enable the observed Yarn Classic version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        }
+      ]
+    },
+    {
+      "id": 138787452873,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Enable the observed Yarn Classic version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        }
+      ]
+    },
+    {
+      "id": 138787453126,
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Enable Yarn Classic",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Record governed frontend toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Install frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Test governed frontend build contract",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Classify reviewed B or source candidate A",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Build production frontend twice and retain verified build B",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Verify retained frontend artifact and reproducibility proof",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Freeze a candidate reviewed intent from the source commit",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 11
+        },
+        {
+          "name": "Retain the candidate reviewed intent",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 12
+        },
+        {
+          "name": "Prove install and build leave the worktree clean",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 25
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 26
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 27
+        }
+      ]
+    },
+    {
+      "id": 138788528756,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35
+        }
+      ]
+    },
+    {
+      "id": 138788528783,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35
+        }
+      ]
+    },
+    {
+      "id": 138789824899,
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564713,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Record supported deployment handoff",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        }
+      ]
+    },
+    {
+      "id": 138787451441,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564630,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run github/codeql-action/autobuild@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Post Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Post Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        }
+      ]
+    },
+    {
+      "id": 138787452008,
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564630,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run github/codeql-action/autobuild@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Post Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Post Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        }
+      ]
+    },
+    {
+      "id": 138787452581,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564672,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Enable Yarn Classic",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Install frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Verify patched dependency runtime compatibility",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Verify strict audit and local security backport contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run unmodified released braces compatibility suite",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Full frontend regression against patched dependency graph",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Audit production frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Reject vulnerable spreadsheet runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Verify production build and frontend security manifests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 23
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 24
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 25
+        }
+      ]
+    },
+    {
+      "id": 138787452962,
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45490564672,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Validate backend dependency policy",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Install reproducible public dependency closure",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Audit backend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Verify image and PDF dependency compatibility (offline)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Compile security-critical modules",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Verify governed frontend toolchain bootstrap contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Run security contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Run inherited security boundary regressions (offline)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Verify sensitive logging output (offline)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 23
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 24
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 25
+        }
+      ]
+    }
+  ],
+  "host_clean_clone_rehearsals": [
+    {
+      "job_id": 138788528756,
+      "run_id": 45490564713,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138788528756",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "host_node": "v20.20.2",
+      "status": "completed",
+      "conclusion": "success",
+      "recorded_steps": 21,
+      "all_steps_success": true,
+      "source_A_matches": true,
+      "release_id_matches": true,
+      "two_clean_passes_exact": true,
+      "proof_file": {
+        "path": "frontend/.release/reproducible-build.json",
+        "bytes": 1521,
+        "sha256": "bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8"
+      },
+      "source_frontend": {
+        "scope": "git_head_frontend_tree_v1",
+        "git_tree_oid": "cec438fdef096e17c8b6436dc38a7a5b934373c9",
+        "file_count": 1450,
+        "tree_sha256": "b57097c1b8826d98ce741270dd33f6875fcbf5f9e9e4e0fbef46c7b44f564e0d"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "package_boundary": {
+        "backend": {
+          "file_count": 1359,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 504391,
+            "path": "release_identity.json",
+            "sha256": "ea81c0571b05bf9263f1fdb0f69ffd82385128fcbc5fb683dac383626983a97b"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "f7bda0469624de0ad57a0ae0c1c584568ac980db15709f13ba0e023224aeb0db",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "ae504a89df53d0af5250b233eef0e12a19232f8369fba19dc69d7778165e08f8",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+        "schema_version": 1,
+        "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873"
+      },
+      "raw_identity_presence": {
+        "A": true,
+        "J": true,
+        "B": false,
+        "D": true,
+        "RID": true,
+        "artifact": true,
+        "build_meta": true,
+        "reproducibility": true
+      },
+      "artifacts": [
+        {
+          "artifact_id": 14965703652,
+          "name": "release-v5-generated-outputs-host-20.20.2.zip",
+          "zip_sha256": "4acb7e2f24f519a262d2e2cf1294d012ad85fb0f19bb1f213640e5ccc90ad2ae",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/artifacts/14965703652",
+          "zip_bytes": 3889478
+        },
+        {
+          "artifact_id": 14965289364,
+          "name": "release-v5-clean-clone-evidence-host-20.20.2.zip",
+          "zip_sha256": "60e1b5fccfc2e01cece8296a728438346b26d501a1ef1542fcbc7b3812c04dad",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/artifacts/14965289364",
+          "zip_bytes": 63795
+        }
+      ]
+    },
+    {
+      "job_id": 138788528783,
+      "run_id": 45490564713,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138788528783",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "host_node": "v24.19.0",
+      "status": "completed",
+      "conclusion": "success",
+      "recorded_steps": 21,
+      "all_steps_success": true,
+      "source_A_matches": true,
+      "release_id_matches": true,
+      "two_clean_passes_exact": true,
+      "proof_file": {
+        "path": "frontend/.release/reproducible-build.json",
+        "bytes": 1521,
+        "sha256": "bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8"
+      },
+      "source_frontend": {
+        "scope": "git_head_frontend_tree_v1",
+        "git_tree_oid": "cec438fdef096e17c8b6436dc38a7a5b934373c9",
+        "file_count": 1450,
+        "tree_sha256": "b57097c1b8826d98ce741270dd33f6875fcbf5f9e9e4e0fbef46c7b44f564e0d"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "package_boundary": {
+        "backend": {
+          "file_count": 1359,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 504391,
+            "path": "release_identity.json",
+            "sha256": "ea81c0571b05bf9263f1fdb0f69ffd82385128fcbc5fb683dac383626983a97b"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "f7bda0469624de0ad57a0ae0c1c584568ac980db15709f13ba0e023224aeb0db",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "ae504a89df53d0af5250b233eef0e12a19232f8369fba19dc69d7778165e08f8",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+        "schema_version": 1,
+        "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873"
+      },
+      "raw_identity_presence": {
+        "A": true,
+        "J": true,
+        "B": false,
+        "D": true,
+        "RID": true,
+        "artifact": true,
+        "build_meta": true,
+        "reproducibility": true
+      },
+      "artifacts": [
+        {
+          "artifact_id": 14964879466,
+          "name": "release-v5-generated-outputs-host-24.19.0.zip",
+          "zip_sha256": "06f2768997a1fbebe82c2ab57be241b6f3f56d5adbe7c89ddf2e0d5300a82505",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/artifacts/14964879466",
+          "zip_bytes": 3890943
+        },
+        {
+          "artifact_id": 14964849785,
+          "name": "release-v5-clean-clone-evidence-host-24.19.0.zip",
+          "zip_sha256": "1f6e2120126b4a979737fcb3239d9a4f9728284899e7349a07184d61cd37fdca",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/artifacts/14964849785",
+          "zip_bytes": 63801
+        }
+      ]
+    }
+  ],
+  "supporting_raw_log_proofs": [
+    {
+      "id": 138787453126,
+      "run": 45490564713,
+      "role": "frontend_build",
+      "counts": {
+        "node_tests": 57,
+        "node_pass": 57,
+        "node_fail": 0,
+        "node_skipped": 0
+      },
+      "validation": "Fresh D build preserves reviewed A artifact/meta and two-pass proof; two source-candidate-only intent creation/upload steps correctly skipped on reviewed deployment.",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787453126",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "raw_D_seen": true,
+      "raw_derived_summary_lines": [
+        "2026-11-24T21:24:37.7894603Z # tests 57",
+        "2026-11-24T21:24:37.7894982Z # pass 57",
+        "2026-11-24T21:24:37.7895162Z # fail 0",
+        "2026-11-24T21:24:37.7895347Z # cancelled 0",
+        "2026-11-24T21:24:37.7895540Z # skipped 0",
+        "2026-11-24T21:24:58.0910129Z Frontend reproducibility proof: bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8"
+      ]
+    },
+    {
+      "id": 138787452406,
+      "run": 45490564713,
+      "role": "backend_preflight",
+      "counts": {
+        "unittest_tests": 156
+      },
+      "validation": "Exact D checkout; unittest output OK.",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138787452406",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "raw_D_seen": true,
+      "raw_derived_summary_lines": [
+        "2026-11-24T21:23:42.6057909Z Ran 156 tests in 3.136s",
+        "2026-11-24T21:23:42.6058248Z OK"
+      ]
+    },
+    {
+      "id": 138787452962,
+      "run": 45490564672,
+      "role": "backend_security_contracts",
+      "counts": {
+        "pytest_groups": [
+          {
+            "passed": 88,
+            "deselected": 1
+          },
+          {
+            "passed": 83
+          },
+          {
+            "passed": 216,
+            "subtests_passed": 29
+          },
+          {
+            "passed": 57
+          }
+        ],
+        "unittest_tests": 26
+      },
+      "validation": "Actual selector deselected one test; no failed check or skipped job. All15 recorded security job steps success.",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452962",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "raw_D_seen": true,
+      "raw_derived_summary_lines": [
+        "2026-11-24T21:25:08.1162731Z 88 passed, 1 deselected, 6 warnings in 8.38s",
+        "2026-11-24T21:25:09.8645885Z Ran 26 tests in 1.292s",
+        "2026-11-24T21:25:09.8646203Z OK",
+        "2026-11-24T21:25:14.6165754Z 83 passed, 1 warning in 3.99s",
+        "2026-11-24T21:25:33.3175780Z 216 passed, 214 warnings, 29 subtests passed in 17.92s",
+        "2026-11-24T21:25:36.0871002Z 57 passed in 2.04s"
+      ]
+    },
+    {
+      "id": 138787452581,
+      "run": 45490564672,
+      "role": "frontend_dependencies_and_CSP",
+      "counts": {
+        "node_tests": 210,
+        "node_pass": 210,
+        "node_fail": 0,
+        "node_skipped": 0,
+        "jest_suites": 492,
+        "jest_tests": 5564
+      },
+      "validation": "Full current frontend regressions pass on D; all15 recorded job steps success.",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564672/job/138787452581",
+      "head_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "raw_D_seen": true,
+      "raw_derived_summary_lines": [
+        "2026-11-24T21:24:03.3275571Z # tests 210",
+        "2026-11-24T21:24:03.3276445Z # pass 210",
+        "2026-11-24T21:24:03.3276740Z # fail 0",
+        "2026-11-24T21:24:03.3277096Z # cancelled 0",
+        "2026-11-24T21:24:03.3277396Z # skipped 0",
+        "2026-11-24T21:26:19.6577060Z Test Suites: 492 passed, 492 total",
+        "2026-11-24T21:26:19.6577401Z Tests:       5564 passed, 5564 total",
+        "2026-11-24T21:26:31.7983903Z Frontend reproducibility proof: dd885e091fae52bf60dd43582039082844584a515c47ed34a0979b4241301c51"
+      ]
+    }
+  ],
+  "codeql": {
+    "workflow_run_id": 45490564630,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630",
+    "jobs": [
+      {
+        "id": 138787451441,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success",
+        "recorded_steps": 9,
+        "all_steps_success": true,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630/job/138787451441"
+      },
+      {
+        "id": 138787452008,
+        "name": "CodeQL (python)",
+        "status": "completed",
+        "conclusion": "success",
+        "recorded_steps": 9,
+        "all_steps_success": true,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564630/job/138787452008"
+      }
+    ],
+    "python_raw_D_seen": true,
+    "python_upload_proof": [
+      "2026-11-24T21:30:19.7422572Z Analysis upload status is complete."
+    ]
+  },
+  "manual_handoff": {
+    "job_id": 138789824899,
+    "run_id": 45490564713,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45490564713/job/138789824899",
+    "head_binding": "Parent workflow head_sha is exact D; this summary-only job does not perform a checkout.",
+    "recorded_steps": 3,
+    "all_steps_success": true,
+    "push_predicate": "github.event_name == 'push'",
+    "meaning": "CI readiness and a required manual protocol-v5 deployment handoff; no deployment performed by the workflow."
+  },
+  "conditional_step_skips": [
+    {
+      "job_id": 138787453126,
+      "steps": [
+        "Freeze a candidate reviewed intent from the source commit",
+        "Retain the candidate reviewed intent"
+      ],
+      "reason": "Candidate A-only steps; D is classified as a reviewed deployment. Actual build and retained artifact/proof verification ran successfully."
+    }
+  ],
+  "review_actions": {
+    "github_reads_only": true,
+    "no_reruns": true,
+    "no_manual_dispatch": true,
+    "no_pr_only_suites_dispatched": true,
+    "no_host_actions": true,
+    "no_source_or_git_writes": true,
+    "evidence_file_only_outside_checkout": true,
+    "full_raw_logs_retained_in_session_stores": true
+  },
+  "scope_note": "Exact deployment D push CI only. PR2120 B-only suites remain separately recorded in pr2120-exact-b-ci-review.json. A check/run PASS does not claim publication or live-production acceptance. Root independently owns merge-parent/tree and deployment-operator verification."
+}
+

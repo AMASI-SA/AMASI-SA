@@ -2,7 +2,7 @@
 
 ## Current state
 
-**READY FOR HOST REHEARSAL — every applicable B and D gate passed; frozen operator and envelope independently reviewed.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**HOST REHEARSAL RUNNING — frozen helper and envelope downloaded and hash-verified; original guard inactive; no lease or publish.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -112,3 +112,11 @@ The external operator `cabinet_archive_release_operator.py` is 35,827 bytes, SHA
 The platform baseline is published version `eeecd3f` (100th publish), with visible “Deployment finished Nov 24, 11:41 PM” Riyadh. The live warehouse page still shows d1 with nine empty slots and unchanged parent hierarchy. No publication or cabinet mutation has been submitted by this task. Exact checks, reviews and host prerequisites are retained in `operator-review.json` and `ci-deployment-D-final.json`.
 
 Next: download this commit's helper and envelope into a new owned /tmp directory, verify both SHA-256 values before execution, and run from /app. Any guard, lineage, foreign-file or capacity rejection stops the operator. Only a successful owned-clone and canonical /app original adapter receipt permits original prepare/prepublish, one authorized publish, explicit newer Deployment Succeeded and three verified probes. Live d1 archive remains after those gates.
+
+## Release checkpoint E5 — operator started
+
+Both E4 files were downloaded into owned `/tmp/mezan-cabinet-archive-operator-eziq9yqb` and independently SHA-256 checked before execution. The frozen helper is now running in root's own Terminal 1. Its stage is `/tmp/mezan-cabinet-archive-release-3yhk4dkk`; receipt is `receipt.json` within that directory. The observed original public guard result is `active:false`. Its current receipt reports RUNNING after clean expected-J and foreign-path enumeration checks; the initial full fingerprint snapshot was still in progress at this checkpoint. No lease, prepare, prepublish, publication or live data action has occurred.
+
+The complete independent exact-D push CI interpretation is now retained as `pr2120-exact-d-push-ci-review.json` (49,836 bytes, SHA-256 `ae3c4ec285201b1dd2e746f91aac3b22e466690f8652003fe9c3bf877d2a5ef4`). All 11 checks and all three actual push workflows passed on exact D; there were no retries, manual dispatches, failures, skips or pending checks.
+
+Resume by reading the existing receipt and process first. Never start a duplicate helper or treat a partial run as a successful rehearsal. Public guard status takes the operation lock and must not be called while this helper owns it. Use read-only receipt observation from the separate root-owned Terminal 4. Root will inspect complete original adapter, foreign-preservation and capacity evidence before any lease preparation.
