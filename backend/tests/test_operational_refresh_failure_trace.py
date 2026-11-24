@@ -71,6 +71,16 @@ class TimeoutTraceTests(unittest.TestCase):
                                                         last_checkpoint_rows=3)]}),
                          {"stage_timings": [], "primary_orders_reads": []})
 
+    def test_bundle_substages_are_safe_and_distinct(self):
+        raw = {"stage_timings": [
+            {"stage":"bundle_order_normalization","duration_ms":4200.5,"outcome":"complete"},
+            {"stage":"bundle_cost_authority","duration_ms":13500.25,"outcome":"complete"},
+        ], "primary_orders_reads":[]}
+        result = safe_failure_trace(raw)
+        self.assertEqual([r["stage"] for r in result["stage_timings"]],
+                         ["bundle_order_normalization","bundle_cost_authority"])
+        self.assertEqual(result["stage_timings"][1]["duration_ms"], 13500.25)
+
     def test_missing_diagnostics_are_empty(self):
         self.assertEqual(safe_failure_trace(None),
                          {"stage_timings": [], "primary_orders_reads": []})
