@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
-  "status": "WIP: combined canonical source A and current-source CI verified; external intent candidate under review; publication awaits the preceding base release",
+  "status": "WIP: canonical source CI and original external-candidate validator passed; no B or publication; preceding base publisher blocked by host ENOSPC",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-cost-report-release-20261124",
   "source_base_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -62,7 +62,7 @@
       "result": "A second reviewer compared base M2 and the candidate in memory through make_operational_balance_router, native/page guards, run_visible_report_read and SnapshotReadCache, using ReadOnlyDB. Both returned identical 500 status, Internal Server Error body and text/plain;charset=utf-8 content type, made identical reads and preserved exception identity/args/string. No data writes, remaining tasks or cache entries; only the candidate emitted the safe note/warning. Private fixture absent. Python 3.12.14, 4.43 seconds; no blocker."
     }
   ],
-  "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards.",
+  "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards. External candidate provenance, full clean canonical-A checkout and original load_candidate_release_intent independently passed without mutation.",
   "ci_state": "Exact combined source A passed all 21 applicable checks; six conditional skips are expected before reviewed-intent B. See continuation_evidence.",
   "merge_state": "Source integration checkpoint only; not merged into production by this task.",
   "release_state": "No new intent, lease, shared-host mutation or publication for the combined source. PR2113 belongs to another owner and is preserved.",
@@ -74,12 +74,12 @@
     "No runtime latency reduction, source completeness or financial recovery is claimed.",
     "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
   ],
-  "next_safe_action": "Complete review of the external candidate and retain the exact source. Establish the preceding base publication and its original guard outcome before freezing B or starting another shared-host release; preserve all other task leases and work.",
+  "next_safe_action": "Retain exact A and candidate bytes. Await the preceding PR2113 owner's capacity recovery, canonical rehearsal, publication and original three-probe verification with inactive guard. Do not rerun its helper, touch foreign files or advance B/shared-host work while its release remains unresolved.",
   "integration": {
     "coordinator": "/root",
     "production_branch_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
     "base_tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
-    "base_publication": "PR2113 is merged; its live deployment is not yet established by this checkpoint. Wait for its owner to finish original-guard verification before freezing or rehearsing another release.",
+    "base_publication": "PR2113 merged at cb98; its owner's canonical shared-host rehearsal failed with ENOSPC. No own lease or publication in its last observed status. A future explicit successful publication and original three-probe verification remain required before our B.",
     "prs": [
       2114,
       2116
@@ -113,7 +113,7 @@
     "history_gate": "The initial unpushed integration attempt b9675bea83bd2881cdf8fbd828a1f2a6562ac873 retained both earlier branches as parents but was rejected by the original full-history intent-path condition despite equal final intent bytes. It remains local only and will not be released. This fresh linear source avoids bringing old-intent branch history into J..A; keep the validator unchanged."
   },
   "continuation_evidence": {
-    "recorded_at_utc": "2026-11-24 18:15:09 UTC",
+    "recorded_at_utc": "2026-11-24T18:34:04.604647+00:00",
     "source_pr": 2118,
     "source_branch": "codex/operational-cost-report-release-20261124",
     "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
@@ -153,7 +153,28 @@
       "artifact_name": "release-v5-reviewed-intent-candidate",
       "zip_bytes": 439711,
       "zip_sha256": "ca09540f8bd34049811895b0973edc452d0d9ad6578b6202d9504fcd6147f0bc",
-      "state": "Under independent review; not committed as B."
+      "state": "PASS: independently reviewed CI artifact and original candidate validator; not committed as B.",
+      "intent_bytes": 1530059,
+      "intent_sha256": "9234bb310d165533151fb360a1c9e67c2e1cf80ddabcc3c54cfd47a200e9e08e",
+      "intent_git_blob": "d13a4b630cbde2e1016ec27eb836409723ca1f82",
+      "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+      "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+      "build_meta_sha256": "a3dba647a67098fb967cc3e395689c2a6454d138c25559b7fe4803121ef1ceb3",
+      "reproducibility_proof_sha256": "41706b6b46a1c936773178da5ddef155fd5ac3b64d61c0d7356d0ba6ff8d8f48",
+      "original_validator": {
+        "function": "load_candidate_release_intent",
+        "started_at": "2026-11-24T18:25:03.910963+00:00",
+        "exit_code": 0,
+        "duration_seconds": 2.565839341001265,
+        "head": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+        "tree": "83ac9b1ce942c4d9d228544e29a6c8b99c206f4a",
+        "tracked_path_count": 6590,
+        "missing_paths": 0,
+        "skip_worktree_entries": 0,
+        "clean_before_and_after": true,
+        "source_and_candidate_unchanged": true,
+        "scope": "No build, host rehearsal, generated identity, lease or B was created. Import-time runtime-identity diagnostic was retained: expected generated identity absent in an unbuilt source clone, independent candidate validation returned PASS."
+      }
     },
     "runtime_read_only_observation": {
       "observed_at": "2026-11-24T18:08:54.582194+00:00",
@@ -177,11 +198,28 @@
     },
     "preceding_publisher_checkpoint": {
       "pr": 2113,
-      "evidence_commit": "b30a4b8765e8b352aa5be5adf74bc088d8d340de",
-      "timestamp": "2026-11-24T17:49:54Z",
-      "state": "Rehearsal in progress; no later success/failure/publication evidence observed at last check."
+      "reference": "codex/inventory-location-codes-evidence-20261124",
+      "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/STATUS.md",
+      "observed_content_blob": "84ad0e685ac4642b0a9b2c0af1a565c89469ffd7",
+      "content_sha256": "93631c7d80430bb53cffbd51d07697ec801eefa04d3ace044a6e4f9b988af672",
+      "read_at": "2026-11-24T18:30:26Z",
+      "independently_reread_by_root": true,
+      "failure_at": "2026-11-24T18:12:52Z",
+      "failure": "Frozen Yarn install ENOSPC copying into /app/frontend/node_modules; adapter exit 2 and Yarn exit 1.",
+      "matching_processes_absent_at": "2026-11-24T18:15:28Z",
+      "receipt_state": "RUNNING is stale; final write did not persist after filesystem filled. Not a successful rehearsal.",
+      "publication": false,
+      "own_lease": false,
+      "root_disk_observation": {
+        "observed_at": "2026-11-24T18:34:04.604647+00:00",
+        "app_available_bytes": 0,
+        "tmp_available_bytes": 237340823552,
+        "receipt_mtime": "2026-11-24T18:10:46.641690+00:00",
+        "receipt_status": "RUNNING"
+      },
+      "ownership": "Other owner remains responsible for recovery/publication. No foreign cleanup, helper repetition, capacity change or host mutation by this task."
     },
-    "next_safe_action": "Complete review of the external candidate and retain the exact source. Establish the preceding base publication and its original guard outcome before freezing B or starting another shared-host release; preserve all other task leases and work.",
+    "next_safe_action": "Retain exact A and candidate bytes. Await the preceding PR2113 owner's capacity recovery, canonical rehearsal, publication and original three-probe verification with inactive guard. Do not rerun its helper, touch foreign files or advance B/shared-host work while its release remains unresolved.",
     "production_changed_by_this_candidate": false
   }
 }

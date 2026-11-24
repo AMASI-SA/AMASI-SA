@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "kind": "mezan_source_candidate_verification",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2118,
+  "result": "PASS for source candidate A; reviewed-B release gates remain pending",
+  "source": {
+    "git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+    "base_git_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "git_tree": "83ac9b1ce942c4d9d228544e29a6c8b99c206f4a",
+    "sole_parent_is_base": true,
+    "tracked_intent_blob": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7",
+    "intent_diff_and_full_history_between_base_and_source_empty": true
+  },
+  "candidate_intent": {
+    "file": "release-intent-v5.json",
+    "bytes": 1530059,
+    "sha256": "9234bb310d165533151fb360a1c9e67c2e1cf80ddabcc3c54cfd47a200e9e08e",
+    "git_blob": "d13a4b630cbde2e1016ec27eb836409723ca1f82",
+    "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+    "unchanged_by_review": true
+  },
+  "artifact": {
+    "id": 14948444145,
+    "run_id": 45452457640,
+    "job_id": 138652926706,
+    "zip_bytes": 439711,
+    "zip_sha256": "ca09540f8bd34049811895b0973edc452d0d9ad6578b6202d9504fcd6147f0bc",
+    "name": "release-v5-reviewed-intent-candidate",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45452457640/artifacts/14948444145",
+    "archive_contains_only_intent": true
+  },
+  "ci_frontend_build": {
+    "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45452457640/job/138652926706",
+    "conclusion": "success",
+    "successful_steps": 16,
+    "two_clean_builds_passed": true,
+    "retained_pass": 2,
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "public_file_count": 381,
+    "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+    "build_meta_bytes": 591784,
+    "build_meta_sha256": "a3dba647a67098fb967cc3e395689c2a6454d138c25559b7fe4803121ef1ceb3",
+    "reproducibility_proof_bytes": 1521,
+    "reproducibility_proof_sha256": "41706b6b46a1c936773178da5ddef155fd5ac3b64d61c0d7356d0ba6ff8d8f48",
+    "verified_after_artifact_upload": true,
+    "post_upload_clean_proof": {
+      "verified_after_artifact_upload": true,
+      "upload_step": {
+        "number": 12,
+        "name": "Retain the candidate reviewed intent",
+        "conclusion": "success"
+      },
+      "clean_step": {
+        "number": 13,
+        "name": "Prove install and build leave the worktree clean",
+        "conclusion": "success"
+      },
+      "artifact_upload_completed_at": "2026-11-24T17:48:47.4729738Z",
+      "clean_step_log_started_at": "2026-11-24T17:48:47.4861806Z",
+      "selected_log_lines": [
+        "2026-11-24T17:48:47.4729738Z Artifact release-v5-reviewed-intent-candidate has been successfully uploaded! Final size is 439711 bytes. Artifact ID is 14948444145",
+        "2026-11-24T17:48:47.4861806Z ##[group]Run set -euo pipefail",
+        "2026-11-24T17:48:47.4862322Z worktree_status=\"$(git status --short)\"",
+        "2026-11-24T17:48:47.4862593Z test -z \"$worktree_status\""
+      ],
+      "correction": {
+        "previous_value": false,
+        "cause": "The evidence generator matched 'install/build', but the actual successful step name uses 'install and build'. The stored job and log conclusions were unchanged.",
+        "corrected_basis": "Exact numbered steps 12 and 13 both concluded success, and the clean-worktree log group follows the completed artifact upload."
+      }
+    }
+  },
+  "source_manifests": {
+    "backend_runtime_source": {
+      "files": 1357,
+      "source_tree_sha256": "89b4afe441d2d4a4a1e664a0c1333b8826b724ce0adda22940f489548927d12d",
+      "projection_git_tree": "0000840ac0378424c038d7d4d750778eb7f61ece"
+    },
+    "frontend_source": {
+      "files": 1449,
+      "source_tree_sha256": "ea368f664612201f7e62c6a8f286c5f6df1518ce931f81a7d744cc9f10139380",
+      "projection_git_tree": "8e6b8d76a62d50b1126e23691e1e12f2d53fb9e2"
+    },
+    "release_control_source": {
+      "files": 328,
+      "source_tree_sha256": "d46ba8c755d6bedb769c4571d8ece21fcc3cbc32bfa4447220f35461259960a0",
+      "projection_git_tree": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e"
+    }
+  },
+  "original_local_validator": {
+    "function": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
+    "source_git_sha_argument": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+    "source_base_git_sha_argument": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "started_at": "2026-11-24T18:25:03.910963+00:00",
+    "duration_seconds": 2.565839341001265,
+    "exit_code": 0,
+    "python": "3.12.14",
+    "checkout": "complete detached canonical A",
+    "tracked_path_count": 6590,
+    "missing_tracked_paths": 0,
+    "skip_worktree_entries": 0,
+    "clean_before_and_after": true,
+    "source_and_candidate_unchanged": true,
+    "returned_release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+    "stderr_note": "Importing release_identity to obtain CRITICAL_FILES emitted one FileNotFoundError log for the generated backend/release_identity.json, which is absent in the unbuilt source checkout. The original candidate validator returned successfully; no runtime-health verification is claimed."
+  },
+  "source_ci_checks": {
+    "observed_at_utc": "2026-11-24 18:35:26 UTC",
+    "source_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+    "check_runs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits/6e25a762b17ad87ce8efeb37f2952a478ae9427b/check-runs?per_page=100",
+    "total_checks": 27,
+    "success": 21,
+    "skipped": 6,
+    "pending": 0,
+    "failure": 0,
+    "success_check_ids": [
+      138654513243,
+      138652932792,
+      138652932014,
+      138652930604,
+      138652930252,
+      138652928730,
+      138652928160,
+      138652927628,
+      138652927619,
+      138652927472,
+      138652927455,
+      138652927440,
+      138652927280,
+      138652927229,
+      138652927204,
+      138652927172,
+      138652927013,
+      138652926940,
+      138652926930,
+      138652926706,
+      138652926503
+    ],
+    "skipped_checks": [
+      {
+        "id": 138653718142,
+        "name": "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal"
+      },
+      {
+        "id": 138653718028,
+        "name": "Emergent manual redeploy required"
+      },
+      {
+        "id": 138653699342,
+        "name": "Backend settings and zero-write regressions"
+      },
+      {
+        "id": 138653698695,
+        "name": "Frontend Snapchat settings tests and build"
+      },
+      {
+        "id": 138653289932,
+        "name": "Publication frontend and existing media flow"
+      },
+      {
+        "id": 138653289420,
+        "name": "Publication backend and existing write guards"
+      }
+    ]
+  },
+  "release_boundary": {
+    "review_created_B": false,
+    "review_merged_or_published": false,
+    "local_build_or_host_rehearsal_invoked": false,
+    "guard_or_lease_invoked": false,
+    "remaining_gates": [
+      "Coordinate with the owner of the base release and establish its live verification and inactive guard before proceeding.",
+      "Freeze reviewed B and pass all applicable exact-B checks; source-A conditional rehearsal skips are not release readiness.",
+      "Complete the required local clean-clone adapter, isolated-package and HTTP rehearsals, then the normal prepare/prepublish/publication/live-verification protocol."
+    ]
+  }
+}
