@@ -155,3 +155,8 @@ Next is original prepare, then prepublish immediately before the already authori
 ## 2026-11-24 19:16:56 UTC — own release lease prepared
 
 Original `prepare` passed for actor `chatgpt-inventory-location-codes-20261124-pr2113`, protocol5, exact A2/J2/D/RID. **Own lease is now active.** Publication stage `/app/.git/mezan-pr2113-publication-o4xyp2sz`; prepare log667,927 bytes SHA256 `bdd879a64c533ce93327af986902e6920df728eba5e9eb5e27a2816514e21ba8`. No Republish click yet. Next is original prepublish immediately before the authorized click, then newer platform success and original three-probe verify; successful verify must close this matching lease.
+
+
+## 2026-11-24 19:19 UTC — authorized publication in progress
+
+Original prepublish exited0 with `ready_to_publish=true` at19:18:44.860927 UTC, exact A2/D/RID (log333 bytes; SHA256 `fabd74c32b9985c34fd30e60d43d787078079c43de62a2326f5c244dd20d9a40`). Immediately clicked Republish, then the observed free-republish confirmation's Publish changes once. Platform visibly shows Publishing. No newer success yet; prior successful version100 was `d0a7e31`, displayed Nov24 08:05PM. Own lease remains active. Next: observe newer explicit success, original three-probe verify and inactive final guard, then live warehouse form preview/cancel.

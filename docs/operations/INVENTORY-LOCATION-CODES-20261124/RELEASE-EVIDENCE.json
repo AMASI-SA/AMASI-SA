@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24T19:16:56.613223+00:00",
+  "observed_at_utc": "2026-11-24 19:19:46 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "OWN_RELEASE_LEASE_PREPARED",
+  "state": "PUBLICATION_IN_PROGRESS",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": true,
   "publication_authorized": true,
-  "next_safe_action": "Run original prepublish immediately before one authorized Republish. Own lease active; do not clear/reuse foreign lease. Then newer platform success, original verify3probes, inactive final status and live form preview/cancel.",
+  "next_safe_action": "Wait for newer explicit platform deployment finished/succeeded, then run unchanged original guard verify --url https://mezansalla.com. No repeated Publish click. Own lease remains active.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1246,7 +1246,7 @@
     "review": "Root and independent review PASS: D tree equals B2; parents[J2,B2]; A2..D changes only exact reviewed intent blob"
   },
   "production_branch_changed_by_this_task": true,
-  "live_publication_performed": false,
+  "live_publication_performed": true,
   "deployment_ci": {
     "head": "cb98e5660380d362e78f937d60abc7139cd1c462",
     "event": "push",
@@ -2009,7 +2009,21 @@
       "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
       "deployment_git_sha": "cb98e5660380d362e78f937d60abc7139cd1c462"
     },
-    "prepublish": false,
-    "republish_clicked": false
+    "prepublish": {
+      "exit_code": 0,
+      "ready_to_publish": true,
+      "observed_at_utc": "2026-11-24T19:18:44.860927+00:00",
+      "log_bytes": 333,
+      "log_sha256": "fabd74c32b9985c34fd30e60d43d787078079c43de62a2326f5c244dd20d9a40"
+    },
+    "republish_clicked": true,
+    "publish_changes_confirmed": true,
+    "platform_state": "Publishing...",
+    "positive_outcome_observed": false,
+    "prior_version": {
+      "ordinal": 100,
+      "platform_id": "d0a7e31",
+      "finished_at_display": "Nov24,08:05PM"
+    }
   }
 }
