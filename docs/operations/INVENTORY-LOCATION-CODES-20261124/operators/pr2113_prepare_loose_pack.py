@@ -272,6 +272,38 @@ def verify_isolated_logical_objects(pack_path, index_path, expected):
             'inventory_sha256': sha256(STAGE / 'isolated-logical-objects.json')}
 
 
+def create_pack_in_private_database(prefix, oids):
+    """Keep pack/index temporary writes in /tmp; read /app objects as alternate."""
+    packing = STAGE / 'packing.git'
+    require(not os.path.lexists(packing), 'PACKING_DATABASE_ALREADY_EXISTS')
+    command('packing-init', ['git', 'init', '--bare', '--template=', str(packing)])
+    objects = packing / 'objects'
+    require(objects.resolve(strict=True) == objects and objects.is_dir()
+            and not any(path.is_file() or path.is_symlink() for path in objects.rglob('*')),
+            'PACKING_DATABASE_NOT_EMPTY_OR_REAL')
+    alternate = objects / 'info/alternates'
+    alternate_bytes = (str(GIT_DIR / 'objects') + '\n').encode('ascii')
+    descriptor = os.open(alternate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'wb') as stream:
+        stream.write(alternate_bytes)
+        stream.flush()
+        os.fsync(stream.fileno())
+    COMMON.fsync_directory(alternate.parent)
+    private_git = ['git', '--git-dir=' + str(packing), '-c', 'gc.auto=0',
+                   '-c', 'maintenance.auto=false', '-c', 'pack.writeReverseIndex=false']
+    selected = command('packing-object-directory', private_git + ['rev-parse', '--git-path', 'objects'])
+    require(Path(os.fsdecode(selected.strip())).resolve(strict=True) == objects,
+            'PACKING_OBJECT_DIRECTORY_NOT_PRIVATE')
+    output = command('private-pack-objects', private_git + ['pack-objects',
+                     '--threads=2', '--index-version=2', '--no-reuse-delta',
+                     '--no-reuse-object', str(prefix)],
+                     data=('\n'.join(oids) + '\n').encode(), timeout=1200)
+    require(alternate.read_bytes() == alternate_bytes, 'PACKING_ALTERNATE_CHANGED')
+    return output, {'git_directory': str(packing), 'primary_object_directory': str(objects),
+                    'read_only_alternate': str(GIT_DIR / 'objects'),
+                    'pack_and_index_temporary_files_confined_to_private_database': True}
+
+
 def interrupt(signum, frame):
     raise Blocked('INTERRUPTED')
 
@@ -338,10 +370,7 @@ def main():
                                      'nlink': info.st_nlink}
             save('loose-storage.json', storage)
             prefix = STAGE / 'loose'
-            output = git('-c', 'pack.writeReverseIndex=false', 'pack-objects',
-                         '--threads=2', '--index-version=2', '--no-reuse-delta',
-                         '--no-reuse-object', str(prefix),
-                         data=('\n'.join(oids) + '\n').encode(), timeout=1200)
+            output, packing_scope = create_pack_in_private_database(prefix, oids)
             pack_hash = output.decode('ascii').strip()
             require(OID.fullmatch(pack_hash), 'INVALID_PACK_HASH')
             pack_path = STAGE / ('loose-' + pack_hash + '.pack')
@@ -368,6 +397,7 @@ def main():
                             for path in (pack_path, index_path)) + block
             RECEIPT.update(status='PASS', object_count=len(expected),
                            logical_object_count=len(before['logical_objects']),
+                           private_packing_scope=packing_scope,
                            isolated_logical_proof=isolated_proof,
                            before_snapshot_sha256=sha256(STAGE / 'snapshot-before.json'),
                            after_snapshot_sha256=sha256(STAGE / 'snapshot-after.json'),

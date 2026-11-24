@@ -116,3 +116,12 @@ At18:39:32 UTC a fresh read showed85,327,872bytes available on/app without any t
 [Pack preparation helper](operators/pr2113_prepare_loose_pack.py):19,572bytes,SHA256`c37ba9fcbc599aaee265a3ce1d139349fcd84a2cd1933ca7789ab05fabe243d6`, independent fullreviewPASS. It creates a new nonthin pack and index only in private/tmp and requires unchanged app object/metadata/foreign snapshots. No install/prune/appwrites.
 
 A local two-object check confirmed that verify-pack delta rows report delta representation sizes; the corrected helper separately reconstructs all logical objects using an isolated bare object database containing only the new pair and no alternates. FullCRC/checksum verification and allOID/type/size equality remain required. Confirm Python temporary default/tmp before execution. This approval covers preparation only, not capacity APPLY or another build.
+
+
+## 2026-11-24 19:03 UTC — pack temporary-file correction
+
+The first pack preparation (`/tmp/mezan-pr2113-pack-_22yeio4`) failed: Git 2.39.5 wrote a temporary pack under `/app/.git/objects/pack` despite the `/tmp` output prefix and hit ENOSPC. The failed receipt's `app_writes=false` is corrected here: one new owned `tmp_pack_O8qayI` file remains (1,179,648 bytes; SHA256 `2e100e18e3e98197154a256fa5daaa4c90025893d873c957e8578ac282b21ac3`), retained in the next baseline. No pack installation, pruning, lease, or publication occurred.
+
+Fresh locked diagnostics prove unchanged HEAD/tree/branch, refs, logical objects, Git metadata and linked worktrees. The 432 foreign paths are unchanged; 431 records match exactly. `.emergent/stripped_env_names` grew from113778 to113904 bytes with its full original prefix hash retained. Historical inode identity was not captured and is not claimed. Available app space at19:00:56 UTC was104853504 bytes.
+
+The corrected pack helper is21,425 bytes, SHA256 `33351c1bce52e9c9a0463131806505363290a83b9de6df30440893e2f190270b`. It creates a fresh private `/tmp` bare object database, uses the app object store only as an alternate read source, and confines pack/index temporary files to the private primary database. Independent exact-diff and Git-source review passed; separate no-alternate reconstruction proof and before/after snapshots remain unchanged. It has not yet been executed. Original archive preparation remains PASS; no space reclaimed yet. The numbered release source/candidate and completed CI remain unchanged.

@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 18:53:26 UTC",
+  "observed_at_utc": "2026-11-24T19:03:30Z",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "PACK_PREPARATION_REVIEWED_READY",
+  "state": "PACK_PREPARATION_TEMP_LOCATION_FIXED_REVIEWED",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Stage exact reviewed pack preparation helper through private/tmp bare loader, confirm tempfiledefault/tmp, execute once from/app. Read verified pack size/estimated gain. Independently review separate capacity APPLY operator before any reclamation; no automatic build or publication.",
+  "next_safe_action": "Stage/run corrected 33351c helper in private /tmp, review actual PASS/space gain, then independently reviewed capacity APPLY and original /app canonical rehearsal. No source/intent/CI changes.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1697,21 +1697,62 @@
     "actual_space_gain": "not yet measured"
   },
   "pack_preparation": {
-    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "state": "CORRECTED_HELPER_INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
     "helper": {
       "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_prepare_loose_pack.py",
-      "bytes": 19572,
-      "sha256": "c37ba9fcbc599aaee265a3ce1d139349fcd84a2cd1933ca7789ab05fabe243d6",
-      "git_blob": "33933cf93cce38f8e81ea8aab9aa5dd0609931d9"
+      "bytes": 21425,
+      "sha256": "33351c1bce52e9c9a0463131806505363290a83b9de6df30440893e2f190270b",
+      "git_blob": "07050b40c73a2833891b5c0704b8ec731d653893"
     },
     "reviewer": "numbering_release_review",
-    "scope": "Only private /tmp preparation; all5760loose OIDs including unreachable, nonthin pack+idx, full verify-pack CRC/checksum, isolated new-pair-only logical object reconstruction, exact app object/metadata/foreign snapshot equality. No installation/pruning/source/refs/index/worktree mutation.",
+    "scope": "Fresh private /tmp bare database holds temporary pack/index files; /app object database is read-only alternate for explicit all-loose-object packing. Separate no-alternate verification reconstructs every logical object. Original app snapshots and guard retained. No install/prune/lease/publication.",
     "execution_precondition": "Python tempfile.gettempdir()==/tmp; bootstrap absent and optimization0",
     "semantic_correction": {
       "issue": "verify-pack delta rows report representation size, not logical object size",
       "validation": "Local isolated two-object test confirmed the mismatch and passed corrected membership/type/base/non-delta checks plus isolated logical reconstruction.",
       "helper_bytes_unchanged": true
     },
-    "app_mutation_performed": false
+    "app_mutation_performed": false,
+    "previous_failed_execution": {
+      "stage": "/tmp/mezan-pr2113-pack-_22yeio4",
+      "started_at_utc": "2026-11-24T18:58:37Z",
+      "status": "BLOCKED",
+      "failure_step": "git--c",
+      "failure_code": "git--c_FAILED",
+      "stderr": "fatal: sha1 file '.git/objects/pack/tmp_pack_O8qayI' write error. Out of diskspace",
+      "receipt_correction": "app_writes=false is invalid for this failed run: pack-objects wrote a temporary app object-store file despite an output prefix under /tmp. No pack installed, no pruning, no lease or publication.",
+      "diagnostic": {
+        "observed_at_utc": "2026-11-24T19:00:56.333266+00:00",
+        "stage": "/tmp/mezan-pr2113-pack-diagnostic-4upxmufg",
+        "head_tree_branch_refs_metadata_linked_gitfiles_worktrees_logical_objects_unchanged": true,
+        "object_changes": {
+          "pack/tmp_pack_O8qayI": {
+            "type": "file",
+            "bytes": 1179648,
+            "mode": 256,
+            "sha256": "2e100e18e3e98197154a256fa5daaa4c90025893d873c957e8578ac282b21ac3"
+          }
+        },
+        "app_available_bytes": 104853504,
+        "foreign_change_pending_classification": false,
+        "foreign": {
+          "path_set_equal": true,
+          "count": 432,
+          "identical_records": 431,
+          "changed_path": ".emergent/stripped_env_names",
+          "previous_bytes": 113778,
+          "current_bytes": 113904,
+          "mode": 420,
+          "original_prefix_preserved": true,
+          "original_prefix_sha256": "6a83935a17f1d2ab3a59ce7f40be0d7d99841b1b2f115790fa62776a24ff402a",
+          "historical_inode_not_recorded": true
+        }
+      }
+    },
+    "independent_review": {
+      "status": "PASS",
+      "reviewer": "numbering_release_review/b_ci_review",
+      "method": "Exact diff and Git v2.39.5 primary source verification: temporary writes follow private --git-dir; source alternate reads do not freshen objects. AST passed."
+    }
   }
 }
