@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-24T23:42:24.691Z",
+  "recorded_at": "2026-11-24T23:45:04.567Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "Exact A2/B CI PASS; PR2123 unmerged/unpublished. Root explicitly authorized to complete existing PR2120 original verification and closure. First wrapper failed parsing before original verify began; corrected capture wrapper compiled, no release control changed.",
+  "status": "Exact A2/B CI PASS; PR2123 unmerged/unpublished. Existing PR2120 original verification RUNNING from23:43:25UTC; no repeat invocation or new publication.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -221,7 +221,7 @@
   "preceding_release": {
     "pr": 2120,
     "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-    "latest_read_checkpoint": "23:33:24UTC exact J/lease/control unchanged and no original guard running. Initial wrapper at23:35:19 had SyntaxError before execution; runner exited, no original-verify output/receipt. See preserved parse-failure evidence; verify has not yet run from this root continuation.",
+    "latest_read_checkpoint": "Fresh exact lease/control hashes and zero original guard processes checked before corrected wrapper launch. Originalverifybegan23:43:25.787063UTC, runner18517observedalive,stdout/stderr0whilepending. Independent wrapperreviewcomplete; optimizationdisabled. Preserveoldparsefailurestage.",
     "constraint": "Currentrootmayfinishoriginalprecedingverificationonlyunderlatestexplicituserauthorization. NoPR2123merge/apprehearsaluntilPASSandclosedlease.",
     "lease_metadata_observation": {
       "observed_at": "2026-11-24T22:56:08.983089+00:00",
@@ -236,9 +236,10 @@
     },
     "latest_user_direction": "Latest user nowexplicitly asks thisconversation tocompletepublicationclosure. Priorwaitinstruction superseded. Rootfreshread23:33:24 showsnooriginalguardprocessrunning,exactlease/J/guardunchanged. Next originalverifyonly,thenoriginalstatus; noabort/prepare/newpublish/cabinetaction.",
     "handoff_evidence": "pr2120-publication-close-authorized-20261124T2333Z.json",
-    "wrapper_parse_failure": "pr2120-initial-wrapper-parse-failure.json"
+    "wrapper_parse_failure": "pr2120-initial-wrapper-parse-failure.json",
+    "original_verify_running_evidence": "pr2120-original-verify-running-observation.json"
   },
-  "next_safe_action": "Firstcompleteauthorizedexistingpublicationoriginalverifyandstatus. Do notabort/reprepare/republish. Afterpriorverified/closed andfreshbaseJ, normalPR2123mergeexpectedB,exactDchecks, finalize/reviewnewliveE7refreshedpair, ownedhostrehearsal, ownprepare/prepublish/publish/originalverify3+inactive andboundedcostacceptance.",
+  "next_safe_action": "Observeexistingoriginalverifierreceiptwithoutconcurrentstatus. AfteroriginalverifyPASSandstatusinactive,retainfulloutputandindependentreview;freshbaseJthenordinaryPR2123mergeandexactDchecks.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",

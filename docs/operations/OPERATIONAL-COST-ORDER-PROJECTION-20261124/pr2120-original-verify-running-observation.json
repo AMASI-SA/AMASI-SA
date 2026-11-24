@@ -1,0 +1,18 @@
+{
+  "status": "RUNNING_ORIGINAL_VERIFY",
+  "root_observed_at": "2026-11-24T23:44:00Z",
+  "stage": "/tmp/mezan-prior-release-verify-fixed-zbh82lm5",
+  "runner_pid": 18517,
+  "launch_started_at": "2026-11-24T23:43:25.752895+00:00",
+  "wrapper_started_at": "2026-11-24T23:43:25.783721+00:00",
+  "original_verify_started_at": "2026-11-24T23:43:25.787063+00:00",
+  "runner_sha256": "693bcdf4993b03b9f820e819989b953cc3d13719ca58b74c4d655007d2b96f31",
+  "lease_sha256": "3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061",
+  "prior_guard_processes": [],
+  "optimization_disabled": true,
+  "runner_alive_observed": true,
+  "original_verify_stdout_bytes_observed": 0,
+  "original_verify_stderr_bytes_observed": 0,
+  "completion_proven": false,
+  "next_safe_action": "Observe existing receipt; never relaunch while current original verifier may run. After successful original verify, wrapper captures original status sequentially."
+}

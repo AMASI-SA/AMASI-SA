@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "task": "Independent checklist for transferred original PR2120 verify/status receipt",
+  "prepared_at_utc": "2026-11-24T23:43:20.171107+00:00",
+  "result": "REVIEW_CONTRACT_READY_NO_EXECUTION_PROOF",
+  "source_of_expected_values": {
+    "commit": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "path": "release/release-intent-v5.json",
+    "bytes": 1531179,
+    "sha256": "f27abedb9ff7ecf9cc8a3c92ec127628a6091842db522e81e1f79b40cdd2a57e",
+    "guard_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a"
+  },
+  "expected_stdout_static_fields": {
+    "verified": true,
+    "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "protocol_version": 5,
+    "url": "https://mezansalla.com",
+    "checks": 3,
+    "backend_runtime_source": {
+      "added_count": 1,
+      "deleted_count": 0,
+      "file_count": 1358,
+      "manifest_sha256": "fe6cbf6b55745e55a8eb0d8dd18a770bfdc53e55d2b7785cedb22d70c5872afd",
+      "modified_count": 18,
+      "projection_tree_oid": "ef7dc5fc00f0a6d8f490fd41030ffec8d595e53c",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "28f3a0916dd6143aee0a5488e0f172b62843cd4e",
+      "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "source_base_root_tree_oid": "8f131ad2a92d8fb70bfd29f314491d8a3ab9adda",
+      "source_base_scope_tree_oid": "5736c2852e79ca18e80c1b68e85d8fcc092682e2",
+      "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+      "source_root_tree_oid": "0f86e247f16bdf6aef45561fb6c92be3d88d37b4",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "3fa62a7b7efb93eb29f67af4d70cb7a836cb02160cca08b089180a8c257d9dec"
+    },
+    "release_control_source": {
+      "added_count": 1,
+      "deleted_count": 0,
+      "file_count": 329,
+      "manifest_sha256": "ef27b92b0e4a8db7fed03b52433d3915215ff75b2b9f21e3b56d606680cfe167",
+      "modified_count": 0,
+      "projection_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+      "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "source_base_root_tree_oid": "8f131ad2a92d8fb70bfd29f314491d8a3ab9adda",
+      "source_base_scope_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
+      "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+      "source_root_tree_oid": "0f86e247f16bdf6aef45561fb6c92be3d88d37b4",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "48775721c55257d4a033810ffe51fef18b142a8ab9c63b699742e35804828620"
+    },
+    "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b"
+  },
+  "expected_stdout_key_set": [
+    "backend_runtime_source",
+    "boot_started_at",
+    "boot_started_at_observations",
+    "checks",
+    "deployment_git_sha",
+    "frontend_artifact_tree_sha256",
+    "frontend_checked_requests",
+    "frontend_service_workers",
+    "frontend_shell_cache",
+    "git_sha",
+    "protocol_version",
+    "release_control_source",
+    "release_id",
+    "source_base_git_sha",
+    "source_git_sha",
+    "url",
+    "verified"
+  ],
+  "frontend_requests": {
+    "expected_count": 770,
+    "distinct_count": 770,
+    "canonical_compact_JSON_list_sha256": "d1d54c198e8c551878ca7d8c9fee1c0c91a2a5e07a410c6fd330c279e3399967",
+    "comparison": "Exact ordered label list independently derived from reviewed D intent and original verifier iteration; not count-only. Metadata has canonical/cache-busted requests for both Accept application/json and */*.",
+    "public_files": 381
+  },
+  "boot_fields": {
+    "original_prepared_at": "2026-11-24T22:29:50.804025+00:00",
+    "original_clock_skew_seconds": 300,
+    "requirements": [
+      "Timezone-aware ISO values; each observation >= original prepared_at minus300seconds and <= verification completion time plus300seconds.",
+      "boot_started_at equals first entry in nonempty deduplicated boot_started_at_observations.",
+      "One to three distinct boot values is allowed by original verifier; do not demand a single boot.",
+      "checks=3 is exact integer and means original three-probe loop completed. Full returned frontend label list describes the first probe; original code repeated all checks each time."
+    ]
+  },
+  "cache_and_workers": {
+    "shell_paths": [
+      "/index.html",
+      "/",
+      "/snapchat-accounts"
+    ],
+    "worker_paths": [
+      "/sw.js",
+      "/service-worker.js"
+    ],
+    "requirements": [
+      "All shell content types begin text/html; cache-control includes no-cache,no-store,must-revalidate; immutable absent; max-age/s-maxage if present are <=0; Age if present is exactly0; no HIT,STALE,UPDATING cache status.",
+      "Each worker state retirement_payload_present, JavaScript MIME, cache-control additionally max-age=0; original guard also required nosniff and exact retirement bytes.",
+      "Returned cache and worker records are checked as structured output; original unchanged verifier execution supplies the byte/MIME checks omitted from compact stdout."
+    ]
+  },
+  "lease_before": {
+    "actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+    "expected_raw_sha256": "3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061",
+    "checks": [
+      "Exact byte equality with copied original-lease-before.json, and exact A/J/D/RID/protocol fields.",
+      "No manual alteration/recreation/abort; inherited lease actor and original timestamp preserved."
+    ]
+  },
+  "execution_evidence": [
+    "Fresh prelaunch absence of a running original verifier; exact original guard hash and current expected lease confirmed.",
+    "Capture original argv/start/end/exit code, complete unchanged stdout/stderr, byte counts and SHA256s.",
+    "Require original verify exit0 and parsed full JSON matching expected static fields, complete request list and dynamic records.",
+    "Only after verify ends, original status exit0 with active:false and no incomplete_lease_directory; lease directory absent afterward.",
+    "Rehash transferred originals locally against the host receipt. Wrapper PASS alone or UI completion alone is insufficient."
+  ],
+  "failure_classification": [
+    "Wrapper PID/start is not proof that original verify began. Missing receipt alone is not proof it did not begin.",
+    "Initial parser SyntaxError is a wrapper parse failure if stderr proves it occurred before any execution and no original child/output evidence exists. Preserve it.",
+    "If original verify launched or output files exist, inspect its process/results before any retry. Never start a duplicate verifier.",
+    "An interrupted or failed wrapper after verify may still have a valid closed lease; inspect original stdout/status and actual state before further action."
+  ],
+  "runner_scope_review": {
+    "file": "pr2120-existing-release-verify-runner.py",
+    "bytes": 4223,
+    "sha256": "693bcdf4993b03b9f820e819989b953cc3d13719ca58b74c4d655007d2b96f31",
+    "result": "PASS_STATIC_SCOPE_WITH_UNOPTIMIZED_LAUNCH_REQUIREMENT",
+    "calls": [
+      "original production_release_guard.py verify --url https://mezansalla.com",
+      "original production_release_guard.py status only after successful verify and matching stdout"
+    ],
+    "writes": "Only caller-owned stage receipt and exclusive stdout/stderr captures; original guard itself closes matching lease on success.",
+    "prelaunch_requirement": "Run without -O/-OO and with PYTHONOPTIMIZE absent, because wrapper preconditions use assert. Use a new owned stage and preserve initial parse-failure artifacts.",
+    "no_prepare_abort_republish_or_manual_lease_deletion": true,
+    "not_executed_by_reviewer": true
+  },
+  "actions": {
+    "host_calls": false,
+    "git_changes": false,
+    "live_verification": false,
+    "test_run": false,
+    "original_or_helper_code_import_or_execution": false
+  }
+}
