@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "kind": "pr2118_owned_helper_identity_review",
+  "result": "PASS: preparatory artifact only; live execution preconditions remain unmet",
+  "helper": {
+    "path": "operators/pr2118_guarded_rehearsal.py",
+    "bytes": 23356,
+    "sha256": "5f739900a685e4fcd17cc8f8894426dab06a9dc1fe1e2675f6f0ac3a3bf8696c",
+    "git_blob": "3222d1e6bc9b2fc0ed2aab3452fed32761b59a72"
+  },
+  "reference": {
+    "path": "docs/operations/AUTO-BALANCE-RECOVERY-20261123/operators/pr2092_guarded_rehearsal.py",
+    "source_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+    "sha256": "eeab2c969ef65e1220ddf1e61865c66377d4e0089fb451f566196d50811de1d8"
+  },
+  "changes": [
+    "Four PR identity strings: docstring, receipt task, stage prefix and original guard import module name.",
+    "Base J changed to cb98e5660380d362e78f937d60abc7139cd1c462."
+  ],
+  "independent_review": {
+    "reviewer": "code_review",
+    "exact_bytes_equal_after_only_approved_replacements": true,
+    "functions": 23,
+    "functions_ast_identical_without_normalization": 21,
+    "remaining_function_deltas_only_approved_identity_strings": true,
+    "full_normalized_ast_identical": true,
+    "executed": false,
+    "tests_invoked": false
+  },
+  "controls_preserved": [
+    "Original /app guard bytes, inactive lease and operation lock.",
+    "Exact source/intent/deployment ancestry, parents and trees; unchanged source intent history.",
+    "Fresh untracked baseline, full verified generated-output backups, foreign preservation and no rollback.",
+    "Canonical adapter, frontend/package/full-proof checks, exact identity and source before final PASS."
+  ],
+  "remaining_preconditions": [
+    "Preceding PR2113 capacity recovery and published base with original three-probe verification and inactive guard.",
+    "Our reviewed intent-only B, exact-B gates, normal matching-tree merge D and exact-D gates.",
+    "Fresh actual /app capacity, source and foreign-entry baseline; exact seven-field envelope with immutable A/B/D/tree/RID/count.",
+    "Independent envelope review and fresh original guard status immediately before staging/execution."
+  ],
+  "limitations": [
+    "No envelope exists yet; no host staging or execution.",
+    "This helper retains the original /tmp stage behavior and does not fix capacity or environment reconnection.",
+    "No lease, build, merge, publication or financial write by this preparation."
+  ]
+}
