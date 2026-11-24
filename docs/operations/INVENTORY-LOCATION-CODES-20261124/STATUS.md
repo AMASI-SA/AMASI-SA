@@ -165,3 +165,8 @@ Original prepublish exited0 with `ready_to_publish=true` at19:18:44.860927 UTC, 
 ## 2026-11-24 19:30 UTC — newer platform success, original verification running
 
 Platform explicitly reported **Deployment finished Nov24,10:29PM** and new published identifier `7fe1672` (the UI labels it100th; no ordinal increment is inferred). This is newer than prior `d0a7e31` at08:05PM. Original unchanged `verify --url https://mezansalla.com` started once at19:30:41.880782 UTC, output retained in `/app/.git/mezan-pr2113-publication-o4xyp2sz/verify.log`. It performs three full probes, each including770 canonical/cache-busted public frontend requests over381 files. No concurrent status or duplicate verify/publish. Own lease remains active until original verify succeeds. Live verification is not yet claimed; final form preview/cancel remains pending.
+
+
+## Live warehouse form PASS; full verifier still running
+
+Reloaded the live warehouse page after platform success. The create-cabinet form shows optional cabinet name, row/column fields, and cabinet→column→row guidance with example121 and hyphens for coordinates above9. Unsaved preview changed4×6 to1 row×3 columns and correctly displayed3 slots. Closed with إغلاق; never clicked إنشاء الدولاب والخانات. Existing cabinet and9 legacy slots001–009 remain displayed. No cabinet creation/deletion or inventory/finance action. Warehouse tab marked for the user. The original production verifier remains running; no final verified/inactive claim yet.

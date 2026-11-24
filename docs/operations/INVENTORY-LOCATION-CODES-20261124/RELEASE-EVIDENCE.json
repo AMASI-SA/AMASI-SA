@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24T19:30:41.880782+00:00",
+  "observed_at_utc": "2026-11-24 19:34:28 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "PLATFORM_SUCCESS_ORIGINAL_VERIFY_RUNNING",
+  "state": "PLATFORM_AND_LIVE_FORM_PASS_ORIGINAL_VERIFY_RUNNING",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": true,
   "publication_authorized": true,
-  "next_safe_action": "Wait for current unchanged original verifier. Require exit0, verifiedtrue/checks3/exactA2-D-RID, then original status inactive. Do not duplicate verifier or publish. Finish live add-cabinet form preview/cancel; no live creation/deletion.",
+  "next_safe_action": "Wait for the currently running original verifier; no concurrent status, duplicate probes or publish. Require verifiedtrue/checks3/exactA2-D-RID and subsequent original inactive status. Live form preview/cancel already PASS; no need repeat.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -2045,5 +2045,29 @@
       "expected_frontend_requests_per_probe": 770,
       "no_concurrent_guard_status": true
     }
+  },
+  "live_form_verification": {
+    "status": "PASS",
+    "observed_at_utc": "2026-11-24 19:34:28 UTC",
+    "url": "https://mezansalla.com/components-v2?workspace=warehouse",
+    "page_reloaded_after_platform_success": true,
+    "labels": [
+      "اسم الدولاب (اختياري)",
+      "عدد الصفوف",
+      "عدد الأعمدة"
+    ],
+    "guidance": "ترتيب رقم الخانة: دولاب، عمود، صف. مثال: 121 للدولاب 1 والعمود 2 والصف 1. تفصل شرطات بين الأرقام عندما يتجاوز أحدها 9.",
+    "initial_rows": 4,
+    "initial_columns": 6,
+    "preview_rows": 1,
+    "preview_columns": 3,
+    "preview_location_count": 3,
+    "closed_with": "إغلاق",
+    "create_button_never_clicked": true,
+    "existing_cabinet_count_after": 1,
+    "existing_slot_count_after": 9,
+    "existing_legacy_slot_labels": "001–009",
+    "live_cabinet_creation_or_deletion": false,
+    "deliverable_tab_marked": true
   }
 }
