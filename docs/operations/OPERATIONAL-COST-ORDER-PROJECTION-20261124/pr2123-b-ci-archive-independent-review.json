@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "result": "PASS",
+  "reviewer": "release_gate",
+  "reviewed_at_utc": "2026-11-24T23:08:06.774884+00:00",
+  "archive": {
+    "file": "PR2123-B-CI-EVIDENCE.zip",
+    "bytes": 393893,
+    "sha256": "079d530df352ad58c57dd6442bcd406f351a696ecc8476c9cdeee7dbb6aad1a4",
+    "git_blob": "20cca4e0e52c4d746c391ffb39a3a82ea0f0d1f4",
+    "crc": "PASS",
+    "member_count": 11
+  },
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "deployment_candidate_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "deployment_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+  "manifest_exact_membership": true,
+  "all_ten_member_lengths_hashes_and_local_originals_match": true,
+  "members": [
+    {
+      "path": "pr2123-b-root-final-ci.json",
+      "bytes": 14550,
+      "sha256": "260e2077a9e115f94bb366941da3c51ad2b7234260c1bc1d7637c41294059a0c",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-final-review.json",
+      "bytes": 35674,
+      "sha256": "a74f0c7c60a5e1a4366d5ea865d3a0616a392a8f7337934effae9d5d0e6d9eaf",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-final-junit-review.json",
+      "bytes": 30019,
+      "sha256": "21e98343a9fdfb88794f446efb430b1d6e9f5a21785f465fe0687d4a41cd011a",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-backend.zip",
+      "bytes": 142049,
+      "sha256": "cc694cb06d55246a4989d1cf124cc7f3534a591213b92278d653628615ffc468",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-stock.zip",
+      "bytes": 108091,
+      "sha256": "776a8e6367e28e4cbb9e88a3c68b48f62dbb7821059aee9b4b40e93228ae1513",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-rehearsal-review.json",
+      "bytes": 17326,
+      "sha256": "7ae567fc9bb03a82aabb6d37a4ace918e6d5cd4f8b5220a67c91e4c8ca7c929a",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-host20-evidence.zip",
+      "bytes": 63799,
+      "sha256": "11be5bd9378abb9955f2f191f4ea40a957ce35136153d5e76c5653f6cdd01503",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-ci-host24-evidence.zip",
+      "bytes": 63803,
+      "sha256": "31442e5e4a992805b57b41690ed9bfd03b2429664b76c70d34c14a686f8f3664",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-b-original-intent-validation.json",
+      "bytes": 1510,
+      "sha256": "f27084f05775be609c95f09857f316ae995ef12fea6e0c050cfdfe54ef5af737",
+      "matches_local_original": true
+    },
+    {
+      "path": "pr2123-frozen-B-independent-review.json",
+      "bytes": 4462,
+      "sha256": "19f02b962ca58a58af8f89bbc6d4480bc39856eb04d8d21ee18598593f0ea0ee",
+      "matches_local_original": true
+    }
+  ],
+  "nested_archives": [
+    {
+      "path": "pr2123-b-ci-backend.zip",
+      "crc": "PASS",
+      "files": [
+        {
+          "path": "operational-backend.xml",
+          "bytes": 1387542,
+          "sha256": "c17ca200304d7361c8b486336019833e9a24e4c09b0cf231e7b8f637043ac011"
+        },
+        {
+          "path": "operational-demand-read-benchmark.json",
+          "bytes": 13212,
+          "sha256": "633585ca904f74e42094dce13a7d54ba3489fcb775c84d221eb4c7d2c2c23eb0"
+        },
+        {
+          "path": "operational-demand-read.xml",
+          "bytes": 18155,
+          "sha256": "d492482a55078bf6f555f224eb2b26a3e18536cf0b8d50e6d31d67bd916312b9"
+        },
+        {
+          "path": "operational-demand-register-benchmark.json",
+          "bytes": 1768,
+          "sha256": "904705627cd0343d72b172ba7d537d0e56ad7c77726b7c0e5597f84676b73d16"
+        },
+        {
+          "path": "operational-source-sha.txt",
+          "bytes": 41,
+          "sha256": "e616bd766ad0fd76849b4a9a0512a434af462beea5bccc17b2816a680e72047b"
+        },
+        {
+          "path": "operational-source-tree.txt",
+          "bytes": 41,
+          "sha256": "f41490826d1ea64d11c245185d7a5603647e9235400f97023300868599c5eb63"
+        }
+      ]
+    },
+    {
+      "path": "pr2123-b-ci-stock.zip",
+      "crc": "PASS",
+      "files": [
+        {
+          "path": "eligibility-backend.xml",
+          "bytes": 1105558,
+          "sha256": "85d7fdea8fcceed94ba8c2a8b984dd93a7e5686431aaff1282c47c1de7b9e5a1"
+        }
+      ]
+    },
+    {
+      "path": "pr2123-b-ci-host20-evidence.zip",
+      "crc": "PASS",
+      "files": [
+        {
+          "path": "mezan-adapter-environment-v5.json",
+          "bytes": 1102,
+          "sha256": "ec7a633249d49ec90069c9e31514085f6c6e601f2c1c9f502a18501e281d203b"
+        },
+        {
+          "path": "mezan-package-boundary-v5.json",
+          "bytes": 1278,
+          "sha256": "bb8c8fe02582e7c3392b6ff9c3895cbd5f5adff836130127496dae487634adb3"
+        },
+        {
+          "path": "mezan-adapter-build-v5.log",
+          "bytes": 206829,
+          "sha256": "19b9e3bdd27fd62df4b1644017624708057a3a9d4e4f191a1412afe92e19f7a6"
+        },
+        {
+          "path": "mezan-governed-runtime.log",
+          "bytes": 518,
+          "sha256": "3891db7d8507a9228690a37f40db69af95e0f37dc94010b4c8ef93f9f9f5b2c8"
+        }
+      ]
+    },
+    {
+      "path": "pr2123-b-ci-host24-evidence.zip",
+      "crc": "PASS",
+      "files": [
+        {
+          "path": "mezan-adapter-environment-v5.json",
+          "bytes": 1102,
+          "sha256": "eb90265b62a87f9da476db19f84f6cc0ccc994c2c9f9dbd3ab0ceee1bf800a8c"
+        },
+        {
+          "path": "mezan-package-boundary-v5.json",
+          "bytes": 1278,
+          "sha256": "bb8c8fe02582e7c3392b6ff9c3895cbd5f5adff836130127496dae487634adb3"
+        },
+        {
+          "path": "mezan-adapter-build-v5.log",
+          "bytes": 206830,
+          "sha256": "2533ff16b01ee4f55b8b93c27a20ca02983564b78394113717cb62576406148b"
+        },
+        {
+          "path": "mezan-governed-runtime.log",
+          "bytes": 518,
+          "sha256": "771125ca41c5e37c8d5ec14865d51d1d9057d4c00baf093f7c9bf4464ba69a6a"
+        }
+      ]
+    }
+  ],
+  "host_environment_facts": [
+    {
+      "archive": "pr2123-b-ci-host20-evidence.zip",
+      "host_node": "v20.20.2",
+      "standalone_environment_before_Git_removal": true,
+      "during_adapter_log_Git_absent": true,
+      "isolated_backend_Git_absent": true
+    },
+    {
+      "archive": "pr2123-b-ci-host24-evidence.zip",
+      "host_node": "v24.19.0",
+      "standalone_environment_before_Git_removal": true,
+      "during_adapter_log_Git_absent": true,
+      "isolated_backend_Git_absent": true
+    }
+  ],
+  "identity_checks": {
+    "B_actual_JUnit": true,
+    "A2_runtime_package_source": true,
+    "both_hosts_during_adapter_Git_absent": true,
+    "existing_JUnit_review_PASS_same61_cases_and_no_skips": true
+  },
+  "content_scope": {
+    "original_CI_artifacts_and_review_receipts_only": true,
+    "no_canonical_generated_output_trees_in_archive": true,
+    "no_private_financial_receipts_or_live_source_data_members": true,
+    "credential_pattern_hits": [],
+    "email_domains_observed": [],
+    "qualification": "Member-level and decoded-text inspection found no credentials or private customer/financial payloads. Original isolated CI logs and test names remain included; this is scoped evidence review, not a global secret guarantee."
+  },
+  "audit_note": "An initial inspection assertion mistakenly expected the standalone pre-removal environment record to say Git absent. It was rejected. Original artifact inspection and the existing rehearsal review establish that this record precedes Git removal; the during-adapter log and isolated package proof independently show Git absent. No CI failure or artifact change resulted.",
+  "release_boundary": "Archive proves frozen-B CI evidence integrity only; it neither publishes nor closes any lease. Latest user instruction leaves verification/closure to the current publication conversation.",
+  "actions": {
+    "tests_rerun": false,
+    "source_edited": false,
+    "archive_modified": false,
+    "github_writes": false,
+    "host_actions": false
+  }
+}

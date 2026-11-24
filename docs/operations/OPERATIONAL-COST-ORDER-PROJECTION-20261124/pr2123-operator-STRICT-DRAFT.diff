@@ -1,0 +1,53 @@
+--- cabinet-archive-v1-reference-cabinet_archive_release_operator.py
++++ pr2123-operator-STRICT-DRAFT.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""Cabinet archive release: owned clone rehearsal, then guarded /app FF and adapter.
++"""PR2123 STRICT DRAFT (DO NOT EXECUTE): owned clone rehearsal, then guarded /app FF and adapter.
+ 
+ External prerequisite: root has reviewed this helper, its exact envelope, and successful exact-D CI.
+ All logs, clone, cache and generated-output backups stay in a unique owned /tmp stage.
+@@ -26,11 +26,11 @@
+ sys.dont_write_bytecode = True
+ ROOT = Path("/app")
+ BRANCH = "hotfix/prod-snap-meta-final"
+-J = "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe"
+-A = "b236f51bb6c52e6f5d14a136db92f7474e4f5873"
+-B = "bdebc069ea5fa980cd16725e422ca70e79dadd17"
+-TREE = "74946da23e059283f49de2b04baf9860c8ee972d"
+-RELEASE_ID = "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42"
++J = "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
++A = "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
++B = "c71a0ba71e36a2306a0c4bce1822f39073e6984f"
++TREE = "2db384dde8a84d0945fceee9cd5be81638d5bb2d"
++RELEASE_ID = "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328"
+ D = START = EXPECTED_UNTRACKED = None
+ ALLOW_RUNTIME_APPEND = False
+ CLONE = None
+@@ -44,7 +44,7 @@
+ STAGE: Path | None = None
+ STEP = "startup"
+ RECEIPT: dict = {
+-    "task": "cabinet_archive_owned_clone_and_app_rehearsal", "status": "RUNNING",
++    "task": "pr2123_strict_owned_clone_and_app_rehearsal", "status": "RUNNING",
+     "initial_head": START, "source_sha": A, "intent_sha": B,
+     "deployment_sha": D, "tree": TREE, "release_id": RELEASE_ID,
+     "external_precondition": "operator verified completed successful exact-D CI",
+@@ -377,7 +377,7 @@
+         require(parent.is_dir() and not parent.is_symlink() and parent.resolve(strict=True) == parent,
+                 "UNSAFE_WORKSPACE_ROOT")
+     assert_checkout(START)
+-    STAGE = Path(tempfile.mkdtemp(prefix="mezan-cabinet-archive-release-", dir="/tmp"))
++    STAGE = Path(tempfile.mkdtemp(prefix="mezan-pr2123-strict-rehearsal-", dir="/tmp"))
+     STAGE.chmod(0o700)
+     fsync_directory(STAGE)
+     fsync_directory(STAGE.parent)
+@@ -512,7 +512,7 @@
+                                 capture=True, timeout=45))
+         require(status.get("active") is False and not status.get("incomplete_lease_directory"), "ACTIVE_OR_INCOMPLETE_RELEASE_LEASE")
+         RECEIPT["initial_public_status"] = {"active": False}
+-        spec = importlib.util.spec_from_file_location("cabinet_archive_original_release_guard", guard_path)
++        spec = importlib.util.spec_from_file_location("pr2123_strict_original_release_guard", guard_path)
+         require(spec is not None and spec.loader is not None, "CANNOT_LOAD_ORIGINAL_GUARD")
+         guard = importlib.util.module_from_spec(spec)
+         sys.modules[spec.name] = guard

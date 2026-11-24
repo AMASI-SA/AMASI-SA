@@ -1,0 +1,38 @@
+{
+  "at": "2026-11-24T23:34:23.337Z",
+  "task": "PR2123 continuation: close preceding already-published release through original verifier only",
+  "authorization": "Latest user explicitly requested that this conversation complete publication closure. This supersedes the preceding waitforotherconversation instruction. No cabinet business action, newpublish,prepare,abort ormanualleaseclear.",
+  "observed": {
+    "at": "2026-11-24T23:33:24.762953+00:00",
+    "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "tracked_clean": true,
+    "guard_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+    "running_original_guard": [],
+    "lease_exists": true,
+    "lease_directory_exists": true
+  },
+  "expected_lease": {
+    "actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+    "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "prepared_at": "2026-11-24T22:29:50.804025+00:00"
+  },
+  "platform_observation": {
+    "provider_version": "7191418",
+    "visible_completion": "Deployment finished",
+    "finish_riyadh": "2026-11-25 01:42",
+    "limit": "ExactliteralDeploymentSucceeded notvisibleinrestoredsession; preserveactualvisiblePublishednewversion+greenfinish. Originalverifychecksrequired."
+  },
+  "next_command": "python scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "next_after_success": "python scripts/production_release_guard.py status",
+  "constraints": [
+    "Recheck exactleaseandoriginalguardbeforestart",
+    "Capture originalstdout/stderr/exitcode byteexactinnewownedstage",
+    "No duplicateverifier ifobservedrunning",
+    "Do notcallstatusconcurrentlywithverify",
+    "Onfailurepreserveleaseandevidence,nomanualclear",
+    "No PR2123merge/rehearsaluntil originalverifyPASSandactivefalse"
+  ],
+  "result": "AUTHORIZED_NOT_YET_EXECUTED"
+}

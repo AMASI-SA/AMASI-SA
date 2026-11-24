@@ -1,0 +1,21 @@
+--- cabinet-archive-v1-reference-cabinet_archive_release_envelope.json
++++ pr2123-envelope-STRICT-DRAFT.json
+@@ -1,11 +1,11 @@
+ {
+-  "source_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+-  "source_base_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+-  "intent_sha": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+-  "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+-  "tree": "74946da23e059283f49de2b04baf9860c8ee972d",
+-  "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+-  "initial_head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
++  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
++  "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
++  "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
++  "deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
++  "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
++  "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
++  "initial_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+   "expected_untracked_count": 432,
+   "allow_runtime_metadata_append": true
+ }

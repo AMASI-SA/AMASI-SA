@@ -1,0 +1,46 @@
+{
+  "at": "2026-11-24T23:13:24.194392+00:00",
+  "read_only": true,
+  "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "branch": "hotfix/prod-snap-meta-final",
+  "guard_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+  "tracked_clean": true,
+  "previous_live_process_exists": false,
+  "prior_stage_exists": false,
+  "previous_stage": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi",
+  "live_scope_records": {
+    ".worktrees": [
+      66340,
+      394231,
+      493,
+      0,
+      0
+    ],
+    ".worktrees/p01-acceptance-state-20260919": [
+      66340,
+      396081,
+      448,
+      0,
+      0
+    ],
+    ".worktrees/p01-acceptance-state-20260919/mongo": [
+      66340,
+      396082,
+      493,
+      0,
+      0
+    ],
+    ".worktrees/p01-acceptance-state-20260919/mongo.log": [
+      66340,
+      121637,
+      420,
+      0,
+      0
+    ]
+  },
+  "symlinks": false,
+  "lease_observed_at": "2026-11-24T23:12:29.994280+00:00",
+  "lease_still_active": true,
+  "root_guard_lifecycle_call": false,
+  "impact": "Oldprocess-boundE7draftmustnotrun. Prepareseparatestrictfullforeignpreservationdraft; retainoldimmutable. Finalcurrentmetadata/count/capacityandguardchecksafterpriorownercloses."
+}

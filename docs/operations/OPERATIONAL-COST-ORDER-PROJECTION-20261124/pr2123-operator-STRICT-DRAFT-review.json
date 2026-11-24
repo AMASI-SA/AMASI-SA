@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "task": "PR2123 STRICT DRAFT after reported preview restart",
+  "review_result": "PASS_STATIC_DRAFT_ONLY",
+  "recorded_at_utc": "2026-11-24T23:19:38.433733+00:00",
+  "scope": "Read-only GitHub/local source review plus preparation of separate local draft files. No helper import/execution, host call, source branch mutation, merge, lease, publication, financial write, process stop or cleanup.",
+  "provenance": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "evidence_commit": "3ca93d49b1c0071824a374bb7b1d1ee33a814a9f",
+    "original_v1_operator": {
+      "path": "cabinet-archive-v1-reference-cabinet_archive_release_operator.py",
+      "bytes": 35827,
+      "sha256": "18a8cf2e09605947263999cd897ac680507c4fbbabffc0ffb4568f606ed6b703",
+      "git_blob": "4145b8575f3be93bb756c76410ce12b0192a8776"
+    },
+    "original_v1_envelope": {
+      "path": "cabinet-archive-v1-reference-cabinet_archive_release_envelope.json",
+      "bytes": 532,
+      "sha256": "c67cbf86ad270185505c7cb8653e741b968a07ed917c9e9ed7762bbc0d06f37b",
+      "git_blob": "5d0bbaf6e0032e2d4b546803769fe19f43d84a75"
+    },
+    "original_v1_review": {
+      "path": "cabinet-archive-v1-reference-operator-review.json",
+      "bytes": 2109,
+      "sha256": "ea48ecec4d49ea875f5c7fe41dd6a88400d36d4561fc631c96695936945575a1",
+      "git_blob": "fb888129765fa28e29b298c1f635e056e93cafc1"
+    },
+    "E7_reference_operator": {
+      "path": "cabinet-archive-reviewed-operator-reference.py",
+      "bytes": 43560,
+      "sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+      "git_blob": "233b0eec3951fbee5f25d03b05faa6c4d9cd70ff"
+    }
+  },
+  "reported_host_observation": {
+    "source": "Parent/root read-only observation; this reviewer did not access host",
+    "at": "2026-11-24T23:13:24.194392+00:00",
+    "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_clean": true,
+    "guard_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+    "previous_live_pid_96507_exists": false,
+    "previous_tmp_stage_exists": false,
+    "prior_scope_directory_device_now": 66340,
+    "prior_scope_directory_device_was": 66338,
+    "limit": "Absence of former PID alone does not prove absence of a replacement writer. Root must make a fresh bounded check before selecting this strict-preservation helper for actual use."
+  },
+  "decision": {
+    "basis": "Use the previously reviewed original strict v1 helper, with only nine explicit literal substitutions, rather than rewriting E7 process identity checks or repinning a nonexistent process. The full v1-to-E7 delta was read. Original v1 failed safely when Mongo was active; that historical failure is retained and not reclassified.",
+    "database_policy": "No exception for Mongo descendants or its log. Every discovered non-generated ignored and nonignored foreign path is traversed and fingerprinted. Any changed foreign fingerprint, inventory or record set blocks the run. It does not stop a writer, remove a file, or retry automatically.",
+    "exception_retained": ".emergent/stripped_env_names only: original same dev/inode/mode plus complete original prefix; only appended bytes allowed when envelope enables the original policy.",
+    "generated_outputs": "Only the four original adapter cleanup targets are preserved through independent full manifests, copies, fsync and revalidation. No generated file is force-added or assumed to survive the adapter.",
+    "fingerprint_limit": "The unchanged original file fingerprint binds path/type/mode/size/content and checks dev/inode/mtime stability while reading each file. It is not a database snapshot, process identity attestation, filesystem-owner preservation proof, or a guarantee against a writer that starts later."
+  },
+  "operator": {
+    "path": "pr2123-operator-STRICT-DRAFT.py",
+    "bytes": 35836,
+    "sha256": "989b643a3b4ad541ac911e3b26cfba69c8c55ff1cdbb7f37afae3266a429fc7a",
+    "git_blob": "49a61da5614ffda3e1499121f5935355608c0d16"
+  },
+  "envelope": {
+    "path": "pr2123-envelope-STRICT-DRAFT.json",
+    "bytes": 529,
+    "sha256": "f1e26e6b62eba66841000dc5f95be79b136ff197db0f8300d8459b71435f0d4d",
+    "git_blob": "c4e08c22ed6cf8335f6d18d12385d7d3c0533015"
+  },
+  "static_checks": {
+    "ast_parse": "PASS",
+    "imports_or_execution": false,
+    "literal_substitutions": 9,
+    "reverse_substitutions_restore_full_original_text_and_AST": true,
+    "top_level_functions": 32,
+    "all_function_names_unchanged": true,
+    "function_AST_changes_only_task_local_literals": [
+      "protected_rehearsal",
+      "main"
+    ],
+    "unchanged_function_AST_count": 30,
+    "main_change": "Original guard module unique name only",
+    "protected_rehearsal_change": "Owned temporary-stage prefix only",
+    "known_J_A_B_tree_RID_exact": true,
+    "envelope_same_nine_fields_as_original": true,
+    "invalid_D_placeholder": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
+    "original_SHA_regex_rejects_placeholder_before_ROOT_or_guard_or_stage": "PASS by static control-flow review; not executed",
+    "helper_and_envelope_mode": "0600",
+    "old_E7_based_PR2123_DRAFT_pair_unchanged": true
+  },
+  "original_controls_retained": [
+    "Original inactive status before operation lock; absent lease rechecked while locked",
+    "Exact tracked clean START and production branch",
+    "Expected nonignored path count; complete ignored/nonignored fresh inventory/fingerprints",
+    "Original guard bytes checked against J; release-control files unchanged J..D",
+    "B sole parent A; D parents J,B and tree=B; A..D only intent, source retains prior intent history",
+    "Incoming paths reject collisions, symlink parents and unsafe traversal",
+    "Own clean clone, original adapter, frontend verification, package verification, full identity/proof",
+    "Copy-verified/fsynced backups of all inherited generated targets before canonical cleanup",
+    "Fresh measured bytes and inodes at owned backup, before FF and before canonical adapter",
+    "Normal FF only; no reset, rollback, process/preview restart, capacity cleanup, prepare or publication",
+    "Final source/foreign/ref/lease checks after canonical original adapter"
+  ],
+  "blocking_before_any_execution": [
+    "Current publishing conversation must close its own lease per latest user instruction; no takeover",
+    "Fresh original public status active:false and no incomplete lease directory",
+    "Confirm no active replacement writer to prior Mongo dbpath before choosing strict snapshot traversal; otherwise stop for a new reviewed preservation plan, never relax this draft automatically",
+    "Refresh source branch/HEAD, nonignored count (432 remains provisional), real parents, actual generated artifacts, capacity and foreign inventory",
+    "Complete normal PR2123 merge; independently verify actual D parents/tree and all applicable exact-D CI",
+    "Create a new finalized pair with actual immutable D, fresh approved count/START, reviewed helper/envelope hashes and durable evidence; keep this draft immutable",
+    "Download exact final pair, verify hashes, execute once under original protocol, preserve all receipts on failure"
+  ],
+  "production_changed": false,
+  "ready_for_host": false,
+  "completed_rehearsal_proof": false
+}

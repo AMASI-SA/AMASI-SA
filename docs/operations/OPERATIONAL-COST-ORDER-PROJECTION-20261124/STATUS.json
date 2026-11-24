@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-24T23:06:31.532Z",
+  "recorded_at": "2026-11-24T23:34:24.267Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
@@ -146,6 +146,15 @@
       "intent_matches_candidate_and_original_zip_member_byte_for_byte": true,
       "remote_commit_trees_and_artifact_metadata_verified": true,
       "no_host_or_source_write": true
+    },
+    "b_ci_archive_independent": {
+      "result": "PASS",
+      "review": "pr2123-b-ci-archive-independent-review.json",
+      "sha256": "cba2f02965128157e074f71d990a87ac81c7eb9d3b91aa3198b719c4b2c98c7b",
+      "all10members_match_manifest_and_originals": true,
+      "outer_and_four_inner_zip_crc_pass": true,
+      "no_private_financial_or_generated_build_tree": true,
+      "note": "SeparateenvironmentartifactrecordedbeforeGitremoval hasgitpresenttrue; actualadapterrun/isolatedpackageproofrecordGitabsent. Preservecontext, donotmisreadtiming."
     }
   },
   "files": [
@@ -212,8 +221,8 @@
   "preceding_release": {
     "pr": 2120,
     "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-    "latest_read_checkpoint": "Root observed newer Emergent Manage provider7191418 and DeploymentfinishedNov25,01:42AM Riyadh at~22:55UTC. WrittenSTATUS remainsE11/blob52ed2d16bce6025d23bb13cf7abc854ea16e9981. This does not substitute for originalthreeprobeverify and leaseclosure.",
-    "constraint": "Await currentpublishingconversation's own originalverifyandclosedlease. No concurrentverify/statusduringitsoperation. Noarchive/cabinetaction authorizedbyscope.",
+    "latest_read_checkpoint": "Rootread-only23:12:29.994280UTC: exactpriorlease stillpresent; previous/tmpstageabsent aftereditorcannotreconnectandreload. At23:13:24.194392UTC sharedHEADstillJ/prodbranch/trackedclean/originalguardblobbc03ccfae879dcfcad3fa80a7dc5e63c5aa98252. WrittensubmissionE11unchanged. Userstatescurrentpublishingconversationwillcloselease; rootwaits.",
+    "constraint": "Currentrootmayfinishoriginalprecedingverificationonlyunderlatestexplicituserauthorization. NoPR2123merge/apprehearsaluntilPASSandclosedlease.",
     "lease_metadata_observation": {
       "observed_at": "2026-11-24T22:56:08.983089+00:00",
       "lease_file_exists": true,
@@ -225,9 +234,10 @@
       "prepared_at": "2026-11-24T22:29:50.804025+00:00",
       "provenance": "Bounded read-only matchinglease metadata in newroot-ownedTerminal2. No guard/status/verify/lease/source mutation. Knownownerstage has no subsequentproductionverify/closedstatusfile names atthis observation."
     },
-    "latest_user_direction": "User briefly authorized taking over pendingpublicationverification, then clarified scopeispublicationonly and finally stated the currentlypublishing conversation willcloseitslease. Latestinstruction: awaitthatowner; rootdidnotrunverify/status/abort/prepare/leasewrite."
+    "latest_user_direction": "Latest user nowexplicitly asks thisconversation tocompletepublicationclosure. Priorwaitinstruction superseded. Rootfreshread23:33:24 showsnooriginalguardprocessrunning,exactlease/J/guardunchanged. Next originalverifyonly,thenoriginalstatus; noabort/prepare/newpublish/cabinetaction.",
+    "handoff_evidence": "pr2120-publication-close-authorized-20261124T2333Z.json"
   },
-  "next_safe_action": "Keep sourceA2/B frozen; save allfurtherdocs onevidencebranch. Await preceding2120 owner's originalthreeprobeverification and closedlease. Then freshoriginalguardstatus inactive andGitbasef199; normalprotectedmerge expectedB; validateDparents/tree/pushCI; finalizeindependentlyreviewoperator/envelope anddurablehashes; originalhostrehearsal; prepare/prepublish; oneauthorizedpublication; originalverify3+inactive; oneboundedlivecostacceptance.",
+  "next_safe_action": "Firstcompleteauthorizedexistingpublicationoriginalverifyandstatus. Do notabort/reprepare/republish. Afterpriorverified/closed andfreshbaseJ, normalPR2123mergeexpectedB,exactDchecks, finalize/reviewnewliveE7refreshedpair, ownedhostrehearsal, ownprepare/prepublish/publish/originalverify3+inactive andboundedcostacceptance.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -255,28 +265,28 @@
     "clean_worktree_after_upload": true
   },
   "operator_draft": {
-    "status": "DRAFT_ONLY_NOT_EXECUTABLE_NOT_APPROVED_FOR_HOST",
-    "source": "E7 reviewed cabinet archive helper, only9declared literals changed; full text/AST equality after substitutions, all36functions preserved.",
+    "status": "STRICT_DRAFT_STATIC_PASS_BUT_BLOCKED_BY_REPLACEMENT_WRITER_311",
+    "source": "Reviewed originalv1 operator from3ca93d49b1c0071824a374bb7b1d1ee33a814a9f; nine literal substitutionsonly; original32functions preserved.",
+    "reason": "After preview reconnection, prior processPID96507 absent and device changed; previous E7 liveprocess-boundexception is invalid. Originalstrictv1 preservesallforeignpaths includingMongo descendantsandlog.",
     "operator": {
-      "path": "pr2123-operator-DRAFT.py",
-      "bytes": 43492,
-      "sha256": "ff5c8895488533e209d4177bbd0d66bcf92b5af6357852c63598fc9eec553f22"
+      "path": "pr2123-operator-STRICT-DRAFT.py",
+      "bytes": 35836,
+      "sha256": "989b643a3b4ad541ac911e3b26cfba69c8c55ff1cdbb7f37afae3266a429fc7a"
     },
     "envelope": {
-      "path": "pr2123-envelope-DRAFT.json",
-      "bytes": 1308,
-      "sha256": "ec07237ff88a0a653150b611a6d4ce2b6d8bdfa64820ac33ea33d94ba6db9451"
+      "path": "pr2123-envelope-STRICT-DRAFT.json",
+      "bytes": 529,
+      "sha256": "f1e26e6b62eba66841000dc5f95be79b136ff197db0f8300d8459b71435f0d4d"
     },
-    "independent_review": "pr2123-operator-DRAFT-independent-review.json",
+    "review": "pr2123-operator-STRICT-DRAFT-review.json",
     "blocking_placeholders": [
-      "B",
-      "D",
-      "tree",
-      "RID"
+      "D"
     ],
-    "live_scope_currentness_unverified": true,
-    "nonignored_entries_expected": 432,
-    "scope": "No helper execution/import, host read, lease, publication, service action or financial write."
+    "nonignored_entries_expected_provisional": 432,
+    "needs_fresh_writer_check": false,
+    "ready_for_host": false,
+    "scope": "Noexecution/import/lease/appmutation. Mustcompletepriorownerclose,exactDmerge+CI,finalfreshmetadataandindependentreview beforefinalpair.",
+    "replacement_writer_observed_at": "2026-11-24T23:22:29.294903+00:00"
   },
   "intent_b": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
   "intent_b_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
@@ -297,5 +307,31 @@
     "members": 11,
     "crc_and_all_member_hashes_verified": true,
     "contents": "Original B Backend/Stock JUnit ZIPs, originalHost20/24environment/package/build evidenceZIPs, exactheadCI and fullreviews, originalBvalidator and independentimmutabilityreview."
-  }
+  },
+  "operator_draft_history": [
+    {
+      "status": "DRAFT_ONLY_NOT_EXECUTABLE_NOT_APPROVED_FOR_HOST",
+      "source": "E7 reviewed cabinet archive helper, only9declared literals changed; full text/AST equality after substitutions, all36functions preserved.",
+      "operator": {
+        "path": "pr2123-operator-DRAFT.py",
+        "bytes": 43492,
+        "sha256": "ff5c8895488533e209d4177bbd0d66bcf92b5af6357852c63598fc9eec553f22"
+      },
+      "envelope": {
+        "path": "pr2123-envelope-DRAFT.json",
+        "bytes": 1308,
+        "sha256": "ec07237ff88a0a653150b611a6d4ce2b6d8bdfa64820ac33ea33d94ba6db9451"
+      },
+      "independent_review": "pr2123-operator-DRAFT-independent-review.json",
+      "blocking_placeholders": [
+        "B",
+        "D",
+        "tree",
+        "RID"
+      ],
+      "live_scope_currentness_unverified": true,
+      "nonignored_entries_expected": 432,
+      "scope": "No helper execution/import, host read, lease, publication, service action or financial write."
+    }
+  ]
 }
