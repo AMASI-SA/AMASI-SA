@@ -58,10 +58,15 @@ def fake_context(*, owner="merchant1", changing_source=False):
     package.__path__=[]
     history=types.ModuleType("operational_provider_history")
     history.late_payment_blocks=lambda *args,**kwargs:False
+    # The separately tested real refresh-health gate uses Motor/pymongo.
+    # Here exercise CAS ordering and assert both health admission points.
+    health=types.ModuleType("operational_payment_refresh_health_gate")
+    health.require_current_refresh_health=AsyncMock(return_value=True)
     modules={
         "operational_balance_store":store,"operational_balance_service":service,
         "salla_integration":package,"salla_integration.webhook_order_sync":salla,
         "operational_provider_history":history,
+        "operational_payment_refresh_health_gate":health,
     }
     return snapshot,db,calls,modules
 
@@ -86,6 +91,8 @@ class PaidPageCASWriterTests(unittest.TestCase):
         self.assertEqual(calls["commits"],1)
         self.assertEqual(calls["audits"],1)
         self.assertGreaterEqual(calls["reads"],2)
+        self.assertEqual(modules["operational_payment_refresh_health_gate"]
+                         .require_current_refresh_health.await_count, 2)
 
     def test_merchant_changed_blocks_before_db_write(self):
         snapshot,db,calls,modules=fake_context(owner="other-owner")
