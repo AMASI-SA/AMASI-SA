@@ -18,6 +18,14 @@ class CaptureAdapterTests(unittest.TestCase):
         self.assertEqual(result[0].transaction_id, "a")
         self.assertEqual(decide(result[0]).action, Decision.POST)
 
+    def test_equivalent_capture_timezones_are_canonicalized(self):
+        first = payment_events_from_normalized("order1",
+            source([capture(stamp="2026-11-24T12:30:00+03:00")]))[0]
+        second = payment_events_from_normalized("order1",
+            source([capture(stamp="2026-11-24T09:30:00Z")]))[0]
+        self.assertEqual(first.captured_at, "2026-11-24T09:30:00+00:00")
+        self.assertEqual(first.captured_at, second.captured_at)
+
     def test_two_installments_same_order(self):
         events = payment_events_from_normalized("order1",
             source([capture("a", "300.00"), capture("b", "150.00")]))
