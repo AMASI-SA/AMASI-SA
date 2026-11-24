@@ -67,7 +67,7 @@ def require_salla_current(row):
     return True
 
 
-async def require_current_refresh_health(db, owner, state, *, at):
+async def require_current_refresh_health(db, owner, state, *, at, event_proof_bound=False):
     """Run the same owner-scoped read at preparation and immediately before CAS."""
     from operational_balance_freshness import HEALTH
     from operational_balance_store import fail
@@ -83,6 +83,31 @@ async def require_current_refresh_health(db, owner, state, *, at):
         from operational_source_freshness import _salla, _safe
         source_now = _stamp(at)
         salla = await _safe("salla", lambda: _salla(db, owner, source_now))
-        require_salla_current(salla)
+        if salla.get("state") == "current" and salla.get("code") == "salla_source_current":
+            require_salla_current(salla)
+        else:
+            # Global daily modified-history coverage is structurally partial
+            # in Salla's list API. An independently verified, signed NEW
+            # payment may use a separate, explicit opt-in gate. Technical
+            # errors, bad source clocks and historical orders stay blocked.
+            from operational_salla_event_source_gate import (
+                EventSourceHold, require_verified_event_source,
+            )
+            if event_proof_bound is not True:
+                raise RefreshHealthHold("payment_salla_source_unverified")
+            from operational_salla_schedule_health_routes import FIELDS
+            import asyncio
+            import pymongo
+            try:
+                with pymongo.timeout(1.5):
+                    async with asyncio.timeout(2):
+                        row = await db["salla_scheduled_reconciliation"].find_one(
+                            {"_id": owner}, FIELDS, max_time_ms=1500)
+                require_verified_event_source(
+                    row, now=source_now, event_proof_bound=event_proof_bound)
+            except EventSourceHold as exc:
+                raise RefreshHealthHold(str(exc)) from None
+            except (TimeoutError, ValueError, TypeError):
+                raise RefreshHealthHold("payment_salla_event_source_unavailable") from None
     except RefreshHealthHold as exc:
         fail(str(exc), "نتيجة تحديث المصادر غير سليمة؛ أوقف الترحيل المالي حتى نجاح التحديث", 409)
