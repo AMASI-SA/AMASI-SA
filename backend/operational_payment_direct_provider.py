@@ -82,7 +82,11 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
         raise InitialCaptureHold("initial_capture_partial_requires_review")
     captured_at, at = _instant(payment.get("captured_at")), _instant(as_of)
     started_at = _instant(state["started_at"])
-    if captured_at < started_at or captured_at > at:
+    created_at = _instant(normalized.get("order_created_at"))
+    # Exactly the canonical reconciliation engine's effective order-date
+    # constraint. A capture cannot predate the original order, and a pre-
+    # cutover order is NOT a new eligible initial receipt.
+    if not started_at < created_at <= captured_at <= at:
         raise InitialCaptureHold("initial_capture_outside_operational_period")
     engine = state.get("engine")
     if not isinstance(engine, dict) or not engine.get("as_of"):
