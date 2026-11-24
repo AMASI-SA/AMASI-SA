@@ -1487,5 +1487,7 @@ def make_operational_balance_router(db, current_user):
     attach_payment_integrity_routes(router, db, current_user, scope)
     from operational_salla_schedule_health_routes import attach_salla_schedule_diagnostics
     attach_salla_schedule_diagnostics(router, db, current_user, scope)
+    from operational_payment_native_capture_routes import attach_native_capture_preview
+    attach_native_capture_preview(router, db, current_user, scope)
     return router
 
