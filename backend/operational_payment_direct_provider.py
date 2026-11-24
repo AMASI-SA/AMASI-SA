@@ -100,6 +100,18 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
     if not all(isinstance(unit, dict) for unit in (facts, obligations, reports, fee_inputs)):
         raise InitialCaptureHold("canonical_ledger_source_incomplete")
     obligation_key, capture_key = "provider:" + order_id, "capture:" + native_ref
+    # A native transaction identity may already belong to a different Salla
+    # order's cumulative paid-page evidence, even if its dated capture fact
+    # has not been written yet. The reverse path is checked by the page
+    # adapter; apply the same global owner-level guard to dated captures.
+    for fact_key, fact_value in facts.items():
+        if (isinstance(fact_key, str)
+                and fact_key.startswith("provider_order_balance:")
+                and isinstance(fact_value, dict)
+                and fact_value.get("transaction_reference") == native_ref
+                and (str(fact_value.get("order_id")) != order_id
+                     or fact_value.get("provider") != provider)):
+            raise InitialCaptureHold("capture_reference_reused")
     old = facts.get(capture_key)
     if old is not None:
         if (isinstance(old, dict) and str(old.get("order_id")) == order_id
