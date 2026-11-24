@@ -47,6 +47,15 @@ class PaymentReviewInboxTests(unittest.TestCase):
         self.assertEqual(data["reason_codes"], ["provider_payment_method_conflict"])
         self.assertNotIn("secret", str(data))
 
+    def test_paid_event_with_unknown_platform_is_review_only(self):
+        record = self.record(provider="unknown",
+                             reasons=["provider_payment_method_conflict"])
+        self.assertEqual(record["provider"], "unknown")
+        state = {"status": "active"}
+        result = queue_review_in_state(state, record, "2026-11-24T20:00:00Z")
+        self.assertEqual(result["status"], "pending_evidence")
+        self.assertNotIn("movements", state)
+
     def test_unrecognized_provider_fails_closed(self):
         with self.assertRaises(ValueError):
             self.record(provider="cash_on_delivery")
