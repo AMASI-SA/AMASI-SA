@@ -242,6 +242,52 @@ def test_attempt_writes_are_diagnostic_only_and_fenced_against_late_completion()
     asyncio.run(scenario())
 
 
+def test_failed_refresh_persists_bounded_trace_and_reader_sanitizes_it():
+    async def scenario():
+        db = DB()
+        attempt = await health.begin_attempt(db, OWNER, now=NOW - timedelta(minutes=3))
+        detail = {"code": "operational_refresh_timeout",
+                  "stage_timings": [{"stage":"source_orders","duration_ms":81000,
+                                     "outcome":"cancelled","customer_id":"secret-customer"}],
+                  "primary_orders_reads": [],
+                  "raw_error":"secret-file-path"}
+        await health.finish_attempt(
+            db, OWNER, attempt, error=HTTPException(408, detail=detail), now=NOW)
+        saved = db.data[health.HEALTH][OWNER]
+        assert saved["last_failure"]["code"] == "operational_refresh_timeout"
+        assert saved["last_failure_trace"]["stage_timings"] == [
+            {"stage":"source_orders","duration_ms":81000,"outcome":"cancelled"}]
+        assert "secret" not in str(saved)
+        output = compose(record=saved)
+        assert output["last_attempt"]["diagnostics"]["stage_timings"] == [
+            {"stage":"source_orders","duration_ms":81000,"outcome":"cancelled"}]
+        assert "secret" not in str(output)
+        assert {name for name, *_ in db.writes} == {health.HEALTH}
+    asyncio.run(scenario())
+
+
+def test_success_clears_failed_refresh_trace():
+    async def scenario():
+        db = DB()
+        first = await health.begin_attempt(db, OWNER, now=NOW-timedelta(minutes=3))
+        await health.finish_attempt(
+            db, OWNER, first, error=HTTPException(408, detail={
+                "code":"operational_refresh_timeout", "stage_timings":[{
+                    "stage":"source_primary_reads","duration_ms":85000,"outcome":"failed"}]
+            }), now=NOW-timedelta(minutes=2))
+        second = await health.begin_attempt(db, OWNER, now=NOW-timedelta(minutes=1))
+        await health.finish_attempt(
+            db, OWNER, second,
+            result={"status":"refreshed","revision":9,"as_of":at()},
+            now=NOW)
+        saved = db.data[health.HEALTH][OWNER]
+        assert saved["last_failure_trace"] is None
+        assert saved["last_attempt"]["outcome"] == "success"
+        output = compose(record=saved)
+        assert "diagnostics" not in output["last_attempt"]
+    asyncio.run(scenario())
+
+
 def test_late_older_start_cannot_overwrite_new_attempt():
     async def scenario():
         db = DB()
