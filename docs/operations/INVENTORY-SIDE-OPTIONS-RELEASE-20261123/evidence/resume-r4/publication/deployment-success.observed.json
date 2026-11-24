@@ -1,0 +1,20 @@
+{
+  "observed_at_utc": "2026-11-24 00:07:03 UTC",
+  "project": "salla-analytics",
+  "success_event_text": "Deployment finished Nov 24, 03:03 AM",
+  "event_display_timezone": "Asia/Riyadh",
+  "event_container_id": "d0561df2-7853-517d-bea1-eaeba2390333",
+  "matches_started_event": true,
+  "previous_completion_text": "Deployment finished Nov 23, 08:29 PM",
+  "newest_published_version": "8a74712",
+  "newest_version_relative_time_display": "1 min ago",
+  "publish_click_count": 1,
+  "status_after": "Republish available; new version in Published versions",
+  "browser_renderer_crash_recovered_by_reload": true,
+  "browsing_issue_id": "a2af0b05-1020-4ed2-be52-978ce8be776d",
+  "production_verifier_pid": 69494,
+  "production_verification_status": "RUNNING",
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "deployment_git_sha": "5cfaac21a1775a0d0761d05aa571f94dbfc02d32",
+  "provenance": "Observed platform UI and actual-host terminal; provider version label is distinct from repository deployment commit."
+}
