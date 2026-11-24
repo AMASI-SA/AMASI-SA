@@ -20,6 +20,8 @@ FIELDS = {
     "last_result.incomplete_count": 1,
     "last_result.truncated": 1,
     "last_result.coverage_complete": 1,
+    "last_result.coverage_reason": 1,
+    "last_result.discovery": 1,
 }
 
 
