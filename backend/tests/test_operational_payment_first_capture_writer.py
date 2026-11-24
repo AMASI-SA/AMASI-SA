@@ -71,10 +71,13 @@ class WriterTests(unittest.TestCase):
         salla._resolve_user_id = AsyncMock(return_value="merchant1")
         package = types.ModuleType("salla_integration")
         package.__path__ = []
+        health = types.ModuleType("operational_payment_refresh_health_gate")
+        health.require_current_refresh_health = AsyncMock(return_value=True)
         with patch.dict("os.environ", {POST_FLAG:"1"}):
             with patch.dict(sys.modules, {
                 "operational_balance_store":store, "operational_balance_service":service,
                 "salla_integration":package, "salla_integration.webhook_order_sync":salla,
+                "operational_payment_refresh_health_gate": health,
             }):
                 result = asyncio.run(post_first_salla_capture(
                     None, "merchant1", "store1", "order1", "10001",
@@ -88,6 +91,7 @@ class WriterTests(unittest.TestCase):
         self.assertEqual(len(tracked["audits"]),1)
         self.assertEqual(salla._resolve_user_id.await_count,2)
         service.active_gate.assert_awaited_once()
+        self.assertEqual(health.require_current_refresh_health.await_count, 2)
 
     def test_wrong_merchant_never_persists(self):
         snapshot, native = staged()
@@ -102,10 +106,13 @@ class WriterTests(unittest.TestCase):
         salla._resolve_user_id = AsyncMock(return_value="another_owner")
         package = types.ModuleType("salla_integration")
         package.__path__ = []
+        health = types.ModuleType("operational_payment_refresh_health_gate")
+        health.require_current_refresh_health = AsyncMock(return_value=True)
         with patch.dict("os.environ", {POST_FLAG:"1"}):
             with patch.dict(sys.modules, {
                 "operational_balance_store":store, "operational_balance_service":service,
                 "salla_integration":package, "salla_integration.webhook_order_sync":salla,
+                "operational_payment_refresh_health_gate": health,
             }):
                 with self.assertRaisesRegex(InitialCaptureHold, "owner_changed"):
                     asyncio.run(post_first_salla_capture(
