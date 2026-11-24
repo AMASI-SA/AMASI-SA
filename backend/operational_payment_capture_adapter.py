@@ -9,7 +9,7 @@ operational state and origin scope must be checked at a CAS posting boundary.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from operational_payment_event_policy import Evidence, Kind, PaymentEvent
@@ -77,12 +77,12 @@ def payment_events_from_normalized(order_id, normalized, diagnostics=()):
             raise CaptureEvidenceError("capture_reference_repeated")
         refs.add(ref)
         value = _money(capture.get("amount"))
-        _timestamp(capture.get("captured_at"))
+        captured_at = _timestamp(capture.get("captured_at")).astimezone(timezone.utc).isoformat()
         aggregate += Decimal(value)
         if aggregate > Decimal(gross):
             raise CaptureEvidenceError("capture_exceeds_original_total")
         out.append(PaymentEvent(order_id=order_id, provider=provider, amount=value,
                                 kind=Kind.PAYMENT, evidence=Evidence.PROVIDER_SUCCESS,
                                 transaction_id=ref, currency=currency,
-                                captured_at=capture["captured_at"]))
+                                captured_at=captured_at))
     return out
