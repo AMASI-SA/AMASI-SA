@@ -5,6 +5,9 @@ on:
     paths:
       - "backend/operational_payment_event_policy.py"
       - "backend/tests/test_operational_payment_event_policy.py"
+      - "backend/tests/test_operational_source_validation_diagnostics.py"
+      - "backend/operational_source_diagnostics.py"
+      - "backend/operational_balance_service.py"
       - ".github/workflows/operational-payment-event-policy.yml"
   workflow_dispatch:
 
@@ -19,4 +22,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run isolated payment policy tests
         working-directory: backend
-        run: python3 -m unittest discover -s tests -p 'test_operational_payment_event_policy.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_operational_payment_event_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_source_validation_diagnostics.py' -v
