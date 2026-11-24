@@ -81,6 +81,51 @@ class SallaEventCaptureTests(unittest.TestCase):
                     self.assertTrue(asyncio.run(stage_verified_payment_update(None, source_item())))
         self.assertEqual(calls, [("merchant-1", "o1", "event-sha-1")])
 
+    def test_paid_without_reference_enters_review_not_money(self):
+        source = source_item()
+        source["event"]["data"]["payment"] = {"status": "paid"}
+        review = types.ModuleType("operational_payment_evidence_review")
+        review.stage_unverified_review = AsyncMock(return_value={"status": "pending_evidence"})
+        money = types.ModuleType("operational_payment_evidence_inbox")
+        money.stage_normalized_captures = AsyncMock()
+        with patch.dict(os.environ, {FLAG: "1"}):
+            with patch("operational_payment_salla_event_capture.normalized_webhook_capture",
+                       return_value=("o1", {"provider":"tabby", "captures":[]},
+                                     [{"code":"provider_capture_evidence_incomplete",
+                                       "provider":"tabby"}])):
+                with patch.dict(sys.modules, {
+                    "operational_payment_evidence_review":review,
+                    "operational_payment_evidence_inbox":money,
+                }):
+                    self.assertTrue(asyncio.run(stage_verified_payment_update(None, source)))
+        review.stage_unverified_review.assert_awaited_once()
+        money.stage_normalized_captures.assert_not_awaited()
+
+    def test_unpaid_order_creation_does_not_create_review_noise(self):
+        source = source_item()
+        source["event"]["event"] = "order.created"
+        review = types.ModuleType("operational_payment_evidence_review")
+        review.stage_unverified_review = AsyncMock()
+        with patch.dict(os.environ, {FLAG: "1"}):
+            with patch("operational_payment_salla_event_capture.normalized_webhook_capture",
+                       return_value=("o1", {"provider":"tabby","captures":[]}, [])):
+                with patch.dict(sys.modules, {"operational_payment_evidence_review":review}):
+                    self.assertTrue(asyncio.run(stage_verified_payment_update(None, source)))
+        review.stage_unverified_review.assert_not_awaited()
+
+    def test_review_staging_failure_keeps_retry(self):
+        source = source_item()
+        source["event"]["data"]["payment"] = {"status": "paid"}
+        review = types.ModuleType("operational_payment_evidence_review")
+        review.stage_unverified_review = AsyncMock(side_effect=RuntimeError("db unavailable"))
+        with patch.dict(os.environ, {FLAG:"1"}):
+            with patch("operational_payment_salla_event_capture.normalized_webhook_capture",
+                       return_value=("o1", {"provider":"tabby","captures":[]},
+                                     [{"code":"provider_capture_evidence_incomplete",
+                                       "provider":"tabby"}])):
+                with patch.dict(sys.modules, {"operational_payment_evidence_review":review}):
+                    self.assertFalse(asyncio.run(stage_verified_payment_update(None, source)))
+
     def test_failed_staging_retries(self):
         stub = types.ModuleType("operational_payment_evidence_inbox")
         async def stage(*args, **kwargs):
