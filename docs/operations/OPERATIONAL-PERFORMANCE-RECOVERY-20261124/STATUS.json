@@ -1,15 +1,19 @@
 {
   "task_id": "OPERATIONAL-PERFORMANCE-RECOVERY-20261124",
-  "status": "WIP: first cost-preview source slice; runtime incident remains unverified",
+  "status": "WIP: two reviewed source slices checkpointed; final release verification is root-owned",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-performance-recovery-20261124",
   "source_base_commit": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
   "checkpoint_identity": "The Draft PR checkpoint records the exact full commit SHA containing this file.",
-  "scope": "Build the existing conservative cost catalogue index once per actual open-cost projection, then reuse it for historical item lookups. Prices, evidence validation, owner reads and financial semantics stay in their existing paths.",
+  "scope": "Reuse the existing catalogue index per actual open-cost projection, and index capture/refund routing only within one immutable collect_sources source_orders attempt. Original monetary validators, dates, proof hashes, owner reads and financial writes remain unchanged.",
   "changed_files": [
     "backend/operational_open_cost_exposure.py",
     "backend/tests/test_operational_balance_cost_exposure_catalog_index.py",
-    "docs/operations/OPERATIONAL-PERFORMANCE-RECOVERY-20261124/STATUS.json"
+    "docs/operations/OPERATIONAL-PERFORMANCE-RECOVERY-20261124/STATUS.json",
+    "backend/operational_retained_payment_index.py",
+    "backend/operational_customer_payment_basis.py",
+    "backend/operational_balance_sources.py",
+    "backend/tests/test_operational_balance_retained_payment_index.py"
   ],
   "verification": [
     {
@@ -37,6 +41,27 @@
       "kind": "whitespace",
       "command": "git diff --check",
       "exit_code": 0
+    },
+    {
+      "kind": "retained_affected",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_retained_payment_index.py backend/tests/test_operational_customer_payment_basis.py backend/tests/test_operational_customer_adjustments.py backend/tests/test_operational_customer_provider_projection.py backend/tests/test_operational_balance_sources.py backend/tests/test_operational_balance_refund_capture_basis.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_refresh_parallel_profit.py --tb=short",
+      "exit_code": 0,
+      "result": "246 passed in 18.05 seconds before adding seven pure identity-routing cases; no runtime changes followed."
+    },
+    {
+      "kind": "retained_final_focused",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_retained_payment_index.py --tb=short",
+      "exit_code": 0,
+      "result": "77 passed in 3.45 seconds, including the seven final None/empty/0/False/BSON Int64 identity cases."
+    },
+    {
+      "kind": "retained_independent_review",
+      "exit_code": 0,
+      "result": "Independent reviewer ran retained_payment_index, customer_payment_basis and balance_sources: 151 passed in 4.70 seconds, no skips. No functional blocker found; final commit/tree identity confirmation follows in the Draft PR."
+    },
+    {
+      "kind": "retained_deterministic_work",
+      "result": "At 64 orders: indexed build, evaluation and final validation executed 31003 traced source-line events versus 250313 legacy events. At 128: 61947 versus 971657. Full results including proof hashes match. This is synthetic operation-count evidence, not production latency."
     }
   ],
   "coverage": [
@@ -45,18 +70,36 @@
     "Duplicate resources and bindings, foreign cost currency and malformed selected prices",
     "Custom mappings, complex and oversized identities retain legacy fallback and lazy validation",
     "Fresh projection observes replaced catalogue and prices",
-    "Foreign-owner rows do not affect the result; input state and source rows remain unchanged"
+    "Foreign-owner rows do not affect the result; input state and source rows remain unchanged",
+    "Retained capture/refund ordering, duplicates and exact str(order_id) semantics without financial precomputation",
+    "Full basis/observation output, Decimal flags, source dates and proof-hash parity",
+    "Unsupported containers, custom keys/rows and identities retain the original lazy fallback",
+    "Whole source collection, reconciliation and idempotent replay match legacy output",
+    "Same-size key replacement, moved order membership, row/kind/value replacement and state/revision/owner changes fail the final source_orders boundary",
+    "Cancellation joins preparation and closes the private index; closed or different-snapshot use takes the legacy path"
   ],
-  "ci_state": "Pending exact task-head CI after Draft PR creation",
-  "review_state": "Independent local review passed; commit identity confirmation pending",
+  "ci_state": "First source checkpoint CI passed. Final retained slice still requires exact immutable release-head CI; root owns the new source/intent freeze.",
+  "review_state": "Both runtime slices independently reviewed and tested with no functional blocker; exact final checkpoint identity is recorded in the Draft PR.",
   "merge_state": "Not merged; root integrator owns all integration decisions",
   "release_state": "No intent, guard lease, publication or deployment created by this task",
   "production_changed": false,
   "limitations": [
-    "This removes a demonstrated repeated catalogue lookup cost; it is not proof of the cause or resolution of the observed approximately 24-second cost-report failure.",
-    "No production timing, response status or exception was captured by this implementation task.",
-    "No snapshot clone, archive, retained-payment-basis, reconciliation or timeout change is included.",
-    "Issue 1006 has reached its comment limit; this task status and the Draft PR provide the recoverable checkpoint."
+    "Neither change establishes the cause or resolution of the observed roughly 24-second cost-report failure or 85-second scheduler failure; no post-change production timing is available.",
+    "The production count of retained-basis eligible orders remains unknown. The scoped index adds two linear fact passes per supported collection attempt, including attempts without eligible orders.",
+    "Retained indexing deliberately falls back for unsupported source shapes. No database reads are retried and no financial evidence is omitted.",
+    "A changed indexed snapshot aborts collect_sources before reconciliation through the existing source-setup failure path; it does not silently reuse or refresh an observation.",
+    "No snapshot clone, archive, reconciliation, timeout, permission or persistent-cache change is included.",
+    "Issue 1006 has reached its comment limit; this task status and Draft PR 2109 provide the recoverable checkpoint."
   ],
-  "next_safe_action": "Require exact-head Operational Balance CI, inspect the real-Mongo HTTP results and independent commit review, then hand the isolated source to root. Assess the retained-basis lookup separately and communicate its proposed scope before any further implementation."
+  "next_safe_action": "Root verifies the exact final source SHA/tree and review, waits for the prior release lease to close, then freezes a fresh source/intent pair and requires all exact-B CI before integration/publication. This agent stops source edits after the checkpoint and performs no release action.",
+  "verified_checkpoints": [
+    {
+      "source_commit": "ca5fcf1e094a99d2db4abf8d44a70f8e02408d64",
+      "tree": "22d55dcd6ddb19e20826f3f3167d98211d5a6af7",
+      "scope": "First catalogue-index slice only",
+      "ci_run": 45430045008,
+      "backend_job": 138572511203,
+      "result": "7466 tests plus 151 subtests passed; demand 106 passed; shipping 16 tests plus 18 subtests passed. Required no-skip/no-failure gates and all four Operational Balance jobs succeeded. Existing real-Mongo cost HTTP module was included by test_operational_balance*.py."
+    }
+  ]
 }
