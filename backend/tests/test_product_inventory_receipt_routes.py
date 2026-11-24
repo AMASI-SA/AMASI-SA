@@ -173,6 +173,8 @@ def test_location_suggestions_prefer_low_quantity_same_configuration():
                 "purpose": "permanent_storage",
                 "state": "occupied",
                 "code": "BIN-1",
+                "display_code": "121",
+                "barcode_value": "WH01-S01-C01-002",
                 "max_items": 20,
                 "occupancy": {
                     "total_quantity": 2,
@@ -193,6 +195,9 @@ def test_location_suggestions_prefer_low_quantity_same_configuration():
         "empty",
     ]
     assert result[0]["recommendation"] == "same_configuration"
+    assert result[0]["display_code"] == "121"
+    assert result[0]["code"] == "BIN-1"
+    assert result[0]["barcode_value"] == "WH01-S01-C01-002"
     assert result[2]["recommendation"] == "empty_location"
 
 

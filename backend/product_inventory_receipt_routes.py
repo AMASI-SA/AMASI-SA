@@ -259,6 +259,7 @@ def rank_purchase_receiving_locations(
             "cabinet_name": location.get("cabinet_name"),
             "cabinet_code": location.get("cabinet_code"),
             "code": location.get("code"),
+            "display_code": location.get("display_code"),
             "barcode_value": (
                 location.get("barcode_value") or location.get("code")
             ),
@@ -712,6 +713,7 @@ def make_product_inventory_receipt_router(
                 "section_id": 1,
                 "code": 1,
                 "barcode_value": 1,
+                "display_code": 1,
                 "state": 1,
                 "purpose": 1,
                 "row": 1,
@@ -981,6 +983,7 @@ def make_product_inventory_receipt_router(
                 "section_id": 1,
                 "code": 1,
                 "barcode_value": 1,
+                "display_code": 1,
                 "state": 1,
                 "purpose": 1,
                 "row": 1,

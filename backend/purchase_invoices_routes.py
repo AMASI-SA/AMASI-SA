@@ -167,12 +167,20 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
                       for r in resources if component_is_active(r) and r.get("kind") != "service"]
         categories = await db.mezan_component_categories_v2.find({"user_id": owner}, {"_id": 0, "id": 1, "name": 1}).to_list(10001)
         cabinets = {c["id"]: c for c in await db.warehouse_locations_cabinets.find({"user_id": owner}).to_list(10001)}
+        warehouses = {row["id"]: row for row in await db.warehouse_locations_warehouses.find(
+            {"user_id": owner}, {"_id": 0, "id": 1, "name": 1, "code": 1},
+        ).to_list(10001) if row.get("id")}
         locations = []
         for loc in await db.warehouse_locations.find({"user_id": owner, "state": {"$ne": "disabled"}}).to_list(20001):
             if (loc.get("purpose") or cabinets.get(loc.get("cabinet_id"), {}).get("purpose")) != "permanent_storage":
                 continue
             if loc.get("warehouse_id") and _warehouse_allowed(context, [loc["warehouse_id"]]):
-                locations.append({"id": loc["id"], "code": loc.get("code"), "barcode": loc.get("barcode_value") or loc.get("code"), "warehouse_id": loc["warehouse_id"]})
+                warehouse = warehouses.get(loc["warehouse_id"], {})
+                locations.append({
+                    "id": loc["id"], "code": loc.get("code"), "display_code": loc.get("display_code"),
+                    "barcode": loc.get("barcode_value") or loc.get("code"), "warehouse_id": loc["warehouse_id"],
+                    "warehouse_name": warehouse.get("name") or warehouse.get("code") or loc["warehouse_id"],
+                })
         _, mappings = await approved_account_mappings(db, owner)
         identities = []
         for mapping in mappings["supplier"]:
