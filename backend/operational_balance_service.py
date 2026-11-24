@@ -832,6 +832,12 @@ async def refresh(db, owner, *, clock=None, ad_correction=None):
         result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
         from operational_balance_recovery_proof import FIELD as PROOF_FIELD, build_recovery_proof
         result["engine"][PROOF_FIELD] = await run_calculation(build_recovery_proof, state, result, sources, stamp)
+        # Match previously staged, verified capture evidence against the
+        # canonical provider/refund facts that THIS refresh already computed.
+        # This updates proof status only: no new obligation or money movement.
+        from operational_payment_cas_reconciliation import reconcile_staged_payment_evidence
+        with refresh_stage("payment_evidence_link"):
+            await run_calculation(reconcile_staged_payment_evidence, result)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()
