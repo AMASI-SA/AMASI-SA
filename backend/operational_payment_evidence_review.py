@@ -45,6 +45,7 @@ ALLOWED_REASONS = frozenset({
     "provider_fee_policy_ambiguous",
     "provider_fee_projection_invalid",
     "capture_identity_conflict",
+    "capture_manual_collection_overlap",
     "historical_page_requires_reconciliation",
     "preexisting_order_provider_effect",
     "native_capture_already_recognized",
