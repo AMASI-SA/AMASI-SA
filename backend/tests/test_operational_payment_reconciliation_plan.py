@@ -1,7 +1,7 @@
 """Three-phase operational payment reconciliation is read-only and fail-closed."""
 import unittest
 from operational_payment_event_policy import Kind, Evidence, PaymentEvent
-from operational_payment_reconciliation_plan import ReconciliationRow, plan
+from operational_payment_reconciliation_plan import ReconciliationRow, plan, exception_summary
 
 
 def item(order="1001", provider="tabby", transaction="t1", amount="300.00",
@@ -73,6 +73,19 @@ class ReconciliationPlanTests(unittest.TestCase):
     def test_historical_opening_overlap_blocked(self):
         result = plan([ReconciliationRow(item(), 3, included_in_opening=True)])
         self.assertEqual(result[0].status, "requires_reconciliation")
+
+    def test_daily_exception_counts_are_private(self):
+        actions = plan([
+            ReconciliationRow(item(), 1),
+            ReconciliationRow(item(transaction="missing", evidence=Evidence.UNVERIFIED), 2),
+            ReconciliationRow(item(transaction="old"), 3, included_in_opening=True),
+        ])
+        result = exception_summary(actions)
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(result["requires_review"], 2)
+        self.assertEqual(result["by_phase"][1]["eligible_candidate"], 1)
+        self.assertNotIn("1001", str(result))
+        self.assertNotIn("300.00", str(result))
 
     def test_invalid_phase_rejected(self):
         with self.assertRaises(ValueError):
