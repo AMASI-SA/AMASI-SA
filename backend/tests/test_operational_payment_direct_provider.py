@@ -87,6 +87,27 @@ class DirectProviderTests(unittest.TestCase):
             post(s, order="order2")
         self.assertNotIn("provider:order2", s["engine"]["obligations"])
 
+    def test_capture_reference_already_on_another_paid_page_is_blocked(self):
+        s = state()
+        s["engine"]["facts"]["provider_order_balance:other"] = {
+            "order_id":"other", "provider":"tabby",
+            "transaction_reference":"native1", "paid":"300.00",
+        }
+        before = copy.deepcopy(s)
+        with self.assertRaisesRegex(InitialCaptureHold, "capture_reference_reused"):
+            post(s)
+        self.assertEqual(s, before)
+
+    def test_capture_reference_same_order_page_is_not_a_second_claim(self):
+        s = state()
+        s["engine"]["facts"]["provider_order_balance:order1"] = {
+            "order_id":"order1", "provider":"tabby",
+            "transaction_reference":"native1", "paid":"300.00",
+        }
+        with self.assertRaisesRegex(InitialCaptureHold, "preexisting_order_financial_effect"):
+            post(s)
+        self.assertNotIn("capture:native1",s["engine"]["facts"])
+
     def test_historical_capture_prior_to_last_refresh_denied(self):
         s = state()
         previous = normalized(captured_at="2026-11-24T20:49:00+03:00")
