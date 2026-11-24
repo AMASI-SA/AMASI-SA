@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useOptionalAuth } from '../../context/AuthContext';
 import { operationalApi as api, entityKinds, messageFor, feeIncomplete } from './api';
 import { OpeningBalances, Notice } from './OpeningBalances';
@@ -85,7 +85,7 @@ function useOperationalRead({read, onData, onError, onStart, onEnd, enabled = tr
     if (!enabled) return;
     return visibleOperationalRead(config => callbacks.current.read(config), {
       onStart: () => callbacks.current.onStart?.(),
-      onData: result => callbacks.current.onData?.(result),
+      onData: result => startTransition(() => callbacks.current.onData?.(result)),
       onError: failure => callbacks.current.onError?.(failure),
       onEnd: () => callbacks.current.onEnd?.(),
     }, lane.current);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { visibleOperationalRead } from './visibleOperationalRead';
 import { simpleBalanceError } from './simpleBalancesApi';
 
@@ -20,7 +20,14 @@ export function useBalanceRead(read, key, enabled = true, { singleAttemptTimeout
     if (!enabled) return undefined;
     const stop = visibleOperationalRead(request, {
       onStart: () => { if (current === sequence.current) setBusy(key); },
-      onData: value => { if (current === sequence.current) setResult({ key, value }); },
+      onData: value => {
+        if (current !== sequence.current) return;
+        // Keep large financial projection renders interruptible by navigation.
+        // The actor/query sequence remains authoritative for stale results.
+        startTransition(() => {
+          if (current === sequence.current) setResult({ key, value });
+        });
+      },
       onError: error => {
         if (current === sequence.current) setFailure({ key, status: error?.response?.status,
           message: error?.code === 'OPERATIONAL_VISIBLE_READ_TIMEOUT'
