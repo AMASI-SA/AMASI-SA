@@ -2,7 +2,7 @@
 
 ## Current state
 
-**HOST REHEARSAL RUNNING — frozen helper and envelope downloaded and hash-verified; original guard inactive; no lease or publish.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**HOST REHEARSAL BLOCKED BEFORE SOURCE UPDATE — owned clone passed; existing live Mongo files changed during the foreign-file check. Recovery helper under independent review.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -115,8 +115,18 @@ Next: download this commit's helper and envelope into a new owned /tmp directory
 
 ## Release checkpoint E5 — operator started
 
-Both E4 files were downloaded into owned `/tmp/mezan-cabinet-archive-operator-eziq9yqb` and independently SHA-256 checked before execution. The frozen helper is now running in root's own Terminal 1. Its stage is `/tmp/mezan-cabinet-archive-release-3yhk4dkk`; receipt is `receipt.json` within that directory. The observed original public guard result is `active:false`. Its current receipt reports RUNNING after clean expected-J and foreign-path enumeration checks; the initial full fingerprint snapshot was still in progress at this checkpoint. No lease, prepare, prepublish, publication or live data action has occurred.
+Both E4 files were downloaded into owned `/tmp/mezan-cabinet-archive-operator-ezig9yqb` and independently SHA-256 checked before execution. The frozen helper is now running in root's own Terminal 1. Its stage is `/tmp/mezan-cabinet-archive-release-3yhk4dkk`; receipt is `receipt.json` within that directory. The observed original public guard result is `active:false`. Its current receipt reports RUNNING after clean expected-J and foreign-path enumeration checks; the initial full fingerprint snapshot was still in progress at this checkpoint. No lease, prepare, prepublish, publication or live data action has occurred.
 
 The complete independent exact-D push CI interpretation is now retained as `pr2120-exact-d-push-ci-review.json` (49,836 bytes, SHA-256 `ae3c4ec285201b1dd2e746f91aac3b22e466690f8652003fe9c3bf877d2a5ef4`). All 11 checks and all three actual push workflows passed on exact D; there were no retries, manual dispatches, failures, skips or pending checks.
 
 Resume by reading the existing receipt and process first. Never start a duplicate helper or treat a partial run as a successful rehearsal. Public guard status takes the operation lock and must not be called while this helper owns it. Use read-only receipt observation from the separate root-owned Terminal 4. Root will inspect complete original adapter, foreign-preservation and capacity evidence before any lease preparation.
+
+## Release checkpoint E6 — first attempt preserved, live-service boundary identified
+
+The first operator ended **exit 2 / BLOCKED:FOREIGN_ENTRY_CHANGED** after its owned clean-clone original adapter and all frontend/package/full-proof checks passed. All 60 recorded subprocess steps passed; the outer custom foreign-record comparison rejected the later live change. The exact complete 12,379-byte receipt is retained as `host-operator-v1-blocked-receipt.json`, SHA-256 `7816922a0e82f264107c9cf0f898788176581cf997d030fe45f4d47d82cfa780`, reconstructed from the browser editor copy and cryptographically checked. Its backups list is empty and it contains no source fast-forward or canonical /app adapter step. Host HEAD remains J and the original public guard freshly reports active:false. There is no lease, publication or live cabinet mutation.
+
+Read-only metadata comparison identified size changes in the separate `.worktrees/p01-acceptance-state-20260919/mongo` diagnostic files and sibling `mongo.log`. The existing mongod process is PID96507/start106766690 with that exact dbpath and port27018; executable and command-line identities are recorded without command-line values. The log's old 19,284,522-byte prefix still matches exactly. Its actual open writable descriptor belongs to supervisord PID138/start106316697/fd30; mongod stdout/stderr are pipes. No database query, service stop/restart or foreign file write was performed. The comparison covered 193,825 records, 47 ignored roots and 432 nonignored entries; it does not prove unchanged live database bytes. Normal Git fetch/guard-lock metadata writes occurred.
+
+The writer and independent reviewer agreed a narrow recovery contract: explicitly bind only that live dbpath to the observed process and real root identities, preserve its active service while allowing its own data descendants to change, and keep the sibling log append-only with unchanged inode/mode and original prefix. All other foreign files remain exact, and all incoming-source/adapter/staging write paths must be disjoint. Original A/J/B/D, CI, guard, adapter and artifact verification remain unchanged. This is an adjustment to the external helper's live-file preservation model, not a bypass of the original release controls. The original helper/envelope/receipt remain immutable. New separate files are being implemented and must be independently reviewed, remotely saved and hash-verified before a fresh run.
+
+The actual first download directory is `/tmp/mezan-cabinet-archive-operator-ezig9yqb` (g). Earlier handwritten E5 continuation text contained a q; the current record corrects that transcription. Read `host-operator-v1-observation.json` for exact process/root/log evidence and scope. Do not restart v1, reuse the partial attempt as full rehearsal proof, or prepare a lease yet.

@@ -1,0 +1,108 @@
+{
+  "task": "INVENTORY-CABINET-ARCHIVE-20261124",
+  "attempt": 1,
+  "status": "BLOCKED",
+  "failure": "FOREIGN_ENTRY_CHANGED",
+  "operator_exit": 2,
+  "operator_sha256": "18a8cf2e09605947263999cd897ac680507c4fbbabffc0ffb4568f606ed6b703",
+  "envelope_sha256": "c67cbf86ad270185505c7cb8653e741b968a07ed917c9e9ed7762bbc0d06f37b",
+  "download_dir": "/tmp/mezan-cabinet-archive-operator-ezig9yqb",
+  "stage": "/tmp/mezan-cabinet-archive-release-3yhk4dkk",
+  "receipt_sha256": "7816922a0e82f264107c9cf0f898788176581cf997d030fe45f4d47d82cfa780",
+  "head_after": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "public_guard_after": {
+    "active": false
+  },
+  "source_fast_forward": false,
+  "backups_started": false,
+  "canonical_app_adapter_started": false,
+  "lease_created": false,
+  "publish_submitted": false,
+  "live_cabinet_mutated": false,
+  "foreign_snapshot": {
+    "nonignored_entries": 432,
+    "ignored_roots": 47,
+    "records": 193825,
+    "record_bytes": 3918439949
+  },
+  "observed_size_changes": [
+    {
+      "path": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      "before": 19284522,
+      "after": 19288881
+    },
+    {
+      "path": ".worktrees/p01-acceptance-state-20260919/mongo/diagnostic.data/metrics.2026-11-24T19-07-34Z-00000",
+      "before": 2855573,
+      "after": 3000817
+    },
+    {
+      "path": ".worktrees/p01-acceptance-state-20260919/mongo/diagnostic.data/metrics.interim",
+      "before": 42471,
+      "after": 44586
+    }
+  ],
+  "live_service": {
+    "pid": 96507,
+    "start_ticks": 106766690,
+    "dbpath": "/app/.worktrees/p01-acceptance-state-20260919/mongo",
+    "port": 27018,
+    "logpath_flag": null,
+    "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+    "executable_path": "/usr/bin/mongod",
+    "executable_identity": {
+      "device": 3145868,
+      "inode": 85851,
+      "mode": 493,
+      "uid": 0,
+      "gid": 0
+    },
+    "stdout": "pipe:[624390766]",
+    "stderr": "pipe:[624390767]"
+  },
+  "root_identities": {
+    ".worktrees": {
+      "device": 66338,
+      "inode": 394231,
+      "mode": 493,
+      "uid": 0,
+      "gid": 0
+    },
+    ".worktrees/p01-acceptance-state-20260919": {
+      "device": 66338,
+      "inode": 396081,
+      "mode": 448,
+      "uid": 0,
+      "gid": 0
+    },
+    ".worktrees/p01-acceptance-state-20260919/mongo": {
+      "device": 66338,
+      "inode": 396082,
+      "mode": 493,
+      "uid": 0,
+      "gid": 0
+    },
+    ".worktrees/p01-acceptance-state-20260919/mongo.log": {
+      "device": 66338,
+      "inode": 121637,
+      "mode": 420,
+      "uid": 0,
+      "gid": 0
+    }
+  },
+  "log_evidence": {
+    "old_prefix_bytes": 19284522,
+    "old_prefix_sha256_matches": true,
+    "writer": {
+      "pid": 138,
+      "start_ticks": 106316697,
+      "comm": "supervisord",
+      "fd": 30,
+      "path": "/app/.worktrees/p01-acceptance-state-20260919/mongo.log",
+      "flags_octal": "02402001",
+      "write_access": true
+    }
+  },
+  "interpretation": "The complete original adapter passed in the owned clone. The custom foreign-file equality gate then detected live external database/log changes before generated backups, capacity checks, source FF or canonical app adapter. This was not an approval-system rejection. No service was stopped, no database queried or changed. Normal original-guard lock/fetch Git metadata writes occurred; do not claim zero /app filesystem writes.",
+  "recovery_contract": "Keep original source/intent/release gates unchanged. A separately reviewed helper and envelope will bind the observed exact live Mongo process and directory identities; only descendants of that data directory may change under that existing service. The sibling log remains append-only with exact inode/mode and prior prefix. Every other foreign record stays exact. Reject overlaps with all operator/adapter/incoming source write targets. No service restart, database read/write, cleanup, force/reset or automatic retry."
+}
