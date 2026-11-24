@@ -278,3 +278,16 @@ Added owner-scoped capture guard against the same native transaction reference p
 Added pure `operational_payment_full_refresh_parity.compare_first_provider_capture(before, direct, recomputed, order_id, provider, reference)`. This is the proposed exact **read-only** Preview acceptance comparator for a live first dated capture after the later FULL operational source refresh. It verifies native capture fact, provider claim gross confirmed/expected, business date, party/currency/direction, fee policy identity, fee/fee-VAT/net principal fields, bank movements and opening balances unchanged, and no preexisting order claim. Returns only fixed conflict codes and **`release_verified=False`**; passing synthetic copies is not a valid production UAT. After real Preview source re-acquisition, the two independent states must compare without differences before any money feature flag can be considered.
 
 **Focused CI:** Operational Payment Event Policy PASS on code SHA `a9bb7854e15e38c511b5c82790a1c3bde06ae3b4` (run `45477504995`). Both new pure/read-source test suites plus prior policy suites passed. **No Preview deployment, live Salla transaction read, or production money write was carried out in this turn.**
+
+
+## 2026-11-24 — Real canonical reducer parity test added (verification pending)
+
+The prior `operational_payment_full_refresh_parity` tests copied a synthetic direct-CAS state into a fake "refresh" state, verifying the comparison contract but NOT the reconciliation engine. To close this gap, added `backend/tests/test_operational_payment_real_reducer_parity.py`:
+- derive the same full native dated Tabby capture with original order-created clock from one pure source fixture;
+- call `operational_payment_direct_provider.apply_first_provider_capture` on a copy of the BEFORE state;
+- **independently execute the actual `operational_balance_engine.reconcile` function** against that same BEFORE state plus the order/source fee-policy fixture, then use the existing strict comparison for native capture fact, original day, provider principal, expected, fee policy, VAT/fees and opening/movement invariants;
+- rerun the actual reducer from a direct-posted state to check that the identical capture reference is not counted twice.
+
+The isolated policy CI initially failed *before test execution* because importing `operational_balance_engine` transitively imports `operational_balance_store`, requiring FastAPI not installed in the pure standalone workflow. Test updated to load the real engine source with a test-only minimal `operational_balance_store.digest`/calculation checkpoint stub; **the engine/reconciliation implementation was NOT modified**. Latest test-only fix commit: `dba2acecbe581da027760dbb3ff802f28831d023`. No GitHub Actions result was yet available for this SHA during the latest check; **do not claim real reducer parity PASS** until the CI runner independently executes and completes it.
+
+This test uses synthetic source evidence, not actual live Mezan owner data and cannot replace Preview E2E reconciliation. All financial flags remain OFF, PR is Draft, no merge/deployment or production money changes.
