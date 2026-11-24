@@ -1,0 +1,202 @@
+{
+  "observed_at_utc": "2026-11-24T16:12:36.808168+00:00",
+  "scope": "private source-A bootstrap build, original verifier, external freeze, candidate validation only",
+  "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
+  "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+  "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
+  "branch": "hotfix/prod-snap-meta-final",
+  "steps": [
+    {
+      "step": "build",
+      "exit_code": 0,
+      "command": "REACT_APP_BACKEND_URL=https://mezansalla.com CI=false PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache MEZAN_RELEASE_BOOTSTRAP_INTENT=1 python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build:release",
+      "log": {
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-e11a2988-build.log",
+        "bytes": 71989,
+        "sha256": "3a4c29d20f797e1e6badcc88135b78ee6ca7778f1314cdbdcce94adf196f081b"
+      }
+    },
+    {
+      "step": "verify",
+      "exit_code": 0,
+      "command": "REACT_APP_BACKEND_URL=https://mezansalla.com CI=false PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache python -B scripts/frontend_release_toolchain.py exec -- python -B scripts/verify_frontend_build.py --expected-git-sha e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+      "log": {
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-e11a2988-verify.log",
+        "bytes": 134106,
+        "sha256": "0810f6f28780a8bbb961d50612b131f662d9f25a294427c3587cd99e30a41252"
+      }
+    },
+    {
+      "step": "freeze",
+      "exit_code": 0,
+      "command": "REACT_APP_BACKEND_URL=https://mezansalla.com CI=false PYTHONDONTWRITEBYTECODE=1 XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache python -B scripts/emergent_deployment_adapter.py freeze-intent --source-git-sha e11a29881c7ba1622c17912af6d06d9f6f8acb0a --source-base-git-sha 3fd7594af806615d4c53616100dd546ef7b5fe9f --branch hotfix/prod-snap-meta-final --output /workspace/scratch/021675d08c11/location-codes-release/candidate-e11a2988.json",
+      "log": {
+        "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-e11a2988-freeze.log",
+        "bytes": 1529691,
+        "sha256": "219feac8f556f2ca73c0ef5fec51a62ce3c752c81d2e17026bd6217a54fede04"
+      }
+    },
+    {
+      "step": "candidate_validate",
+      "exit_code": 0,
+      "method": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/candidate-e11a2988.json",
+      "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+      "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
+      "result": "accepted by original validator at source A; observed tool process exit 0"
+    }
+  ],
+  "candidate": {
+    "path": "/workspace/scratch/021675d08c11/location-codes-release/candidate-e11a2988.json",
+    "bytes": 1529501,
+    "sha256": "460a55ac4f5242bd51321e9df23eba793954260be80b031815f6a42122d152c1"
+  },
+  "release_id": "rg5-f46ec42e0b8cb5f3bd757aae88f12a5023f06f3fe17cad80e4c53b042fbcb0ea",
+  "manifests": {
+    "frontend_source": {
+      "file_count": 1449,
+      "git_tree_oid": "8e6b8d76a62d50b1126e23691e1e12f2d53fb9e2",
+      "scope": "git_head_frontend_tree_v1",
+      "tree_sha256": "ea368f664612201f7e62c6a8f286c5f6df1518ce931f81a7d744cc9f10139380"
+    },
+    "backend_runtime_source": {
+      "added_count": 1,
+      "deleted_count": 0,
+      "file_count": 1356,
+      "manifest_sha256": "ba45acb71d40223db8666557d510f047a43df252fff89dc2db42a09459c5b430",
+      "modified_count": 6,
+      "projection_tree_oid": "32e215d8e8fbb7081473059481d3f13d5ce611bc",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "7a09357b1ad27a9a257e4fe729c95cb8b571c3de",
+      "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
+      "source_base_root_tree_oid": "0e139ed1822245fd40f1b4b123cae4b3c490d9f8",
+      "source_base_scope_tree_oid": "b4ba1daa1926771ae5d803e8fffd01af98b2c148",
+      "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+      "source_root_tree_oid": "ad3c5544b91ae7fcd34f86fa5c8387cc58add075",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "d69480249e1efbd3592e7e4347d1d238a55dcd602a364eef51775994881aa106"
+    },
+    "release_control_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 328,
+      "manifest_sha256": "dc0118c67474d6ee71b9215f057659fd917192211d6497a8306622a8ae185c6a",
+      "modified_count": 0,
+      "projection_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
+      "source_base_git_sha": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
+      "source_base_root_tree_oid": "0e139ed1822245fd40f1b4b123cae4b3c490d9f8",
+      "source_base_scope_tree_oid": "11eb3442b4abcbf8f5b0bd96d7ace905175c312e",
+      "source_git_sha": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+      "source_root_tree_oid": "ad3c5544b91ae7fcd34f86fa5c8387cc58add075",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "d46ba8c755d6bedb769c4571d8ece21fcc3cbc32bfa4447220f35461259960a0"
+    }
+  },
+  "frontend_J_to_A_change_counts": {
+    "M": 8
+  },
+  "frontend_build": {
+    "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+    "build_meta": {
+      "bytes": 591784,
+      "path": "build-meta.json",
+      "sha256": "5145b0b1a38bc0f4fc18c73e32045aaab0ef099ceafb5144238c195329f383b6"
+    },
+    "index": {
+      "bytes": 3917,
+      "path": "index.html",
+      "sha256": "3e89f49e86f330699b62a10a794736fb193e7d8f162a9e5723371bcbfdf96229"
+    },
+    "metadata_file_records": 383,
+    "build_directory_regular_files": 384,
+    "assets_count": 342,
+    "public_files_count": 381,
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    }
+  },
+  "reproducibility": {
+    "kind": "frontend_two_clean_builds_v1",
+    "passes": [
+      {
+        "ordinal": 1,
+        "build_meta": {
+          "path": "build-meta.json",
+          "bytes": 591784,
+          "sha256": "5145b0b1a38bc0f4fc18c73e32045aaab0ef099ceafb5144238c195329f383b6"
+        },
+        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6"
+      },
+      {
+        "ordinal": 2,
+        "build_meta": {
+          "path": "build-meta.json",
+          "bytes": 591784,
+          "sha256": "5145b0b1a38bc0f4fc18c73e32045aaab0ef099ceafb5144238c195329f383b6"
+        },
+        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6"
+      }
+    ],
+    "retained_pass": 2,
+    "proof_file": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "d2c83872af8601762970aad5f8ef73ba96b8917d8495cddf95da363d87044425"
+    },
+    "build_elapsed_seconds": [
+      13.97,
+      10.59
+    ],
+    "modules_per_build": 7853
+  },
+  "postconditions": {
+    "head": "e11a29881c7ba1622c17912af6d06d9f6f8acb0a",
+    "git_status_porcelain": "",
+    "git_diff_check_exit_code": 0,
+    "preflight_source_hashes_unchanged": true,
+    "tracked_intent": {
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap/release/release-intent-v5.json",
+      "bytes": 1528959,
+      "sha256": "5a54eec61ec6f15abd6192f851df46932bf87830bf6973744dbbaff40dd8d3bf"
+    },
+    "candidate_matches_freeze_stdout": true,
+    "verifier_evidence_matches_candidate": true,
+    "no_backend_runtime_identity_materialized": true,
+    "node_modules_is_symlink": false
+  },
+  "warnings": [
+    "Node emits UNDICI-EHPA experimental EnvHttpProxyAgent warning.",
+    "Vite config uses ESM syntax while loaded as CommonJS; future native config loader warning.",
+    "CSS @import ordering warning for the font import.",
+    "sidebarVisibility.js has both dynamic and static imports; dynamic import does not split its chunk.",
+    "Some chunks exceed 500 kB after minification.",
+    "Freeze and candidate validation import backend/release_identity.py, whose module-level BOOT_RELEASE_IDENTITY read logs missing ignored backend/release_identity.json. Original freeze and candidate validator both exit 0; this private A stage does not materialize runtime identity."
+  ],
+  "out_of_scope_actions_performed": [],
+  "task_id": "INVENTORY-LOCATION-CODES-20261124",
+  "state": "INTENT_B_REVIEWED_CI_RUNNING",
+  "release_branch": "codex/inventory-location-short-codes-release-20261124",
+  "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
+  "pr": 2110,
+  "intent_commit": "c8766ed16c9806d56dad0fab733537833fa73bb4",
+  "intent_tree": "a2dc14faa5d4278c52433b00a197115504073448",
+  "candidate_git_blob": "9804039303c159b0750f303ce049650e597eb612",
+  "independent_candidate_review": "PASS: original Python candidate validator, governed Node frontend membership, actual artifact and complete proof; source A and prior intent clean",
+  "host_helper": {
+    "path": "operators/pr2110_guarded_rehearsal.py",
+    "sha256": "d7b77ac6b08058fe61ca2923c5a1ed100121204b6a5cd8799705685b30d7ee94",
+    "bytes": 23356,
+    "status": "STAGED_FOR_REVIEW_NOT_EXECUTED",
+    "changes": "identity-only J and PR/task prefixes from existing PR2092 helper; reverse replacement exact"
+  },
+  "production_changed_by_this_task": false,
+  "live_cabinet_creation_or_deletion": false,
+  "own_lease_created": false,
+  "publication_authorized": true
+}
