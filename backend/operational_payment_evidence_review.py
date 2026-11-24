@@ -34,7 +34,7 @@ ALLOWED_REASONS = frozenset({
     "provider_split_payment_review_required",
     "provider_refund_execution_evidence_required",
 })
-ALLOWED_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan", "paypal"})
+ALLOWED_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan", "paypal", "unknown"})
 ALLOWED_EVENTS = frozenset({"order.created", "order.payment.updated"})
 
 
