@@ -83,5 +83,6 @@ def payment_events_from_normalized(order_id, normalized, diagnostics=()):
             raise CaptureEvidenceError("capture_exceeds_original_total")
         out.append(PaymentEvent(order_id=order_id, provider=provider, amount=value,
                                 kind=Kind.PAYMENT, evidence=Evidence.PROVIDER_SUCCESS,
-                                transaction_id=ref, currency=currency))
+                                transaction_id=ref, currency=currency,
+                                captured_at=capture["captured_at"]))
     return out
