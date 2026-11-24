@@ -78,21 +78,19 @@ class PaidPageCASWriterTests(unittest.TestCase):
                         "301556476",source_ref="event-1"))
         self.assertEqual(result["status"],"posting_disabled")
 
-    def test_authoritative_current_paid_page_posts_once(self):
+    def test_authoritative_current_paid_page_returns_review_without_money(self):
         snapshot,db,calls,modules=fake_context()
+        before=copy.deepcopy(snapshot)
         with patch.dict("os.environ", {PAGE_POST_FLAG:"1"}):
             with patch.dict(sys.modules,modules):
                 result=asyncio.run(post_first_paid_page(db,"merchant1","store1",
                     "301556476",source_ref="event-1",clock=STAMP))
-        self.assertEqual(result["status"],"posted")
-        self.assertEqual(snapshot["engine"]["obligations"]["provider:580626783"]["confirmed"],"173.99")
-        self.assertIn("provider_order_balance:580626783",snapshot["engine"]["facts"])
-        self.assertNotIn("capture:",str(snapshot["engine"]["facts"]))
-        self.assertEqual(calls["commits"],1)
-        self.assertEqual(calls["audits"],1)
-        self.assertGreaterEqual(calls["reads"],2)
-        self.assertEqual(modules["operational_payment_refresh_health_gate"]
-                         .require_current_refresh_health.await_count, 2)
+        self.assertEqual(result["status"],"review_required")
+        self.assertEqual(result["reason_code"],"paid_page_original_capture_date_required")
+        self.assertEqual(snapshot,before)
+        self.assertEqual(calls["commits"],0)
+        self.assertEqual(calls["audits"],0)
+        self.assertEqual(calls["reads"],1)
 
     def test_merchant_changed_blocks_before_db_write(self):
         snapshot,db,calls,modules=fake_context(owner="other-owner")
@@ -103,15 +101,16 @@ class PaidPageCASWriterTests(unittest.TestCase):
                         "301556476",source_ref="event-1",clock=STAMP))
         self.assertEqual(calls["commits"],0)
 
-    def test_source_version_change_prevents_cas(self):
+    def test_source_version_change_cannot_post_without_original_capture_date(self):
         snapshot,db,calls,modules=fake_context(changing_source=True)
+        before=copy.deepcopy(snapshot)
         with patch.dict("os.environ", {PAGE_POST_FLAG:"1"}):
             with patch.dict(sys.modules,modules):
-                with self.assertRaisesRegex(ValueError,"source_changed"):
-                    asyncio.run(post_first_paid_page(db,"merchant1","store1",
-                        "301556476",source_ref="event-1",clock=STAMP))
+                result=asyncio.run(post_first_paid_page(db,"merchant1","store1",
+                    "301556476",source_ref="event-1",clock=STAMP))
+        self.assertEqual(result["status"],"review_required")
+        self.assertEqual(snapshot,before)
         self.assertEqual(calls["commits"],0)
-        self.assertFalse(snapshot["engine"]["facts"])
 
     def test_stale_operational_source_blocks_money(self):
         snapshot,db,calls,modules=fake_context()
