@@ -182,7 +182,7 @@ def confirmed_paid_basis(raw, currency, total, created_at, as_of, *, owner,
 
 
 def retained_confirmed_paid_basis(raw, currency, total, created_at, as_of, *, owner,
-                                  order_number, provider_order_id, source, state, rows=()):
+                                  order_number, provider_order_id, source, state, rows=(), fact_index=None):
     """Read already recognized original money after the source reports a net.
 
     This fallback is for order lookup/review only. It neither normalizes a new
@@ -220,8 +220,10 @@ def retained_confirmed_paid_basis(raw, currency, total, created_at, as_of, *, ow
         if (not isinstance(claim, dict) or (claim.get("party_type"), claim.get("party_id"), claim.get("currency"))
                 != ("provider", provider, currency)):
             return None
+        from operational_retained_payment_index import retained_fact_rows
+        capture_rows = retained_fact_rows(fact_index, state, facts, provider_order_id, 'capture:')
         frozen = {}
-        for key, fact in facts.items():
+        for key, fact in facts.items() if capture_rows is None else capture_rows:
             if not key.startswith("capture:") or not isinstance(fact, dict) or str(fact.get("order_id")) != provider_order_id:
                 continue
             if fact.get("provider") != provider or fact.get("currency", currency) != currency:
@@ -239,7 +241,8 @@ def retained_confirmed_paid_basis(raw, currency, total, created_at, as_of, *, ow
         paid = max(sum(frozen.values(), ZERO), page_paid)
         if paid <= ZERO:
             return None
-        refunded = sum((_amount(fact["amount"], currency) for key, fact in facts.items()
+        refund_rows = retained_fact_rows(fact_index, state, facts, provider_order_id, 'refund:')
+        refunded = sum((_amount(fact["amount"], currency) for key, fact in (facts.items() if refund_rows is None else refund_rows)
             if key.startswith("refund:" + provider + ":") and isinstance(fact, dict)
             and str(fact.get("order_id")) == provider_order_id), ZERO)
         confirmed = _amount(claim.get("confirmed"), currency)
@@ -292,7 +295,7 @@ def retained_confirmed_paid_basis(raw, currency, total, created_at, as_of, *, ow
 
 
 def retained_adjustment_observation(raw, currency, total, created_at, as_of, *, owner,
-                                    order_number, provider_order_id, source, state, issues, rows=()):
+                                    order_number, provider_order_id, source, state, issues, rows=(), fact_index=None):
     """Refresh terminal zero-paid review metadata; never return a payment candidate."""
     try:
         if not issues or any(issue.get("code") not in RETAINED_ADJUSTMENT_ISSUES for issue in issues):
@@ -310,7 +313,7 @@ def retained_adjustment_observation(raw, currency, total, created_at, as_of, *, 
             return None
         basis = retained_confirmed_paid_basis(raw, currency, total, created_at, as_of,
             owner=owner, order_number=order_number, provider_order_id=provider_order_id,
-            source=source, state=state, rows=rows)
+            source=source, state=state, rows=rows, fact_index=fact_index)
         if basis is None:
             return None
         engine = state.get("engine") or {}

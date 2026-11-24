@@ -1511,7 +1511,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             operational_state=operational_state, native_matches=native_matches, cost_started_at=start)
     with refresh_stage('source_option_catalog'):
         await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
-    with refresh_stage('source_orders'):
+    from operational_retained_payment_index import RetainedPaymentFactScope
+    with refresh_stage('source_orders'), RetainedPaymentFactScope(operational_state) as retained_fact_scope:
         from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
         customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
         customer_tenders["paypal_provider_recognized"] = True
@@ -1533,6 +1534,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             data['_assignment_index'] = assignment_index
             cost_catalog_index = await prepare_in_thread(build_cost_catalog_index, data, unique_index)
             courier_hold_lookup = await prepare_in_thread(build_courier_hold_lookup, operational_state)
+            retained_fact_index = await prepare_in_thread(retained_fact_scope.build)
         service_candidates = {}
         for source in data['unified_orders']:
             await cpu_budget.checkpoint()
@@ -1801,7 +1803,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     from operational_customer_payment_basis import retained_adjustment_observation
                     observation = retained_adjustment_observation(raw, order['currency'], total, created, now,
                         owner=owner, order_number=order_number, provider_order_id=identity, source=source,
-                        state=operational_state, issues=payment_issues, rows=txn_by_order.get(order_number, ()))
+                        state=operational_state, issues=payment_issues, rows=txn_by_order.get(order_number, ()),
+                        fact_index=retained_fact_index)
                     if observation is not None:
                         # Reporting metadata only. Frozen cash/fees remain the
                         # authority; never feed the retained payment to posting.
@@ -1949,6 +1952,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     order['carrier'].update(cost=None, fee_complete=False, fee_recognition_held=True)
                     order['carrier'].pop('fee_components', None)
                 out['delivery_events'].append(order)
+        # Outside per-order recovery: a changed attempt must never return
+        # partially accepted financial observations or enter reconciliation.
+        await prepare_in_thread(retained_fact_scope.validate)
     with refresh_stage('source_invoices'):
         # An issued, approved MZ2 invoice is the sole confirmation authority.
         # Current piece state may have changed after invoicing and cannot revoke it.
