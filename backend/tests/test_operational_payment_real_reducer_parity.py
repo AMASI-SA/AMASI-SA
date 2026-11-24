@@ -73,6 +73,12 @@ class RealReducerParityTests(unittest.TestCase):
         self.assertEqual(outcome["status"],"posted")
         independent=run_actual_reconcile(
             copy.deepcopy(before),source_snapshot(payment),AT)
+        # This version marker is emitted by the REAL reducer, not by the
+        # direct CAS writer or a synthetic snapshot copy.
+        self.assertEqual(
+            independent["engine"]["order_versions"].get("order1"),
+            "2026-11-24T21:02:00+03:00",
+        )
         receipt=compare_first_provider_capture(
             before,direct,independent,order_id="order1",
             provider="tabby",reference="native1")
