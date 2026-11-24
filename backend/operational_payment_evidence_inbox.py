@@ -66,6 +66,8 @@ def queue_evidence_in_state(state: dict, record: dict, stamp: str) -> dict:
     if not isinstance(inbox, dict) or len(inbox) > MAX_INBOX:
         raise ValueError("payment_event_inbox_capacity")
     existing = inbox.get(record["key"])
+    if existing is None and len(inbox) >= MAX_INBOX:
+        raise ValueError("payment_event_inbox_capacity")
     if existing is not None:
         if _financial_identity(existing) != _financial_identity(record):
             raise ValueError("payment_event_identity_conflict")
@@ -116,5 +118,41 @@ async def stage_verified_evidence(db, owner, event: PaymentEvent, *,
         except ValueError as exc:
             fail(str(exc), "تعذر حفظ إثبات الدفع بأمان", 409)
         return result
+
+    return await mutate(db, owner, apply)
+
+def queue_verified_batch_in_state(state: dict, records: list[dict], stamp: str) -> list[dict]:
+    """Apply an all-or-nothing batch inside a single CAS candidate snapshot.
+
+    The surrounding mutate() discards the entire copied state if any record
+    conflicts. This helper must not be called on the real stored state outside
+    that copy. No financial movement or provider obligation is created.
+    """
+    if not isinstance(records, list) or not 1 <= len(records) <= 16:
+        raise ValueError("payment_event_batch_size_invalid")
+    return [queue_evidence_in_state(state, record, stamp) for record in records]
+
+
+async def stage_normalized_captures(db, owner, order_id, normalized, diagnostics,
+                                    *, source_ref: str, stamp=None) -> list[dict]:
+    """Trusted-source worker adapter; not mounted on any public route.
+
+    The caller must guarantee ownership and authenticity of normalized source
+    data. This entrypoint adds only source observations; it never posts money.
+    """
+    from operational_balance_store import fail, mutate, now
+    from operational_payment_capture_adapter import payment_events_from_normalized
+    events = payment_events_from_normalized(order_id, normalized, diagnostics)
+    if not events:
+        return []
+    records = [event_record(event, owner=owner, source="salla_native_transactions",
+                            source_ref=source_ref) for event in events]
+    stamp = stamp or now()
+
+    async def apply(state):
+        try:
+            return queue_verified_batch_in_state(state, records, stamp)
+        except ValueError as exc:
+            fail(str(exc), "تعذر حفظ إثباتات الدفع بأمان", 409)
 
     return await mutate(db, owner, apply)
