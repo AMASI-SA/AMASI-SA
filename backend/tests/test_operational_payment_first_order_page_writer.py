@@ -112,14 +112,16 @@ class PaidPageCASWriterTests(unittest.TestCase):
         self.assertEqual(snapshot,before)
         self.assertEqual(calls["commits"],0)
 
-    def test_stale_operational_source_blocks_money(self):
+    def test_stale_operational_source_may_queue_review_but_never_money(self):
         snapshot,db,calls,modules=fake_context()
         snapshot["engine"]["as_of"]="2026-11-20T10:00:00+03:00"
+        before=copy.deepcopy(snapshot)
         with patch.dict("os.environ", {PAGE_POST_FLAG:"1"}):
             with patch.dict(sys.modules,modules):
-                with self.assertRaisesRegex(ValueError,"snapshot_stale"):
-                    asyncio.run(post_first_paid_page(db,"merchant1","store1",
-                        "301556476",source_ref="event-1",clock=STAMP))
+                result=asyncio.run(post_first_paid_page(db,"merchant1","store1",
+                    "301556476",source_ref="event-1",clock=STAMP))
+        self.assertEqual(result["status"],"review_required")
+        self.assertEqual(snapshot,before)
         self.assertEqual(calls["commits"],0)
 
 
