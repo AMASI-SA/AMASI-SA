@@ -103,6 +103,8 @@ def audit_payment_snapshot(state: dict, *, max_issues: int = MAX_ISSUES) -> dict
             counts["payment_evidence_already_recognized"] += 1
         elif evidence.get("status") == "evidence_received":
             counts["payment_evidence_pending_projection"] += 1
+        elif evidence.get("status") == "conflict":
+            record("payment_evidence_conflict")
         else:
             record("payment_evidence_status_invalid")
 
