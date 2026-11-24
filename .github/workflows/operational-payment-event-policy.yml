@@ -25,6 +25,8 @@ on:
       - "backend/operational_payment_refresh_health_gate.py"
       - "backend/operational_refresh_failure_trace.py"
       - "backend/operational_balance_freshness.py"
+      - "backend/operational_remaining_bundle_sources.py"
+      - "backend/operational_demand_refresh.py"
       - "backend/tests/test_operational_refresh_failure_trace.py"
       - "backend/tests/test_operational_payment_refresh_health_gate.py"
       - "backend/tests/test_operational_payment_first_order_page_writer.py"
