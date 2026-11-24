@@ -135,7 +135,7 @@ function ReceiptForm({ order, item, inventoryCatalog, busy, onReceive }) {
         >
             <select value={locationId} onChange={(event) => { setLocationId(event.target.value); setBarcode(""); }} className={controlClass}>
                 <option value="">خانة الاحتفاظ بالمخزون</option>
-                {locations.map((row) => <option key={row.id} value={row.id}>{row.code} — حاليًا {row.current_quantity}</option>)}
+                {locations.map((row) => <option key={row.id} value={row.id}>{row.display_code || row.code} — حاليًا {row.current_quantity}</option>)}
             </select>
             <div className="relative">
                 <Barcode size={19} className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-700" />

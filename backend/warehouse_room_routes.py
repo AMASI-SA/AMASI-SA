@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from warehouse_location_labels import location_label_fields
+from warehouse_cabinet_numbering import ensure_cabinet_numbering_indexes, next_cabinet_number
 
 from warehouse_location_routes import (
     CABINETS,
@@ -130,6 +131,7 @@ class SectionCabinetCreate(BaseModel):
     width: int = Field(ge=1, le=100)
     purpose: LocationPurpose = "permanent_storage"
     max_items_per_location: int | None = Field(default=None, ge=1, le=100000)
+    location_numbering: Literal["cabinet-column-row"] | None = None
 
 
 async def _next_number(db: Any, key: str) -> int:
@@ -153,6 +155,7 @@ async def _get_branch(db: Any, *, warehouse_id: str, user_id: str) -> dict[str, 
 
 
 async def ensure_section_indexes(db: Any) -> None:
+    await ensure_cabinet_numbering_indexes(db)
     await db[ROOMS].create_index(
         [("user_id", 1), ("warehouse_id", 1), ("room_number", 1)],
         unique=True,
@@ -314,7 +317,8 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             )
         branch = await _get_branch(db, warehouse_id=section["warehouse_id"], user_id=user_id)
 
-        number = await _next_number(db, f"cabinet:{user_id}:{section['warehouse_id']}" if branch.get("location_numbering") == "cabinet-row-slot" else f"section-cabinet:{user_id}:{section_id}")
+        number = await next_cabinet_number(db, user_id=user_id, warehouse_id=section["warehouse_id"])
+        numbering = {"location_numbering": payload.location_numbering or branch.get("location_numbering", "legacy")}
         section_code = section.get("code") or f"S{int(section.get('section_number') or 0):02d}"
         cabinet_code = f"{section_code}-C{number:02d}"
         generated_payload = CabinetGenerate(
@@ -342,7 +346,7 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             "section_code": section_code,
             "code": cabinet_code,
             "cabinet_number": number,
-            "location_numbering": branch.get("location_numbering", "legacy"),
+            "location_numbering": numbering["location_numbering"],
             "name": (payload.cabinet_name or f"دولاب {number}").strip(),
             "length": payload.length,
             "width": payload.width,
@@ -357,7 +361,7 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             barcode_value = row["code"]
             locations.append({
                 **row,
-                **location_label_fields(branch, number, row),
+                **location_label_fields(numbering, number, row),
                 "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "warehouse_id": section["warehouse_id"],

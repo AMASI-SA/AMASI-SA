@@ -51,7 +51,7 @@ test('read-only delegate does not request manager occupancy or expose native wri
 
 test('country/city dependency and native branch creation payload remain intact',async()=>{
   await render();await click(button('فرع جديد'));await change(field('اسم الفرع'),'فرع الإمارات');await change(field('الدولة'),'الإمارات');expect(field('المدينة').value).toBe('دبي');await change(field('الحي'),'الحي');await change(field('الشارع'),'الشارع');
-  api.post.mockImplementation(async(path,payload)=>{branches=[...branches,{...payload,id:'wh-new',code:'WH02'}];sections=[];return {data:{id:'wh-new'}};});await submit('warehouse-branch-form');expect(api.post).toHaveBeenCalledWith('/warehouse-locations-v2/warehouses',{name:'فرع الإمارات',country:'الإمارات',city:'دبي',district:'الحي',street:'الشارع',is_primary:false,location_numbering:'cabinet-row-slot',inventory_scope:'standalone'});expect(host.querySelector('[role="dialog"]')).toBeNull();
+  api.post.mockImplementation(async(path,payload)=>{branches=[...branches,{...payload,id:'wh-new',code:'WH02'}];sections=[];return {data:{id:'wh-new'}};});await submit('warehouse-branch-form');expect(api.post).toHaveBeenCalledWith('/warehouse-locations-v2/warehouses',{name:'فرع الإمارات',country:'الإمارات',city:'دبي',district:'الحي',street:'الشارع',is_primary:false,location_numbering:'cabinet-column-row',inventory_scope:'standalone'});expect(host.querySelector('[role="dialog"]')).toBeNull();
 });
 
 test('section templates preserve mandatory cabinets and canonical capability payload',async()=>{
@@ -59,9 +59,10 @@ test('section templates preserve mandatory cabinets and canonical capability pay
   api.post.mockResolvedValue({data:{id:'sec-1'}});await submit('warehouse-section-form');expect(api.post).toHaveBeenCalledWith('/warehouse-locations-v2/sections',{warehouse_id:'wh-1',name:'قسم شحن',capabilities:['cabinets','packing','shipping_labeling'],notes:null});
 });
 
-test('cabinet form validates capacity and preserves native dimensions, purpose, limits and generated result',async()=>{
-  await render();await click(button('إضافة دولاب'));await change(field('عدد الرفوف'),'2');await change(field('خانات لكل رف'),'3');await change(field('سعة كل خانة (اختياري)'),'1.5');await submit('warehouse-cabinet-form');expect(api.post).not.toHaveBeenCalled();expect(host.querySelector('[role="alert"]').textContent).toContain('عدد صحيح');await change(field('سعة كل خانة (اختياري)'),'12');await change(field('اسم الدولاب (اختياري)'),'دولاب جديد');
-  api.post.mockImplementation(async()=>{sections=[{...sections[0],cabinets:[...sections[0].cabinets,{...cabinet,id:'cab-new',name:'دولاب جديد',cabinet_number:2,length:2,width:3,total_locations:6}]}];locationRows=[];return {data:{cabinet:{id:'cab-new'},locations_created:6}};});await submit('warehouse-cabinet-form');expect(api.post).toHaveBeenCalledWith('/warehouse-locations-v2/sections/sec-1/cabinets',{cabinet_name:'دولاب جديد',length:2,width:3,purpose:'permanent_storage',max_items_per_location:12});expect(host.querySelectorAll('.mz-wh-bin')).toHaveLength(6);expect(host.querySelector('[aria-label="تفاصيل الخانة المحددة"]').textContent).toContain('د2 / ر1 / خ1');
+test('cabinet creation in a legacy warehouse opts into short numbering and preserves chosen dimensions, purpose and limits',async()=>{
+  branches=[{...branches[0],location_numbering:'legacy'}];sections=[{...sections[0],cabinets:[{...cabinet,location_numbering:'legacy'}]}];
+  await render();await click(button('إضافة دولاب'));expect(field('عدد الصفوف').value).toBe('4');expect(field('عدد الأعمدة').value).toBe('6');expect(api.post).not.toHaveBeenCalled();await change(field('عدد الصفوف'),'2');await change(field('عدد الأعمدة'),'3');await change(field('سعة كل خانة (اختياري)'),'1.5');await submit('warehouse-cabinet-form');expect(api.post).not.toHaveBeenCalled();expect(host.querySelector('[role="alert"]').textContent).toContain('عدد صحيح');await change(field('سعة كل خانة (اختياري)'),'12');await change(field('اسم الدولاب (اختياري)'),'دولاب جديد');
+  api.post.mockImplementation(async()=>{sections=[{...sections[0],cabinets:[...sections[0].cabinets,{...cabinet,id:'cab-new',name:'دولاب جديد',cabinet_number:2,length:2,width:3,total_locations:6,location_numbering:'cabinet-column-row'}]}];locationRows=[];return {data:{cabinet:{id:'cab-new'},locations_created:6}};});await submit('warehouse-cabinet-form');expect(api.post).toHaveBeenCalledWith('/warehouse-locations-v2/sections/sec-1/cabinets',{cabinet_name:'دولاب جديد',location_numbering:'cabinet-column-row',length:2,width:3,purpose:'permanent_storage',max_items_per_location:12});expect(host.querySelectorAll('.mz-wh-bin')).toHaveLength(6);expect(host.querySelector('[aria-label="تفاصيل الخانة المحددة"]').textContent).toContain('211');
 });
 
 test('native Code39 print pack keeps immutable barcode codes',async()=>{
@@ -74,4 +75,50 @@ test('failed occupancy reader leaves unknown bins and visible error rather than 
 
 test('hierarchy failure remains an error, offers retry and does not suggest an empty warehouse',async()=>{
   const original=api.get.getMockImplementation();api.get.mockImplementation((path,...args)=>path==='/warehouse-locations/warehouses'?Promise.reject(Error('offline')):original(path,...args));await render();expect(host.textContent).toContain('تعذر تحميل الفروع');expect(host.textContent).toContain('أعد القراءة قبل إنشاء');expect(button('إضافة فرع').disabled).toBe(true);api.get.mockImplementation(original);await click(button('إعادة المحاولة'));expect(host.querySelectorAll('.mz-wh-bin')).toHaveLength(24);expect(api.post).not.toHaveBeenCalled();
+});
+
+test('new codes use cabinet then column then row, with separators for multi-digit coordinates',()=>{
+  const single={...cabinet,length:1,width:3,location_numbering:'cabinet-column-row'};
+  expect([0,1,2].map(index=>cabinetLocationLabel(single,index))).toEqual(['111','121','131']);
+  expect(cabinetLocationLabel({...single,length:3},7)).toBe('123');
+  expect(cabinetLocationLabel({...single,cabinet_number:12},1)).toBe('12-2-1');
+  expect(cabinetLocationLabel({...single,width:12},9)).toBe('1-10-1');
+  expect(cabinetLocationLabel({...single,length:12},30)).toBe('1-1-11');
+  expect(compactWarehouseLocation(single,1)).toBe('121');
+  expect(cabinetLocationLabel({...single,length:3},0,{row:3,column:2})).toBe('123');
+  expect(cabinetLocationLabel(single,0,{row:1,column:2,display_code:'121'})).toBe('121');
+});
+
+test('new map, search, details, list and print use short labels and actual barcode records',async()=>{
+  sections=[{...sections[0],cabinets:[{...cabinet,length:1,width:3,total_locations:3,location_numbering:'cabinet-column-row'}]}];
+  locationRows=[0,1,2].map(index=>({id:'new-'+index,number:index+1,row:1,column:index+1,display_code:['111','121','131'][index],
+    code:'ACTUAL-LOCATION-'+index,barcode_value:'ACTUAL-BARCODE-'+index,state:'empty',occupancy:null}));
+  await render();expect([...host.querySelectorAll('.mz-wh-bin strong')].map(n=>n.textContent)).toEqual(['111','121','131']);
+  await change(host.querySelector('[aria-label="بحث خانات المستودع"]'),'121');expect(host.querySelectorAll('.mz-wh-bin')).toHaveLength(1);
+  await click(host.querySelector('.mz-wh-bin'));expect(host.querySelector('[aria-label="تفاصيل الخانة المحددة"] h3').textContent).toBe('121');
+  await click(button('قائمة'));expect(host.querySelector('.mz-wh-bin-list strong').textContent).toBe('121');
+  const write=jest.fn(),open=jest.spyOn(window,'open').mockReturnValue({document:{write,close:jest.fn()}});
+  try{await click(button('طباعة ملصقات الدولاب'));const html=write.mock.calls[0][0];expect(html).toContain('ACTUAL-BARCODE-1');expect(html).toContain('>121</div>');expect(html).not.toContain('WH01-S01-C01-002');}
+  finally{open.mockRestore();}
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+test('delegate printing keeps the canonical full barcode when occupancy records are unavailable',async()=>{
+  sections=[{...sections[0],cabinets:[{...cabinet,length:1,width:3,total_locations:3,location_numbering:'cabinet-column-row'}]}];
+  await render('read');const write=jest.fn(),open=jest.spyOn(window,'open').mockReturnValue({document:{write,close:jest.fn()}});
+  try{await click(button('طباعة ملصقات الدولاب'));const html=write.mock.calls[0][0];expect(html).toContain('<div class="big-value">121</div>');expect(html).toContain('<div class="code">WH01-S01-C01-002</div>');expect(html).not.toContain('<div class="code">121</div>');expect(html.match(/<svg class="barcode"/g)).toHaveLength(3);}
+  finally{open.mockRestore();}
+  expect(api.get.mock.calls.some(([path])=>path==='/warehouse-locations/locations')).toBe(false);expect(api.post).not.toHaveBeenCalled();
+});
+
+test('printing uses the actual record code when no separate barcode value is present',async()=>{
+  sections=[{...sections[0],cabinets:[{...cabinet,length:1,width:1,total_locations:1,location_numbering:'cabinet-column-row'}]}];
+  locationRows=[{id:'actual-location',number:1,row:1,column:1,display_code:'111',code:'RECORDED-SCANNER-001',state:'empty'}];
+  await render();const write=jest.fn(),open=jest.spyOn(window,'open').mockReturnValue({document:{write,close:jest.fn()}});
+  try{await click(button('طباعة ملصقات الدولاب'));const html=write.mock.calls[0][0];expect(html).toContain('<div class="big-value">111</div>');expect(html).toContain('<div class="code">RECORDED-SCANNER-001</div>');expect(html).not.toContain('WH01-S01-C01-001');}
+  finally{open.mockRestore();}
+});
+
+test('opening and cancelling the numbering form does not create or remove a cabinet',async()=>{
+  await render();await click(button('إضافة دولاب'));const dialog=host.querySelector('[role="dialog"]');expect(dialog.textContent).toContain('دولاب، عمود، صف');expect(dialog.textContent).toContain('121');await change(field('عدد الصفوف'),'1');await change(field('عدد الأعمدة'),'3');await click(dialog.querySelector('[aria-label="إغلاق"]'));expect(host.querySelector('[role="dialog"]')).toBeNull();expect(host.querySelectorAll('.mz-wh-bin')).toHaveLength(24);expect(api.post).not.toHaveBeenCalled();
 });

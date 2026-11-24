@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
-from warehouse_location_labels import location_label_fields
+from warehouse_location_labels import LocationNumbering, location_label_fields
+from warehouse_cabinet_numbering import ensure_cabinet_numbering_indexes, next_cabinet_number
 
 from warehouse_location_routes import (
     CABINETS,
@@ -55,7 +56,7 @@ class WarehouseCreateV2(BaseModel):
     street: str = Field(min_length=1, max_length=180)
     is_primary: bool = False
     inventory_scope: Literal["shared", "standalone"] = "shared"
-    location_numbering: Literal["legacy", "cabinet-row-slot"] = "legacy"
+    location_numbering: LocationNumbering = "legacy"
 
 
 class CabinetCreateV2(BaseModel):
@@ -66,6 +67,7 @@ class CabinetCreateV2(BaseModel):
     width: int = Field(ge=1, le=100)
     purpose: LocationPurpose = "temporary_staging"
     max_items_per_location: int | None = Field(default=None, ge=1, le=100000)
+    location_numbering: Literal["cabinet-column-row"] | None = None
 
 
 class LocationPlacementV2(BaseModel):
@@ -92,14 +94,9 @@ async def _next_number(db: Any, *, key: str) -> int:
 
 async def ensure_v2_indexes(db: Any) -> None:
     await ensure_warehouse_location_indexes(db)
-    await db[COUNTERS].create_index("key", unique=True)
+    await ensure_cabinet_numbering_indexes(db)
     await db[WAREHOUSES].create_index(
         [("user_id", 1), ("country", 1), ("city", 1), ("warehouse_number_int", 1)],
-        unique=True,
-        sparse=True,
-    )
-    await db[CABINETS].create_index(
-        [("user_id", 1), ("warehouse_id", 1), ("cabinet_number", 1)],
         unique=True,
         sparse=True,
     )
@@ -171,7 +168,8 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
         warehouse = await db[WAREHOUSES].find_one({"id": payload.warehouse_id, "user_id": user_id, "status": "active"}, {"_id": 0})
         if not warehouse:
             raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
-        number = await _next_number(db, key=f"cabinet:{user_id}:{payload.warehouse_id}")
+        number = await next_cabinet_number(db, user_id=user_id, warehouse_id=payload.warehouse_id)
+        numbering = {"location_numbering": payload.location_numbering or warehouse.get("location_numbering", "legacy")}
         cabinet_code = str(number)
         generated_payload = CabinetGenerate(
             warehouse_id=payload.warehouse_id,
@@ -188,7 +186,7 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
         cabinet = {
             "id": cabinet_id, "user_id": user_id, "warehouse_id": payload.warehouse_id,
             "warehouse_code": warehouse["code"], "code": cabinet_code, "cabinet_number": number,
-            "location_numbering": warehouse.get("location_numbering", "legacy"),
+            "location_numbering": numbering["location_numbering"],
             "name": (payload.cabinet_name or f"دولاب {number}").strip(),
             "length": payload.length, "width": payload.width, "purpose": payload.purpose,
             "total_locations": len(generated), "status": "active", "created_at": now,
@@ -198,7 +196,7 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
         for row in generated:
             barcode_value = row["code"]
             locations.append({
-                **row, **location_label_fields(warehouse, number, row), "id": str(uuid.uuid4()), "user_id": user_id,
+                **row, **location_label_fields(numbering, number, row), "id": str(uuid.uuid4()), "user_id": user_id,
                 "warehouse_id": payload.warehouse_id, "warehouse_code": warehouse["code"],
                 "cabinet_id": cabinet_id, "cabinet_code": cabinet_code,
                 "barcode_value": barcode_value, "barcode_symbology": "CODE39",
