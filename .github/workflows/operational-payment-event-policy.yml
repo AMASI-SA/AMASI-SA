@@ -12,6 +12,8 @@ on:
       - "backend/operational_statement_auto_confirmation.py"
       - "backend/operational_payment_snapshot_integrity.py"
       - "backend/operational_payment_integrity_routes.py"
+      - "backend/operational_payment_evidence_inbox.py"
+      - "backend/tests/test_operational_payment_evidence_inbox.py"
       - "backend/operational_balance_routes.py"
       - "backend/tests/test_operational_payment_snapshot_integrity.py"
       - "backend/tests/test_operational_statement_auto_confirmation.py"
@@ -39,3 +41,4 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_capture_adapter.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_statement_auto_confirmation.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_snapshot_integrity.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_evidence_inbox.py' -v
