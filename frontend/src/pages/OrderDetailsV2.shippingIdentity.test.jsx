@@ -5,6 +5,22 @@ import { issueShippingLabel, verifyShippingLabel } from "../services/orderEngine
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 
 jest.mock("react-router-dom", () => ({}), { virtual: true });
+// Jest 27 may reuse PermissionRoute's real-router identity from another suite.
+// Select its CommonJS DOM entry for that fallback, preserving the page-level
+// virtual mock identity also used by the OrderDetails layout suite.
+jest.mock("react-router/dom", () => {
+    const { TextEncoder, TextDecoder } = require("util");
+    if (!global.TextEncoder) global.TextEncoder = TextEncoder;
+    if (!global.TextDecoder) global.TextDecoder = TextDecoder;
+    const path = require("path");
+    const packagePath = require.resolve("react-router/package.json");
+    let target = require(packagePath).exports["./dom"];
+    while (target && typeof target === "object") {
+        target = target.require || target.node || target.default;
+    }
+    if (typeof target !== "string") throw new Error("react-router/dom CommonJS export missing");
+    return require(path.resolve(path.dirname(packagePath), target));
+}, { virtual: true });
 jest.mock("@phosphor-icons/react", () => ({
     Truck: () => null, Printer: () => null, SpinnerGap: () => null,
     Copy: () => null, CheckCircle: () => null, MapPin: () => null,

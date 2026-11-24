@@ -20,6 +20,7 @@ On 2026-11-24 the owner answered `نعم موافق` to the specific request to 
 - Verified implementation source: `e34016484da1ee43409a1e61b632a30b72f81c0e`.
 - Original draft PR: [#2106](https://github.com/AMASI-SA/AMASI-SA/pull/2106). The replacement release PR is recorded in Issue #1006 and the original PR; do not merge both.
 - Documentation-only checkpoint: `f4898d018b93ab71daec0d79f40ea33d561ec40b`.
+- Refreshed-base WIP checkpoint C: `d04b5b3d3a9fef5003a93da8362bd8e749c0d55e`, sole parent J; its 18 non-status feature files are byte-identical to `f4898d`. This final source adds the shipping-test fixture correction and updated verification record after C.
 - The final source checkpoint, reviewed intent-only commit and eventual deployment evidence are recorded in this task's bounded Issue #1006 section. Do not append source or documentation changes after freezing the release source.
 
 Production advanced to updated J while the test-fixture failure was being investigated. The new production paths and this task's paths are disjoint, except that the new production release owns its updated intent. A normal merge of the old task branch would itself appear in the original guard's full-history intent-change check. Consequently the release branch starts directly at J and carries the exact reviewed numbering files plus the verified fixture correction and this continuity document. The old branch is preserved without rewriting its history. The new production intent stays byte-identical until the separate intent-only B.
@@ -52,7 +53,7 @@ At 15:51 UTC the original shared guard reported an active foreign lease for `cha
 
 - Backend: `warehouse_location_labels.py`, new `warehouse_cabinet_numbering.py`, V2 direct/section creation routes, and display-field passthrough in `purchase_invoices_routes.py`, `product_inventory_receipt_routes.py`, `accounting_onboarding_domains.py`.
 - Frontend: `WarehouseHierarchyWorkspace.jsx`, and location options in `StockPreparationOrders.jsx` and `OpeningInventoryEditor.jsx`.
-- Focused tests cover these behaviors, full scanner values, no-write cancellation, actual Mongo indexes and concurrent allocation.
+- Focused tests cover these behaviors, full scanner values, no-write cancellation, actual Mongo indexes and concurrent allocation. A narrowly scoped shipping-identity test fixture resolves the pre-existing suite-order CI blocker; it changes no application behavior or assertions.
 - No deletion/replacement API or UI, global reset modification, stocktake, reservation or financial write change.
 
 ## Verification
@@ -72,6 +73,8 @@ env -u MONGO_URL -u MONGODB_URI -u DEMAND_READ_TEST_MONGO_URI DEMAND_READ_TEST_M
 ```
 
 The fixture creates/cleans its owned loopback replica and rejects a supplied database URI. Tests cover 24 simultaneous allocations each with absent, zero, stale and higher counters; all statuses/sections; owner/warehouse isolation; the exact old unique+sparse index alongside the new partial index; legacy duplicate numbers without the old global index; both route index initializers and both HTTP creation paths. Existing rows remained unchanged.
+
+After carrying the reviewed feature onto updated production J, both selections were rerun from clean checkpoint C in `/workspace/scratch/021675d08c11/location-codes-release/bootstrap`: **56 passed in 4.83 seconds** and **10 real-Mongo tests passed in 7.82 seconds**, both exit 0. The Mongo rerun used task-owned cache/basetemp directories under `location-codes-release`; it retained the same explicit owned `mongod` and rejected external database fallback. The tracked worktree remained clean.
 
 Partial-index creation over pre-existing duplicates is tested on real Mongo because mongomock does not implement that index-creation case faithfully. An extra broader operational metadata test attempt required an absent local Mongo on port 27305 and was stopped; it is not claimed as passed or required for this narrowed scope.
 
@@ -101,7 +104,17 @@ Non-blocking build warnings concerned the environment's experimental proxy agent
 
 The original PR #2106 was not merged. At `f4898d018b93ab71daec0d79f40ea33d561ec40b`, the MZ2 A+B source integration job failed to load `OrderDetailsV2.shippingIdentity.test.jsx`: an installed `react-router-dom` package was mocked as virtual, and suite order could make Jest resolve the real ESM module through `PermissionRoute.jsx`. The run passed 490 other suites and 5,541 assertions, but its later integration steps did not run. That failure is not waived by the local feature results. The replacement release branch must pass its own applicable GitHub checks.
 
-The same ordered `PermissionRoute` then shipping-identity pair reproduced the loading error on the unchanged production baseline `80341983cf7e89145e4101b408ab68bb45f379cf`. A full local run in a different order passed 491 suites and 5,552 assertions, confirming why an isolated passing run is insufficient. A narrow test-fixture correction and explicit ordered reproduction are part of the final source checkpoint; application routing, permissions, dependencies and all shipping assertions remain unchanged. Exact corrected results are recorded below before source freeze.
+The same ordered `PermissionRoute` then shipping-identity pair reproduced the loading error on both the unchanged production baseline `80341983cf7e89145e4101b408ab68bb45f379cf` and `f4898d`. A full local run in a different order passed 491 suites and 5,552 assertions, confirming why an isolated passing run is insufficient.
+
+The final correction adds 16 fixture lines in `frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx`: it preserves the existing page-level virtual router mock and selects the package's actual CommonJS `react-router/dom` entry when a previous suite cached the real router identity. Application routing, `PermissionRoute`, `userHasPermission`, dependencies, the global resolver, all original mocks, setup and assertions remain unchanged. Removing only `virtual:true` was tested and failed two of three orderings; replacing the original mock also broke the reversed layout order. These failed alternatives were not retained.
+
+The final fixture SHA256 is `b1eec8ea9b727e9620b1d07d813472ffa31e873e10551e2d7849dcbf9203b165`. Explicit ordered regressions passed: PermissionRoute → shipping **14 tests**; shipping → layout → PermissionRoute **15 tests**; layout → PermissionRoute → shipping **15 tests**; zero skips in each. The full CI-equivalent command then passed **491/491 suites, 5,552/5,552 tests, zero skips/todos, exit 0, 262.923 seconds**:
+
+```bash
+CI=true XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache PYTHONDONTWRITEBYTECODE=1 python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --json --outputFile=/workspace/scratch/021675d08c11/location-codes-testenv/shipping-identity-current-full-after.json
+```
+
+The full run used `f4898d` plus this exact fixture. Updated J has no Frontend changes, and C's Frontend tree equals `f4898d`; the final source carries the same tested Frontend bytes. Independent review checked raw JSON/logs, all three orderings, unchanged assertions, and the final hash. `git diff --check` passed. Exact release-head CI remains required before merge; these local results do not claim that skipped post-failure GitHub integration steps already passed.
 
 The initial original `/app` guard was `active:false`, and `/app` was clean on `80341983cf7e89145e4101b408ab68bb45f379cf`; the later updated-J/foreign-lease observation above supersedes that release precondition. The authenticated live warehouse showed the existing 3-by-3 cabinet and its nine legacy locations. These are prepublication observations, not proof that the new feature is deployed.
 
@@ -119,6 +132,6 @@ Odoo documents recognizable location names, parent hierarchy and barcodes, not a
 
 ## Next safe action
 
-Read the release branch, replacement PR and final source checkpoint from this task's Issue #1006 section; verify the exact PR head and require its applicable checks. After the fixture correction is verified and the foreign publication has completed, freeze source A, build it twice under Node 22.23.2 / Yarn 1.22.22 with the reviewed backend URL, validate the candidate against complete Git ancestry, and create B changing only `release/release-intent-v5.json`. The earlier `f4898d` candidate is superseded and must not be published.
+Read the release branch, replacement PR and final source checkpoint from this task's Issue #1006 section. The fixture and combined-base feature checks are verified. After the foreign publication has completed, build fixed source A twice under Node 22.23.2 / Yarn 1.22.22 with the reviewed backend URL, validate the candidate against complete Git ancestry, and create B changing only `release/release-intent-v5.json`. Require all applicable exact-B checks before merge, including source integration and both clean-clone host rehearsals. The earlier `f4898d` candidate is superseded and must not be published.
 
 Publication is now explicitly authorized. Complete the matching clean-clone adapter rehearsals, preserve the reviewed A/B relation through merge, and refresh Production refs and the original guard before touching `/app`. Only after the matched rehearsal may the owner acquire a lease, prepublish and perform one Republish. Require a new explicit Deployment Succeeded, three exact-identity live verification probes, and final `active:false`. Preserve other conversations' leases/workspaces. Verify the new cabinet form read-only and cancel it; live cabinet creation and deletion remain deferred. No further naming/layout or publication clarification is needed.
