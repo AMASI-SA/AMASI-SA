@@ -9,7 +9,15 @@ into the same operational aggregate. It never changes engine claims or balances.
 from __future__ import annotations
 
 from decimal import Decimal
-from operational_balance_store import digest, fail, mutate, now
+from hashlib import sha256
+import json
+
+
+def digest(value):
+    # Identical deterministic hash contract to operational_balance_store.digest,
+    # but without importing the web/database runtime for pure policy tests.
+    return sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
+                             separators=(",", ":"), default=str).encode()).hexdigest()
 from operational_payment_event_policy import Decision, Kind, PaymentEvent, decide
 
 MAX_INBOX = 10000
@@ -98,6 +106,7 @@ async def stage_verified_evidence(db, owner, event: PaymentEvent, *,
     Avoid calling from public/browser routes. The operational aggregate CAS
     serializes concurrent same-owner requests. This is *not* money posting.
     """
+    from operational_balance_store import fail, mutate, now
     record = event_record(event, owner=owner, source=source, source_ref=source_ref)
     stamp = stamp or now()
 
