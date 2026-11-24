@@ -27,6 +27,18 @@ class TestOperationalPaymentEventPolicy(unittest.TestCase):
     def test_same_event_replay_has_stable_key(self):
         self.assertEqual(decide(event()).idempotency_key, decide(event()).idempotency_key)
 
+    def test_same_gateway_transaction_cannot_be_reused_for_another_order(self):
+        first = decide(event(order_id="301344207", transaction_id="txn-once"))
+        another_order = decide(event(order_id="301344208", transaction_id="txn-once"))
+        self.assertEqual(first.action, Decision.POST)
+        self.assertEqual(first.idempotency_key, another_order.idempotency_key)
+        # At persistence this must be a conflict if order identity differs.
+
+    def test_same_amount_separate_transactions_are_distinct(self):
+        a = decide(event(transaction_id="txn-a", amount="150.00"))
+        b = decide(event(transaction_id="txn-b", amount="150.00"))
+        self.assertNotEqual(a.idempotency_key, b.idempotency_key)
+
     def test_status_only_cannot_prove_payment(self):
         result = decide(event(evidence=Evidence.ORDER_STATUS_ONLY))
         self.assertEqual(result.action, Decision.PENDING_EVIDENCE)
