@@ -1,0 +1,69 @@
+{
+  "status": "STATIC_AND_ISOLATED_CHECKS_PASS_ROOT_REVIEW_PASS_EXECUTION_GATES_PENDING",
+  "basis": "Root-reported fresh host process/root/log observations after reconnect; reviewer did not access host.",
+  "upstream_evidence_sha": "0beba15679fed2ada56896a4847b0368040e8edd",
+  "upstream_sha256": "62e545a2b11520f121aebf0a985b0854134052070ff7355892fcec0f95eb72c7",
+  "helper_sha256": "d7832f19f5475912f3ebd0ba14c4fd2cd9b61572426f67190719c507d655a343",
+  "helper_bytes": 43579,
+  "changed_integer_literals": [
+    {
+      "old": 96507,
+      "new": 311
+    },
+    {
+      "old": 106766690,
+      "new": 40102116
+    },
+    {
+      "old": 66338,
+      "new": 66340
+    },
+    {
+      "old": 3145868,
+      "new": 4194406
+    },
+    {
+      "old": 85851,
+      "new": 85818
+    },
+    {
+      "old": 66338,
+      "new": 66340
+    },
+    {
+      "old": 66338,
+      "new": 66340
+    },
+    {
+      "old": 66338,
+      "new": 66340
+    }
+  ],
+  "changed_integer_literal_count": 8,
+  "only_live_scope_changed": true,
+  "all_other_ast_identical": true,
+  "exact_bytes_restore_to_E5": true,
+  "same_dbpath": true,
+  "same_logpath": true,
+  "same_command_hash": true,
+  "same_executable_path": true,
+  "release_constants_unchanged": true,
+  "no_control_flow_changes": true,
+  "harness_only_expected_hash_changed": true,
+  "execution_envelope_created": false,
+  "host_execution": false,
+  "git_or_remote_writes": false,
+  "remaining_gates": [
+    "Durable checkpoint",
+    "Predecessor original verification and closed lease",
+    "Fresh original guard inactive before rehearsal",
+    "Actual normal merge D and exact-D CI",
+    "Fresh reviewed ten-field envelope",
+    "Exact fresh metadata must still match immediately before execution"
+  ],
+  "root_reported_independent_review": {
+    "exact_bytes_and_sha256": "PASS",
+    "eight_literal_diff": "PASS",
+    "normalized_ast": "PASS"
+  }
+}

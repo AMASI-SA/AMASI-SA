@@ -1,0 +1,55 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 0.25,
+  "checks": {
+    "helper_sha256": "d7832f19f5475912f3ebd0ba14c4fd2cd9b61572426f67190719c507d655a343",
+    "isolated_checks": "PASS",
+    "groups": 6,
+    "results": [
+      "Only the exact database descendants are unaccessed; live changes and log append pass, sibling changes and additions fail",
+      "Log prefix corruption, truncation and byte-identical inode replacement fail",
+      "Lexical ancestors/descendants and resolved symlink collisions fail; separate sibling paths remain outside scope",
+      "Synthetic process/start, command, executable, directory and log identities are enforced without real process or database access",
+      "All four capacity-checked generated backups preserve source bytes, modes, literal symlinks and fsync receipts",
+      "Adapter environment strips inherited GitHub/bootstrap markers and uses owned cache/tmp with the reviewed public origin"
+    ],
+    "main_invoked": false,
+    "adapter_invoked": false,
+    "git_or_network_invoked": false,
+    "actual_app_or_database_access": false,
+    "execution_envelope_created": false
+  },
+  "stderr_bytes": 0,
+  "files": {
+    "pr2122_release_operator_live_scope_v3.py": {
+      "bytes": 43579,
+      "sha256": "d7832f19f5475912f3ebd0ba14c4fd2cd9b61572426f67190719c507d655a343"
+    },
+    "ISOLATED_CHECKS.py": {
+      "bytes": 11934,
+      "sha256": "96e81792f62a5fef9a37370a6d183ad79de2388410e145aea1331cafb46912e9"
+    },
+    "ISOLATED_CHECKS.log": {
+      "bytes": 1030,
+      "sha256": "cb7fe5b984e6180df27f38978ff4cb767d3ed12a063bbf501081d8386d58cf63"
+    },
+    "ISOLATED_CHECKS.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "adaptation.diff": {
+      "bytes": 1177,
+      "sha256": "abd5bbd4c5b9f566f2b03c922b50adbc9a21408295eb4f7cd5bf7bcbd061f859"
+    }
+  },
+  "actual_host_execution": false,
+  "execution_envelope_created": false,
+  "root_fresh_service_metadata_twice_reported": true,
+  "root_reported_independent_review": "PASS: exact bytes/hash, eight-literal diff and normalized AST",
+  "root_fresh_original_guard_observation": {
+    "exit_code": 0,
+    "active": true,
+    "exact_predecessor_identity": true,
+    "incomplete_lease_directory": false
+  }
+}

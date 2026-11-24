@@ -1,0 +1,97 @@
+{
+  "task": "DASHBOARD-SPLIT-PROFIT-20261124",
+  "recorded_at": "2026-11-24 23:07:49 UTC",
+  "scope": "read_only_host_metadata_and_original_public_status",
+  "observed_old_pid_absent": true,
+  "observed_old_temporary_stage_absent": true,
+  "cause_of_changed_host_state": "not_established",
+  "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "tracked_dirty": false,
+  "nonignored_count": 432,
+  "live_scope": {
+    "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "db_descendants_policy": "live_writer_managed_no_operator_access",
+    "process": {
+      "pid": 311,
+      "start_ticks": 40102116,
+      "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+      "exe": "/usr/bin/mongod",
+      "exe_identity": [
+        4194406,
+        85818,
+        493,
+        0,
+        0
+      ]
+    },
+    "directory_identities": {
+      ".worktrees": [
+        66340,
+        394231,
+        493,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919": [
+        66340,
+        396081,
+        448,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919/mongo": [
+        66340,
+        396082,
+        493,
+        0,
+        0
+      ]
+    },
+    "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+    "log_identity": [
+      66340,
+      121637,
+      420,
+      0,
+      0
+    ],
+    "log_policy": "independent_same_inode_append_only"
+  },
+  "confirmation": {
+    "stable_process_start_before_after": true,
+    "exact_command_hash": true,
+    "exe_link_and_regular_direct_file_match": true,
+    "all_ancestors_and_scope_roots_real_nonsymlink_directories": true,
+    "log_regular_and_exact_identity": true,
+    "db_descendants_accessed": false,
+    "log_content_accessed": false
+  },
+  "point_capacity_bytes": {
+    "app": 420474880,
+    "tmp": 268655374336
+  },
+  "capacity_proven_for_eventual_build": false,
+  "original_guard": {
+    "exit_code": 0,
+    "active": true,
+    "actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+    "prepared_at": "2026-11-24T22:29:50.804025+00:00",
+    "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "incomplete_lease_directory_reported": false
+  },
+  "root_v3_review": {
+    "status": "PASS",
+    "exact_eight_integer_changes_only": true,
+    "all_other_bytes_and_ast_identical": true,
+    "helper_bytes": 43579,
+    "helper_sha256": "d7832f19f5475912f3ebd0ba14c4fd2cd9b61572426f67190719c507d655a343"
+  },
+  "own_deployment_sha": null,
+  "own_execution_envelope_created": false,
+  "own_helper_executed": false,
+  "own_source_or_host_changed": false,
+  "own_lease_or_publication": false,
+  "next_action": "Wait for predecessor owner original verification and lease closure. Preserve production J until then; recheck all identities before the authorized merge and later rehearsal."
+}
