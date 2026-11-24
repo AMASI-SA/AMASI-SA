@@ -17,6 +17,7 @@ on:
       - "backend/tests/test_operational_payment_cas_reconciliation.py"
       - "backend/operational_payment_salla_event_capture.py"
       - "backend/salla_integration/payment_update_inbox.py"
+      - "backend/salla_integration/webhook_order_sync.py"
       - "backend/tests/test_operational_payment_salla_event_capture.py"
       - "backend/tests/test_operational_payment_evidence_inbox.py"
       - "backend/operational_balance_routes.py"
