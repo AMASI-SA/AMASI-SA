@@ -112,6 +112,22 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
                 and (str(fact_value.get("order_id")) != order_id
                      or fact_value.get("provider") != provider)):
             raise InitialCaptureHold("capture_reference_reused")
+    # A manual provider collection may already have registered the same
+    # external transaction. It is not enough to inspect capture:* facts:
+    # a confirmed collection is a distinct operational financial workflow.
+    # Deny even same-order references until an explicit reviewed reconciliation
+    # establishes this is merely a mirrored source observation.
+    collections = state.get("customer_collections", [])
+    if not isinstance(collections, list):
+        raise InitialCaptureHold("capture_collection_scope_invalid")
+    for collection in collections:
+        if not isinstance(collection, dict):
+            raise InitialCaptureHold("capture_collection_scope_invalid")
+        if (collection.get("status") == "confirmed"
+                and collection.get("destination_type") == "provider"
+                and collection.get("destination_id") == provider
+                and collection.get("reference") == native_ref):
+            raise InitialCaptureHold("capture_manual_collection_overlap")
     old = facts.get(capture_key)
     if old is not None:
         if (isinstance(old, dict) and str(old.get("order_id")) == order_id
