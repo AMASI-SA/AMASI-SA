@@ -1,6 +1,13 @@
 name: Operational Payment Event Policy
 
 on:
+  push:
+    branches:
+      - "codex/operational-payment-events-current-20261124"
+    paths:
+      - ".github/workflows/operational-payment-event-policy.yml"
+      - "backend/operational_payment_*.py"
+      - "backend/tests/test_operational_payment_*.py"
   pull_request:
     paths:
       - "backend/operational_payment_event_policy.py"
