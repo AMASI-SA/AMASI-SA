@@ -1,0 +1,57 @@
+{
+  "task": "INVENTORY-CABINET-ARCHIVE-20261124",
+  "attempt": 2,
+  "stage": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi",
+  "observed_status": "RUNNING",
+  "owned_clone_adapter": "PASS",
+  "backups": [
+    {
+      "source": "frontend/build",
+      "state": "COPY_VERIFIED",
+      "entries": 390,
+      "bytes": 11403687
+    },
+    {
+      "source": "frontend/.release",
+      "state": "COPY_VERIFIED",
+      "entries": 2,
+      "bytes": 1521
+    },
+    {
+      "source": "backend/release_identity.json",
+      "state": "COPY_VERIFIED",
+      "entries": 1,
+      "bytes": 504124
+    },
+    {
+      "source": "frontend/node_modules",
+      "state": "COPY_VERIFIED",
+      "entries": 76640,
+      "bytes": 405526531
+    }
+  ],
+  "capacity": {
+    "phase": "before-ff",
+    "required_bytes": 661082112,
+    "available_after_adapter_cleanup_estimate_bytes": 1075732480,
+    "result": "PASS"
+  },
+  "foreign": {
+    "records": 185030,
+    "identical_entries": 185028,
+    "nonignored_paths": 432,
+    "ignored_paths": 47,
+    "append_only_metadata": ".emergent/stripped_env_names",
+    "live_db_root_identity_preserved": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "live_db_descendants_compared": false,
+    "live_log_original_prefix_bytes": 19298866,
+    "live_log_original_prefix_sha256": "118dc34225f6df08454af22e0d66092ed9ee560f3071fbb85f70b903e8d23ed6",
+    "live_log_latest_observed_bytes": 19301641,
+    "result": "PASS"
+  },
+  "latest_step": "fresh foreign snapshot before fast-forward",
+  "canonical_app_adapter_complete": false,
+  "lease_created": false,
+  "publish_submitted": false,
+  "live_cabinet_mutated": false
+}

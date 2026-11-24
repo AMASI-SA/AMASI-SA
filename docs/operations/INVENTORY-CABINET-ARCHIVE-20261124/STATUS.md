@@ -2,7 +2,7 @@
 
 ## Current state
 
-**SECOND HOST REHEARSAL RUNNING — E7 pair hash-verified; fresh original guard inactive; canonical rehearsal and publish still pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**SECOND HOST REHEARSAL RUNNING — clone, foreign preservation, generated backups and measured capacity passed; canonical adapter and publish remain pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -144,3 +144,11 @@ The latest remote production ref still equals D. E7 is not execution or publicat
 Root downloaded the exact E7 pair into owned `/tmp/mezan-cabinet-archive-operator-live-1c_0ba3x`, verified both reviewed SHA-256 values, and executed it once from /app. Its separate owned stage is `/tmp/mezan-cabinet-archive-release-live-e7l6f9wi`. The current receipt reports RUNNING, the fresh original public guard reports active:false, expected tracked-source checks and foreign-inventory enumeration passed, and the initial fingerprint snapshot is in progress. The E7 live-process/root identity checks passed before the stage was created. No lease, publication or live cabinet action has been submitted.
 
 The v1 stage and BLOCKED receipt remain preserved. Observe the existing second process through its `receipt.json`; do not start a duplicate, run a blocking public guard command while its lock is held, or reuse v1 as final rehearsal proof. Next is the successful second owned-clone and canonical /app original adapter receipt, followed by independent receipt review and original prepare/prepublish for one authorized publication.
+
+## Release checkpoint E9 — backups and measured capacity passed
+
+The second owned clean-clone original adapter passed. The first complete foreign-preservation check passed with 185,030 records and 185,028 identical records; only the two declared append-only files changed. The bound live database root identity stayed exact, and its descendants were not read or compared. The independent log retained its full original 19,298,866-byte prefix with SHA-256 `118dc34225f6df08454af22e0d66092ed9ee560f3071fbb85f70b903e8d23ed6`.
+
+All four inherited generated-output backups are now COPY_VERIFIED: frontend/build (390 entries), frontend/.release (2), backend/release_identity.json (1), and frontend/node_modules (76,640). The fresh pre-fast-forward capacity check passed: required 661,082,112 bytes versus estimated available after original adapter cleanup 1,075,732,480 bytes. No capacity cleanup or foreign service changes were used. The next fresh foreign snapshot was running at this observation; the reviewed helper will proceed to FF and the canonical /app adapter only if its remaining checks pass. See `host-live-scope-midpoint.json`.
+
+The run is still the single E8 process at `/tmp/mezan-cabinet-archive-release-live-e7l6f9wi`. Do not restart it or prepare a lease from this midpoint. Full canonical adapter completion, final preservation/identity checks, independent receipt review and original publication protocol remain pending. Production publication and live cabinet mutation have not occurred.
