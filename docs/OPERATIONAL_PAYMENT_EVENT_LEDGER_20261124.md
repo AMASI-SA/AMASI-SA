@@ -104,3 +104,15 @@ Fix in the Draft branch:
 - Isolated Operational Payment Event Policy workflow run `45452409434` on commit `e7d6fecc671c04d29b4dda29ebed7bae3e956e60` passed.
 
 This is **durable EVIDENCE delivery**, not a live bank/platform ledger posting. The current `operational_balance_service.refresh` remains the only owner of derived provider claims. Avoid duplicate per-payment writes into claims when refresh already derives the same capture from Salla. Production deployment SHA, Preview end-to-end tests and historical opening/provider statement reconciliation remain outstanding; do not merge/deploy yet.
+
+
+## 2026-11-24 — Fail-closed accountant review for missing paid proof
+- New `backend/operational_payment_evidence_review.py` retains insufficient payment evidence from authenticated Salla source events as a bounded, idempotent no-money review record in the existing operational CAS state.
+- `operational_payment_salla_event_capture.py` now routes an `order.payment.updated` with missing reference/timestamp or an apparently paid `order.created` lacking canonical capture to review instead of silently dropping it. A newly created unpaid order without a payment-success signal is NOT added to financial review.
+- If the source reports a paid transaction but provider is unknown, classify it as `unknown` for human review only; never select an arbitrary Tabby/Tamara/Salla account.
+- The owner-only `/payment-events/integrity-preview` includes `payment_review_needs_evidence` rows with just a financially scoped order identifier and fixed error codes.
+- These entries NEVER create `engine.facts`, obligations, customer collection cases, bank movements, or payment receipts. Replays do not reset manually closed review decisions.
+- New tests include missing native proof, source retry, unknown provider, unfunded created order, owner separation, repeat event, and absence of financial mutations.
+- Operational Payment Event Policy CI **PASS** on commit `02cc7eef78c351758504afc4d5559d7ff3b25a15` (run `45453801639`).
+
+Remaining: the review is not yet an actionable accountant approval page; collection and refund flows still need integration to canonical identity, and the event-driven direct balance posting plus production refresh repair and Preview UAT are still incomplete. Keep payment evidence feature flag OFF in production and DO NOT DEPLOY.
