@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "MERGED_WAITING_EXACT_D_CI",
+  "state": "READY_FOR_REVIEWED_HOST_REHEARSAL",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Wait all applicable exact-D automatic push gates and independent review. Fresh-check Production still D, original guard inactive and clean app HEAD J2. Obtain fresh untracked count/incoming collision/optimization/bootstrap checks, review seven-field envelope, then execute preserved PR2113 helper. After matched rehearsal prepare own lease, prepublish, Republish once, require newer explicit successful platform deployment, run original three-probe verify and confirm inactive guard. Read-only one-row form preview/cancel; no live cabinet creation/deletion.",
+  "next_safe_action": "Fresh original guard inactive and Production D/app J2/tracked-clean/untracked432/incoming-no-collision checks. Stage exact remotely preserved helper and envelope into private /tmp directory (hash verify; no source edits). Run reviewed helper from /app with Python optimization and bootstrap absent after the exact-D gates now passed. Require receipt PASS and preservation, then own prepare/prepublish/Republish, newer successful deployment and original three-probe verify/final inactive guard. No live cabinet creation/deletion.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1171,7 +1171,8 @@
       "Stock Eligibility",
       "Warehouse"
     ],
-    "note": "Verify actual exact-D runs/statuses after normal merge; do not substitute the B snapshot."
+    "note": "Observed exact-D push has 11 successful records, 7+2+2 across the three workflows, no separate aggregate.",
+    "actual_final_check_records": 11
   },
   "ci_key_results": {
     "source_integration": {
@@ -1249,11 +1250,179 @@
   "deployment_ci": {
     "head": "cb98e5660380d362e78f937d60abc7139cd1c462",
     "event": "push",
-    "state": "RUNNING",
-    "expected_workflows": [
-      "Mezan Release Readiness",
-      "Security Gate",
-      "CodeQL"
-    ]
+    "state": "PASS",
+    "total": 11,
+    "counts": {
+      "success": 11
+    },
+    "observed_at_utc": "2026-11-24T17:40:09Z",
+    "checks": [
+      {
+        "id": 138644035752,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:33:58Z",
+        "completed_at": "2026-11-24T17:34:01Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138644035752"
+      },
+      {
+        "id": 138642338629,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:31:23Z",
+        "completed_at": "2026-11-24T17:33:56Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138642338629"
+      },
+      {
+        "id": 138642338616,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:31:23Z",
+        "completed_at": "2026-11-24T17:33:41Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138642338616"
+      },
+      {
+        "id": 138641636725,
+        "name": "CodeQL (python)",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:21Z",
+        "completed_at": "2026-11-24T17:39:45Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291302/job/138641636725"
+      },
+      {
+        "id": 138641636625,
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:22Z",
+        "completed_at": "2026-11-24T17:34:55Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449290986/job/138641636625"
+      },
+      {
+        "id": 138641636365,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:21Z",
+        "completed_at": "2026-11-24T17:30:42Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138641636365"
+      },
+      {
+        "id": 138641636237,
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:21Z",
+        "completed_at": "2026-11-24T17:30:35Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138641636237"
+      },
+      {
+        "id": 138641636217,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:22Z",
+        "completed_at": "2026-11-24T17:33:00Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291302/job/138641636217"
+      },
+      {
+        "id": 138641636201,
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:22Z",
+        "completed_at": "2026-11-24T17:31:50Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449290986/job/138641636201"
+      },
+      {
+        "id": 138641636035,
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:22Z",
+        "completed_at": "2026-11-24T17:30:37Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138641636035"
+      },
+      {
+        "id": 138641635869,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "started_at": "2026-11-24T17:30:21Z",
+        "completed_at": "2026-11-24T17:31:21Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028/job/138641635869"
+      }
+    ],
+    "workflows": [
+      {
+        "name": "Mezan Release Readiness",
+        "run_id": 45449291028,
+        "conclusion": "success",
+        "event": "push",
+        "attempt": 1
+      },
+      {
+        "name": "Security Gate",
+        "run_id": 45449290986,
+        "conclusion": "success",
+        "event": "push",
+        "attempt": 1
+      },
+      {
+        "name": "CodeQL",
+        "run_id": 45449291302,
+        "conclusion": "success",
+        "event": "push",
+        "attempt": 1
+      }
+    ],
+    "independent_review": "PASS: exact-D source/intent/tree, all actual push workflows, Host20/24 full raw identity/proof and manual handoff. No separate CodeQL aggregate on push."
+  },
+  "host_read_only_preflight": {
+    "at_utc": "2026-11-24T17:34:56.650186+00:00",
+    "guard_active": false,
+    "guard_actor": null,
+    "head": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_clean": true,
+    "untracked_count": 432,
+    "cleanup_overlap_count": 0,
+    "incoming_collisions": [],
+    "incoming_parent_symlink_count": 0,
+    "python_optimize": 0,
+    "bootstrap_flag_present": false,
+    "real_git_directory": true,
+    "tmp_free_bytes": 269461364736
+  },
+  "reviewed_envelope": {
+    "path": "operators/pr2113-reviewed-envelope.json",
+    "bytes": 429,
+    "sha256": "7f806d949e255c252097cabafa43851f63d932660396c5de7840ff33de865f0a",
+    "git_blob": "d8f89ae6b2eff5a3774f09e36216aa26ff9543a0",
+    "fields": {
+      "source_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_base_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "intent_sha": "6005a1be25a7a9402442a389f3052ffab8664e07",
+      "deployment_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+      "tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
+      "release_id": "rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e",
+      "expected_untracked_count": 432
+    },
+    "independent_review": "PASS: exactly seven fields, reviewed J2/A2/B2/D/tree/RID and integer432 matching root observed git_entries count; helper bytes and launch sequence rechecked"
   }
 }

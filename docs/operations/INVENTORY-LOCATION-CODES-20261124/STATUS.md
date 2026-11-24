@@ -1,7 +1,7 @@
 # INVENTORY-LOCATION-CODES-20261124
 
 ## Current state
-**PR2113 merged with the reviewed tree preserved. All exact-B2 checks passed; exact-deployment D CI is running. Live numbering publication remains pending and is already authorized.**
+**PR2113 merged with the reviewed tree preserved. All exact-B2 and exact-deployment D checks passed; the reviewed host rehearsal is next. Live numbering publication remains pending and is already authorized.**
 
 The owner settled **cabinet → column → row** and will create the cabinet themselves. This task changes numbering/display behavior only. Live cabinet creation and deletion of the old cabinet are deferred. No cabinet, location, inventory quantity, barcode identity, historical or financial record was directly changed by this task.
 
@@ -49,6 +49,13 @@ New cabinets explicitly select `cabinet-column-row`, including inside legacy war
 - Reproducibility proof: 1,521 bytes; SHA256 `8f582c809003c06d706e5a9513fb449638cf96731aa03f211e3e59bd72a36e58`.
 - Full machine-readable evidence, commands, checks, logs/hashes and source manifests: [RELEASE-EVIDENCE.json](RELEASE-EVIDENCE.json).
 
+## Exact-deployment CI and reviewed envelope
+All **11 actual D check records passed**, across three automatic push workflows: [Readiness](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291028), [Security](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449290986), and [CodeQL](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45449291302). All are exact D, push, attempt1; no pending, failure, neutral or skips. The final independent observation was17:40:09 UTC. There is no separate CodeQL aggregate on this push. Both Host20/24 rehearsals again passed21/21steps with the same A2/RID/proof; manual handoff passed3/3steps.
+
+[Reviewed seven-field envelope](operators/pr2113-reviewed-envelope.json): **429bytes**, SHA256 `7f806d949e255c252097cabafa43851f63d932660396c5de7840ff33de865f0a`; Git blob `d8f89ae6b2eff5a3774f09e36216aa26ff9543a0`. It binds J2/A2/B2/D/tree/RID and expected non-ignored untracked count **432**. Independent envelope/schema/identity/count review passed.
+
+Original read-only host preflight at17:34:56 UTC: guard inactive, app J2 on the Production branch, tracked clean,432non-ignored untracked entries, zero cleanup overlaps, no collisions for five incoming new paths or symlinked parents, Python optimization0, bootstrap flag absent, real .git directory and sufficient free space. These are preliminary readings; repeat applicable conditions immediately before staging/execution. The helper also rechecks under the original operation lock.
+
 ## Host coordination and publication boundary
 **Live Production changed by this task: no. The Production Git branch advanced to D through the approved PR merge. No own shared-host mutation, lease, prepare, prepublish or publication has occurred.**
 
@@ -57,11 +64,10 @@ The predecessor PR2109 owner acquired the original guard for J2. The host was tr
 [Reviewed helper](operators/pr2113_guarded_rehearsal.py): 23,356 bytes; SHA256 `cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb`. It is preserved remotely and has not been executed. Only expected J/PR identity substitutions differ from the already reviewed helper. Original operation lock, full verified cleanup-target backups, foreign untracked preservation and all fail-closed checks remain intact.
 
 ## Exact next safe actions
-1. Wait all applicable **exact-D automatic push** Release Readiness, Security Gate and CodeQL checks; expected11Actionsjobs/usually12checkrecords, subject to actual results. Do not rerun PR-only suites manually.
-2. Fresh-check Production still D, original guard `active:false`, and clean `/app` at J2. If Production advances, stop and review that release before touching the host; never publish a stale intent.
-3. Check Python optimization disabled, bootstrap flag absent, exact non-ignored untracked count and no incoming-path collisions. Independently review the exact seven-field envelope binding J2/A2/B2/D/tree/RID/count.
-4. Execute the remotely preserved reviewed helper under the original operation lock. It makes verified backups of all four adapter cleanup targets, fast-forwards to D, invokes original `yarn build`, checks identity/artifact/packages and preserves foreign non-ignored files. It creates no lease.
-5. After the matched rehearsal, prepare this task's own lease, prepublish immediately before one authorized Republish, require a newer explicit successful deployment, run original three-probe verification and confirm final `active:false`.
-6. Read-only live UI check: open the new cabinet form, verify row/column labels and short-number guidance, preview one row without saving if useful, then cancel. Do not create/delete cabinets.
+1. All applicable exact-D automatic CI is now passed. Fresh-check Production still D, original guard inactive, clean app J2 and untracked count432; no incoming-path collisions. Stop if any condition changed.
+2. Stage the exact remotely preserved helper and envelope into an owned private directory, verify both byte hashes, and execute the reviewed helper from real `/app` using normal Python with bootstrap/optimization absent.
+3. Require helper receipt PASS: verified backups of four cleanup targets, fast-forward to D, original `yarn build`, exact identity/artifact/proof/packages and preserved foreign non-ignored files. The rehearsal creates no lease.
+4. Only then prepare this task's own lease and run prepublish immediately before one authorized Republish. Require a newer explicit successful platform deployment, original three-probe production verification and final guard inactive.
+5. Read-only live form check: verify row/column labels and short-number help, preview one row without saving, cancel. No live cabinet creation/deletion.
 
-No further owner approval or numbering/layout clarification is pending. Persist the deployment and final verification milestones in this evidence branch and the bounded [Issue1006 continuation section](https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123).
+Publication is already authorized; no new owner confirmation is pending. Preserve later evidence on this separate branch and the bounded Issue1006 section. Do not merge the evidence branch or repeat the completed PR merge.

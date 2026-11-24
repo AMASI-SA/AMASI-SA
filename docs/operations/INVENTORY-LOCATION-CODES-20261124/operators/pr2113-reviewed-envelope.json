@@ -1,0 +1,9 @@
+{
+  "deployment_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+  "expected_untracked_count": 432,
+  "intent_sha": "6005a1be25a7a9402442a389f3052ffab8664e07",
+  "release_id": "rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e",
+  "source_base_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+  "source_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+  "tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a"
+}
