@@ -90,12 +90,17 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
 
     async def apply(state):
         await active_gate(db, owner, state)
-        await require_current_refresh_health(db, owner, state, at=stamp)
+        try:
+            _assert_staged_evidence(state, owner, source_ref, order_id, normalized)
+        except InitialCaptureHold as exc:
+            fail(str(exc), "إثبات الدفع الأصلي غير موثوق", 409)
+        # Only now can the optional event-scoped Salla source gate be used.
+        # The full operational refresh health/age and history gates remain.
+        await require_current_refresh_health(db, owner, state, at=stamp, event_proof_bound=True)
         if not _recent_source_snapshot(state, stamp):
             fail("payment_source_snapshot_stale",
                  "تحديث مصادر الأرصدة قديم؛ لا يمكن ترحيل الدفعة قبل التحقق", 409)
         try:
-            _assert_staged_evidence(state, owner, source_ref, order_id, normalized)
             result = apply_first_provider_capture(
                 state, order_id=order_id, order_number=order_number,
                 normalized=normalized, as_of=stamp)
@@ -131,8 +136,11 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
 
     async def before_commit(before, after):
         await verify_merchant()
-        # A newer failed source attempt may arrive during preparation.
-        await require_current_refresh_health(db, owner, after, at=stamp)
+        # Revalidate source proof and health at the protected commit; a Salla
+        # daily historical-coverage gap never grants an arbitrary order.
+        _assert_staged_evidence(after, owner, source_ref, order_id, normalized)
+        await require_current_refresh_health(db, owner, after, at=stamp,
+                                             event_proof_bound=True)
 
     await verify_merchant()
     return await mutate(db, owner, apply, before_commit=before_commit)
