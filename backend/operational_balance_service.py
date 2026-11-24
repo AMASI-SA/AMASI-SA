@@ -693,7 +693,10 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp, *, ad_correct
                 _LOG.warning("operational_refresh_source_failure stage=source_collection outcome=failed "
                              "cause=%s source_collection=%s", detail["cause"], detail["source_collection"])
                 raise HTTPException(409, detail=detail) from None
-            fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
+            from operational_source_diagnostics import source_validation_failure_detail
+            detail = source_validation_failure_detail(exc)
+            _LOG.warning("operational_refresh_validation_failure cause=%s", detail["cause"])
+            raise HTTPException(409, detail=detail) from None
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
