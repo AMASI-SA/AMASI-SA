@@ -97,6 +97,28 @@ async def stage_verified_payment_update(db, item):
             db, item["user_id"], order_id, normalized, diagnostics,
             source_ref=item["_id"],
         )
+        # A SECOND, independently disabled gate optionally posts only the
+        # FIRST, full native capture into the existing operational provider
+        # claim. Partial/additional payments retain the reviewed workflow.
+        from operational_payment_first_capture_writer import (
+            enabled as first_capture_post_enabled, post_first_salla_capture,
+        )
+        if first_capture_post_enabled():
+            from decimal import Decimal, InvalidOperation
+            captures = normalized["captures"]
+            try:
+                first_full = (len(captures) == 1
+                              and Decimal(str(captures[0]["amount"])) ==
+                                  Decimal(str(normalized["gross"]))
+                              and not normalized.get("refunds"))
+            except (TypeError, ValueError, InvalidOperation, KeyError):
+                first_full = False
+            if first_full:
+                await post_first_salla_capture(
+                    db, item["user_id"], item["merchant_id"],
+                    order_id, item["order_number"], normalized,
+                    source_ref=item["_id"],
+                )
     except Exception:
         # The worker owns retry/structured diagnostics. Never log financial
         # payloads, tokens, source refs or customer identifiers.
