@@ -172,6 +172,25 @@ class TrackingTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(row["label"] == "تم استرجاع الشحنة" and row["source"] == "salla"
                             for row in body["order_route_steps"]))
 
+    async def test_native_carrier_activity_records_stage_actor_and_original_date(self):
+        await self.source(status="delivering")
+        at = "2026-11-22T10:00:00Z"
+        event = {"user_id": "owner-a", "order_number": "10001", "source": "salla_history",
+            "event_type": "history_event", "occurred_at": at, "provider_order_id": "source-10001",
+            "source_event_id": "native-carrier-event",
+            "native_status_transition": [{"source": "salla_carrier_activity", "native_type": "activity",
+                "history_id": "native-carrier-event", "order_id": "source-10001",
+                "actor": {"id": "carrier-1", "name": "سمسا"}, "status": "out_for_delivery",
+                "at": at, "created_at": at}]}
+        await self.db.order_activity_events_v2.insert_one(event)
+        body = await self.get()
+        step = next(row for row in body["order_route_steps"] if row["label"] == "جاري التوصيل")
+        self.assertEqual(step["actor_name"], "سمسا")
+        self.assertEqual(step["at"], "2026-11-22T10:00:00+00:00")
+        await self.db.order_activity_events_v2.update_one({"source_event_id": "native-carrier-event"},
+            {"$set": {"native_status_transition.0.order_id": "wrong-order"}})
+        self.assertFalse(any(row["label"] == "جاري التوصيل" for row in (await self.get())["order_route_steps"]))
+
     async def test_independent_grant_live_revoke_and_manager_owner_access(self):
         await self.source()
         self.assertEqual(required_mobile_permissions("/api/mobile/order-tracking/10001"),
