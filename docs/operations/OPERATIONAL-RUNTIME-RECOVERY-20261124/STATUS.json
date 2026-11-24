@@ -74,11 +74,12 @@
         "backend/operational_report_copy.py",
         "backend/operational_response_encoding.py",
         "backend/operational_workspace_demand_routes.py",
-        "backend/tests/test_operational_balance_read_diagnostics.py"
+        "backend/tests/test_operational_balance_owner_read_diagnostics.py"
       ],
       "review": "Root and independent static review passed; all11 hashes bound. Independent20 assertions and two real-driver stalled-socket checks passed. Actual production AcceptanceConfigDatabase route chain confirmed.",
-      "runtime_acceptance": "Full owner HTTP, spawned child and real-Mongo suite pending.",
-      "limits": "The 200ms driver deadline is not a strict wall-clock ceiling; independent joined socket observations were about504ms. Telemetry does not itself repair cold report latency."
+      "runtime_acceptance": "New diagnostic execution is underway; both preserved original and renamed new suites must pass together before release.",
+      "limits": "The 200ms driver deadline is not a strict wall-clock ceiling; independent joined socket observations were about504ms. Telemetry does not itself repair cold report latency.",
+      "integration_correction": "Release review caught a test filename collision in WIP3ae42e3a. Restore the pre-existing 13-case primary-source diagnostic suite byte-for-byte from633a; retain all21 new owner-trace cases in a distinct, verified-absent module. All10 reviewed runtime files remain unchanged. Both suites stay selected by existing CI globs."
     }
   ]
 }
