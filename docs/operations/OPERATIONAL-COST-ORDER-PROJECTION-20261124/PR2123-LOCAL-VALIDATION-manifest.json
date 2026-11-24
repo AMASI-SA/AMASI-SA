@@ -1,0 +1,134 @@
+{
+  "source_git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+  "base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "runtime_blob": "fffc08c8748c6f4204ca0b767a598103667d4671",
+  "runtime_sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd",
+  "scope": "Isolated synthetic local verification only. Environment connection failures retained separately; no production data or credentials.",
+  "files": [
+    {
+      "name": "cost-projection-affected-environment-failure.xml",
+      "bytes": 160000,
+      "sha256": "36cbb84a749ea42d0cff72ea066e33914725dab4a663812959ebfcbc5bd6fb7c"
+    },
+    {
+      "name": "cost-projection-affected.xml",
+      "bytes": 160000,
+      "sha256": "36cbb84a749ea42d0cff72ea066e33914725dab4a663812959ebfcbc5bd6fb7c"
+    },
+    {
+      "name": "cost-projection-http-audit.baseline.json",
+      "bytes": 52986,
+      "sha256": "650a0a21e82c67991accfa2a52f67f940d0543ada22e1bb8ca02e3f09a61f3d4"
+    },
+    {
+      "name": "cost-projection-http-audit.candidate.json",
+      "bytes": 60479,
+      "sha256": "da51f05ccdbae73255f0bd1920cacb2c5854b4f9dcd32577313886f167ad6e10"
+    },
+    {
+      "name": "cost-projection-http-audit.json",
+      "bytes": 4049,
+      "sha256": "9f77e313fee7ed3403cfdfbce8b8d10bcd7c99588f4881e942ef4627fece9c84"
+    },
+    {
+      "name": "cost-projection-http-audit.log",
+      "bytes": 930,
+      "sha256": "99c92d5bcddc5ffc2dd0bf1248ae748736079bd264126c9f2d501f356e52e2c0"
+    },
+    {
+      "name": "cost-projection-http-audit.py",
+      "bytes": 19115,
+      "sha256": "c791c3eeb9b29489bf542c94ce7bd14e6018ec1852874f3fc0fe00a3e6c1f80b"
+    },
+    {
+      "name": "cost-projection-independent-audit.py",
+      "bytes": 13739,
+      "sha256": "4821d9d767e39c8a2a2184820a86654f611a8a7b5672743b2539529e36f435a3"
+    },
+    {
+      "name": "cost-projection-independent-existing.log",
+      "bytes": 1505,
+      "sha256": "850aeab435b5234e8144f8d89a1097a4818449a9d50282ec3b4bc8f38cd2d865"
+    },
+    {
+      "name": "cost-projection-independent-existing.xml",
+      "bytes": 64080,
+      "sha256": "86d31f99d8e2769f6df9962cdc8b5a1620f7f48eb978150d4774fc070a556adb"
+    },
+    {
+      "name": "cost-projection-independent-mongo-owned-result.json",
+      "bytes": 10144,
+      "sha256": "a17057fc856a8330533c7fffac4d94d8e05488720ce204a5f99d4fc6695a77d5"
+    },
+    {
+      "name": "cost-projection-independent-mongo-owned.log",
+      "bytes": 6232,
+      "sha256": "b9effb3b460ff33d9e9e9530f050b5695e5a43cb475f4f368e9d26d4a467c32f"
+    },
+    {
+      "name": "cost-projection-independent-mongo-owned.xml",
+      "bytes": 580,
+      "sha256": "b781d946fb48d1f7e17554f564e7e8f3f9c7c50b2d20f301f9a4a1d28eafa591"
+    },
+    {
+      "name": "cost-projection-independent-mongo-result.json",
+      "bytes": 1619,
+      "sha256": "fe1b66f42c36ac37dcd675b5228ff3589c9a014cc79a1ad4d72c5dbaa727088f"
+    },
+    {
+      "name": "cost-projection-independent-mongo.log",
+      "bytes": 17556,
+      "sha256": "6c3d194cc1f342822d3d666ab71974daac903b1207fcd0c7110edbf5341ba153"
+    },
+    {
+      "name": "cost-projection-independent-mongo.xml",
+      "bytes": 17561,
+      "sha256": "4f935e04b08dc85373ac605eb085f8d0ef8e770315f39ef57284174af5b7adc4"
+    },
+    {
+      "name": "cost-projection-independent-result.json",
+      "bytes": 855996,
+      "sha256": "e9780333b94803487e40578944d6621482aec47e1f7cd4002cf89954021c09c0"
+    },
+    {
+      "name": "cost-projection-independent-summary.json",
+      "bytes": 4311,
+      "sha256": "74a34fcb012e55dd8388f3ee3ad32ffc9383f7801a7233f53f7b1e790cb84119"
+    },
+    {
+      "name": "cost-projection-mongo-rerun.xml",
+      "bytes": 59530,
+      "sha256": "8b5042e4fc3fad5d08e90aa39a6bc615b77caa9c15b0208884999bc5b7931575"
+    },
+    {
+      "name": "cost-projection-mongo-supervised.json",
+      "bytes": 822,
+      "sha256": "19d9e688b4797be831dd9d76652cc727388b364bbc4b15e6695c20983d419016"
+    },
+    {
+      "name": "cost-projection-mongo-supervised.log",
+      "bytes": 98,
+      "sha256": "0e0c8f366ac8997685b6ac496b8f309fc4c1ea03c9420ecf520e0c332122ce9b"
+    },
+    {
+      "name": "cost-projection-mongo-supervised.xml",
+      "bytes": 1523,
+      "sha256": "b1be5335846605b8ca72d7a22d1e25b3c16f8ced0cae28bea170f000de99b4e7"
+    },
+    {
+      "name": "cost-projection-pr.json",
+      "bytes": 4708,
+      "sha256": "c285d249f9cc37dc437fc86f0870dcb890cfa3b3a3cb66e458e4afe59b7e74da"
+    },
+    {
+      "name": "cost-projection-source-A.json",
+      "bytes": 415,
+      "sha256": "feaefaab9513170de9864059ab028a8060526dc1dc490b43226337e431a49b04"
+    },
+    {
+      "name": "run_cost_projection_mongo_tests.py",
+      "bytes": 3395,
+      "sha256": "1cb5ea902b601ad92e5e3276636c074840af8af1034b17e071866488ff7018fa"
+    }
+  ]
+}

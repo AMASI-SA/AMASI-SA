@@ -1,0 +1,89 @@
+{
+  "review": "PASS; no concrete blocker in runtime diff",
+  "base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "runtime_path": "/workspace/scratch/39c6dec7c37f/operational-cost-order-projection/backend/operational_open_cost_exposure.py",
+  "runtime_sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd",
+  "runtime_git_blob": "fffc08c8748c6f4204ca0b767a598103667d4671",
+  "runtime_unchanged": true,
+  "scope": [
+    "cost-local reader wrapper",
+    "53 top-level fields: full REFRESH_ORDER_FIELDS plus 25 COD outer evidence fields",
+    "initial load_collections reader replacement only"
+  ],
+  "existing_synthetic_tests": {
+    "passed": 360,
+    "failed": 0,
+    "skipped": 0,
+    "initially_deselected": [
+      "backend/tests/test_operational_balance_open_customer_cod.py::test_native_projection_is_read_only_across_repeated_runs"
+    ],
+    "whole_cost_outcome_comparisons": 217,
+    "whole_financial_report_comparisons": 216,
+    "projection_honored_reads": 216
+  },
+  "owned_local_mongo_tests": {
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "whole_cost_outcome_comparisons": 3,
+    "whole_financial_report_comparisons": 3,
+    "actual_motor_projection_verified": true,
+    "server_lifecycle": "repository demand_read_mongo_fixture launched and cleaned up within the same pytest process; no external URI",
+    "native_cod_initial_deselection_resolved": true
+  },
+  "combined": {
+    "passed": 362,
+    "whole_cost_outcome_comparisons": 220,
+    "whole_financial_report_comparisons": 219,
+    "all_whole_outputs_equal": true,
+    "skips": 0
+  },
+  "environmental_attempt": {
+    "result": "prior external loopback URI unavailable across tool processes; connection failures, not implementation failures",
+    "evidence": "cost-projection-independent-mongo.log",
+    "replaced_by": "owned_local_mongo_tests"
+  },
+  "limits": [
+    "Only synthetic data used; no production calls or production performance claim.",
+    "Full value/error outcome and canonical JSON parity asserted; arbitrary BSON decoding failures in intentionally excluded fields are not claimed equivalent.",
+    "Existing test DB projection behavior was changed only inside the independent test process; no repository source/test files edited.",
+    "HTTP/auth/cancellation audit is separately owned by release_audit; its result is not counted here."
+  ],
+  "artifacts": {
+    "cost-projection-independent-result.json": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-result.json",
+      "bytes": 855996,
+      "sha256": "e9780333b94803487e40578944d6621482aec47e1f7cd4002cf89954021c09c0"
+    },
+    "cost-projection-independent-existing.xml": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-existing.xml",
+      "bytes": 64080,
+      "sha256": "86d31f99d8e2769f6df9962cdc8b5a1620f7f48eb978150d4774fc070a556adb"
+    },
+    "cost-projection-independent-existing.log": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-existing.log",
+      "bytes": 1505,
+      "sha256": "850aeab435b5234e8144f8d89a1097a4818449a9d50282ec3b4bc8f38cd2d865"
+    },
+    "cost-projection-independent-mongo-owned-result.json": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-mongo-owned-result.json",
+      "bytes": 10144,
+      "sha256": "a17057fc856a8330533c7fffac4d94d8e05488720ce204a5f99d4fc6695a77d5"
+    },
+    "cost-projection-independent-mongo-owned.xml": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-mongo-owned.xml",
+      "bytes": 580,
+      "sha256": "b781d946fb48d1f7e17554f564e7e8f3f9c7c50b2d20f301f9a4a1d28eafa591"
+    },
+    "cost-projection-independent-mongo-owned.log": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-mongo-owned.log",
+      "bytes": 6232,
+      "sha256": "b9effb3b460ff33d9e9e9530f050b5695e5a43cb475f4f368e9d26d4a467c32f"
+    },
+    "cost-projection-independent-audit.py": {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/cost-projection-independent-audit.py",
+      "bytes": 13739,
+      "sha256": "4821d9d767e39c8a2a2184820a86654f611a8a7b5672743b2539529e36f435a3"
+    }
+  }
+}

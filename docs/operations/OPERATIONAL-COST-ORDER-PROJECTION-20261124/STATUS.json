@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-24T21:56:43.782897+00:00",
+  "recorded_at": "2026-11-24T22:02:02.702Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
@@ -121,7 +121,11 @@
     }
   ],
   "ci": "pending",
-  "pr": "pending",
+  "pr": {
+    "number": 2123,
+    "state": "Draft, exact-head CI in progress",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2123"
+  },
   "merge": "not merged",
   "intent": "Inherited base intent unchanged; no new frozen intent yet.",
   "production_changed_by_this_candidate": false,
@@ -132,5 +136,17 @@
     "constraint": "Preserve other owner lease/lock. Do not run its status while operation lock is owned; no shared host changes by this candidate."
   },
   "next_safe_action": "Preserve this source checkpoint and independent evidence on dedicated branches; open Draft PR, review all exact-head gates and original candidate build. Before intent freeze, confirm preceding owner publication/verification/inactive guard and production ref. Then original v5 A/B protocol, normal merge, host rehearsal and authorized publish/verify before one bounded live acceptance read.",
-  "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified."
+  "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
+  "source_git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+  "source_tree": "7a60a0150621e36bb8b455a247ac6a09dba325ee",
+  "evidence_branch": "codex/operational-cost-order-projection-evidence-20261124",
+  "evidence_rule": "This branch must never be merged into frozen source/intent; original sourceA retains its reviewed tree.",
+  "local_validation_archive": {
+    "path": "PR2123-LOCAL-VALIDATION.zip",
+    "bytes": 95394,
+    "sha256": "22a856c23ef9955e452e863beffe225dcbb91e6a9bfa71fe7b806ae31de51f6a",
+    "git_blob": "11fabaf7a678618f688c695f486000c10c44ecdf",
+    "members": 26,
+    "crc_and_all_member_hashes": "PASS"
+  }
 }

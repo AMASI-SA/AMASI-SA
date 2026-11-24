@@ -1,0 +1,128 @@
+{
+  "result": "PASS",
+  "base_commit": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "candidate_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "baseline_source_sha256": "e943b22c6176c1a1554ab8aaea7df2df988f2f00d4cb500febadd386c2ac0c09",
+  "candidate_source_sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd",
+  "candidate_unchanged_during_audit": true,
+  "harness_sha256": "c791c3eeb9b29489bf542c94ce7bd14e6018ec1852874f3fc0fe00a3e6c1f80b",
+  "seconds": 12.919,
+  "paired_cases": 12,
+  "executed_http_cases": 24,
+  "cases": [
+    {
+      "case": "legacy_orders_timeout",
+      "status": 500,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 1,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_orders_timeout",
+      "status": 200,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 1,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_missing_binding",
+      "status": 422,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_stale_expected_revision",
+      "status": 409,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_stale_expected_as_of",
+      "status": 409,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_stale_expected_started_at",
+      "status": 409,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_changed_during_read",
+      "status": 409,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 1,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "unauthenticated",
+      "status": 401,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "disabled_owner",
+      "status": 403,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "staff_no_page",
+      "status": 403,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "staff_owner_gate",
+      "status": 403,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 0,
+      "writes": 0,
+      "cleanup_complete": true
+    },
+    {
+      "case": "forecast_disconnect",
+      "status": 499,
+      "full_body_and_content_type_equal": true,
+      "read_scope_and_cap_equal": true,
+      "order_source_read_count": 1,
+      "writes": 0,
+      "cleanup_complete": true
+    }
+  ],
+  "scope": "Actual original router, owner/page/native gates, source loader, snapshot binding/cache and ASGI disconnect lifecycle; synthetic read-only DB replies.",
+  "limits": [
+    "Fault injection proves HTTP contracts and cleanup, not production timeout resolution or live latency.",
+    "Generated report timestamp was fixed identically in both processes for byte-equal response comparison.",
+    "This is an offline coroutine cursor boundary, not a real Mongo transport or performance benchmark."
+  ]
+}
