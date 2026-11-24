@@ -213,6 +213,8 @@ async def demand(db, spec, consumer_id, *, refresh=False, retry=False):
     ]}
     for slot in range(MAX_OWNER_PENDING):
         try:
+            # A rebuilding job can retain its previous large result. Status
+            # polling needs no financial header from that expired generation.
             row = await db[JOBS].find_one_and_update(scope, [
                 {"$set": {"_requeue": requeue, "consumers": consumers,
                     "owner_id": {"$literal": spec["owner_id"]}, "actor_id": {"$literal": spec["actor_id"]},
@@ -226,7 +228,8 @@ async def demand(db, spec, consumer_id, *, refresh=False, retry=False):
                     "retry_at": {"$cond": ["$_requeue", "$$NOW", {"$ifNull": ["$retry_at", "$$NOW"]}]},
                     "error_code": {"$cond": ["$_requeue", None, "$error_code"]}}},
                 {"$unset": "_requeue"},
-            ], upsert=True, return_document=ReturnDocument.AFTER)
+            ], upsert=True, return_document=ReturnDocument.AFTER,
+                projection={"_id": 1, "status": 1, "error_code": 1})
             return public_status(row)
         except DuplicateKeyError:
             # Another exact request may have won _id, or this owner's bounded
@@ -342,3 +345,4 @@ async def materialize(db, claim, result, checkpoint):
         await db[ROWS].insert_many(batch, ordered=True)
     await checkpoint()
     return {"header": header, "paged": rows is not None, "total": len(rows) if rows is not None else 0}
+

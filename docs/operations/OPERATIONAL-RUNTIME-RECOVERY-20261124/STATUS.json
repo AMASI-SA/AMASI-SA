@@ -28,6 +28,19 @@
     "Other task branches and worktrees",
     "Pending source admission and manual financial records"
   ],
-  "next_safe_action": "Integrate isolated reviewed candidates; run actual composed runtime and real-Mongo regressions and all required gates before a new immutable A/B pair.",
-  "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00"
+  "next_safe_action": "Fetch this WIP into the isolated Emergent worktree, run the three new owned real-Mongo tests and adjacent demand suites; integrate the separately reviewed Salla completion fix and diagnostics.",
+  "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00",
+  "integrated_candidates": [
+    {
+      "name": "bounded demand metadata projections",
+      "patch_sha256": "6a4f7e7142f3df934c3e7f952b40a5d195538a9834763bd8418bba1f6f117000",
+      "files": [
+        "backend/demand_read_store.py",
+        "backend/demand_read_jobs.py",
+        "backend/tests/test_operational_balance_demand_metadata_reads.py"
+      ],
+      "review": "Root and independent static review passed; only three Mongo result projections change. Runtime tests pending.",
+      "runtime_test_count": 3
+    }
+  ]
 }

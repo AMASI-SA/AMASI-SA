@@ -90,12 +90,14 @@ async def claim_next(db):
     if not await _claim_runner(db, token):
         return None
     try:
+        # Preserve all claim metadata without transferring an old result.
         row = await db[store.JOBS].find_one_and_update(pending, [{"$set": {
             "status": "running", "active_slot": True, "lease_token": {"$literal": token},
             "generation": {"$literal": uuid.uuid4().hex},
             "lease_until": {"$add": ["$$NOW", LEASE_SECONDS * 1000]},
             "started_at": "$$NOW", "attempts": {"$add": ["$attempts", 1]}, "error_code": None,
-        }}], sort=[("requested_at", 1)], return_document=ReturnDocument.AFTER)
+        }}], sort=[("requested_at", 1)], return_document=ReturnDocument.AFTER,
+            projection={"header": 0})
         if row is None:
             await _release_runner(db, token)
         return row
@@ -149,9 +151,10 @@ def _builder_module(family):
 
 async def execute_claim(db, key, token, generation, *, builder=None, authorize=None):
     """Child entry; test injections stay process-local, never in stored jobs."""
+    # The child rebuilds from the scoped source; it never consumes the stale header.
     row = await db[store.JOBS].find_one({"_id": key, "status": "running", "lease_token": token,
         "generation": generation, "code_version": store.CODE_VERSION,
-        "$expr": {"$gt": ["$lease_until", "$$NOW"]}})
+        "$expr": {"$gt": ["$lease_until", "$$NOW"]}}, {"header": 0})
     if row is None:
         return False
     started, cpu_started = time.monotonic(), time.process_time()
@@ -415,3 +418,4 @@ async def run(db, *, wake_event=None):
             except asyncio.TimeoutError:
                 pass
             wake_event.clear()
+
