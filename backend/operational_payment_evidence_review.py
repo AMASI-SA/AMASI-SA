@@ -13,13 +13,27 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 
-from operational_payment_evidence import DIAGNOSTICS
-
 MAX_PENDING = 10000
 PENDING_KEY = "payment_evidence_review_inbox"
-ALLOWED_REASONS = frozenset(
-    code for code in DIAGNOSTICS if code.startswith("provider_")
-)
+# Fixed, payment-specific failure vocabulary. Do not import the larger Salla
+# runtime into the pure review model or disclose a raw third-party exception.
+ALLOWED_REASONS = frozenset({
+    "provider_capture_evidence_incomplete",
+    "provider_payment_method_conflict",
+    "provider_payment_shape_invalid",
+    "provider_payment_currency_conflict",
+    "provider_payment_amount_conflict",
+    "provider_payment_reference_missing",
+    "provider_payment_reference_conflict",
+    "provider_capture_timestamp_invalid",
+    "provider_capture_conflict",
+    "provider_capture_status_conflict",
+    "provider_transaction_binding_conflict",
+    "provider_transaction_not_captured",
+    "provider_transaction_amount_conflict",
+    "provider_split_payment_review_required",
+    "provider_refund_execution_evidence_required",
+})
 ALLOWED_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan", "paypal"})
 ALLOWED_EVENTS = frozenset({"order.created", "order.payment.updated"})
 
