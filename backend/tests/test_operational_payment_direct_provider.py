@@ -66,6 +66,15 @@ class DirectProviderTests(unittest.TestCase):
         self.assertEqual(post(s)["status"], "already_posted")
         self.assertEqual(s, previous)
 
+    def test_exact_replay_still_matches_after_source_refresh_advances(self):
+        s = state()
+        post(s)
+        s["engine"]["as_of"] = "2026-11-24T22:30:00+03:00"
+        self.assertEqual(post(s, as_of="2026-11-24T22:31:00+03:00")["status"],
+                         "already_posted")
+        self.assertEqual(s["engine"]["obligations"]["provider:order1"]["confirmed"],
+                         "300.00")
+
     def test_reused_payment_reference_on_different_order_is_blocked(self):
         s = state()
         post(s)
