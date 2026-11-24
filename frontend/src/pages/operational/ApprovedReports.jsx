@@ -116,10 +116,11 @@ function SourceTable({ table, currency, snapshot }) {
   </section>;
 }
 function DeliveryTables({ deliveries, currency, snapshot }) {
+  // Filter a report's delivery cohort once per source snapshot. Switching the
+  // displayed currency, page or navigation state should not repeat a full-cohort
+  // pass; row labels are still formatted only for the visible table page.
+  const rows=useMemo(() => filterDeliveries(list(deliveries?.rows)), [deliveries?.rows]);
   if (!deliveries) return null;
-  // Keep the original rows immutable. Per-row presentation labels are computed
-  // by SourceTable only for the current paginated window.
-  const rows=filterDeliveries(list(deliveries.rows));
   const field=(key,label,type='money')=>({key,label,type});
   const base={kind:'actual',complete:deliveries.complete,rows,show_totals:false,notes:deliveries.notes};
   const identity=[field('order_label','الطلب','text'),field('party_name','الجهة','text')];
