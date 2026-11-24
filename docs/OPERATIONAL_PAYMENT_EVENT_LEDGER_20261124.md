@@ -38,3 +38,21 @@ Only operational balances. Do not create Qoyod invoices, alter Salla order state
 - Backfill dry-run report first.
 - Regression tests, code security review, preview UAT, bank/provider statement reconciliation, release guard.
 - No merge or production deployment until explicit approval.
+
+
+## 2026-11-24 phased implementation update
+- A pure canonical Salla-capture adapter is implemented at `backend/operational_payment_capture_adapter.py`. It emits phase-ready event identities **only** from normalized successful captures; a paid observation or `awaiting_review` order status alone does not trigger posting. Different transaction IDs support added installments; native currency other than SAR requires an explicit FX path.
+- The read-only phase-1/2/3 planner is at `backend/operational_payment_reconciliation_plan.py`: already-posted, conflicting, repeated and opening-overlap cases are excluded from candidate writes.
+- The statement gate is at `backend/operational_statement_auto_confirmation.py`: automatic refund or extra payment confirmation requires exact independent native-event reference. Current `operational_provider_statement_intake._normalize_row` sets `event_reference=None` for Tabby and Tamara native exports, so upload-only rows from those parsers **must remain pending**, unless a separate verified transaction identity is established and bound. Never infer a unique payment/refund from amount + order alone.
+- COD network evidence is different from bank-transfer evidence. Delivery completion must never imply collection.
+- The current production refresh error `operational_source_setup_incomplete` cannot be attributed to a source until the allowlisted `cause` diagnostic is deployed and observed.
+
+## Still required for functional live activation (NOT COMPLETED)
+1. Verify production deploy SHA, actual environment flags and current data sources, and reconcile with the latest concurrent work.
+2. Add an authenticated, idempotent ingestion service for original and added payment captures, sourcing from authoritative Salla transaction evidence (not `webhook_routes.py` Make-only flow).
+3. Persist single canonical effects **inside existing operational balance CAS** without creating an independent parallel financial ledger. Protect at commit against reference/owner/order collisions and evidence changes.
+4. Integrate statement confirmation with canonical source link and robust transaction fingerprint, not only row/order amount. Existing confirmation explicitly requires `confirmed_unrecorded`; must not silently bypass this without independent protection against baseline overlaps.
+5. Implement pending-accountant POS/bank COD state in the operational workspace, with signed approval/audit, without blocking `delivered` status.
+6. Add a recurring daily exception reconciliation process, bounded replay and freshness alert.
+7. Historical dry-run per provider from the true operational starting point and opening balances; zero-difference reconciliation and Preview UAT.
+8. Keep feature flags OFF until all gates pass; no Qoyod/general ledger changes or production deployment.
