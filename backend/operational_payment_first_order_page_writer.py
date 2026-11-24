@@ -83,7 +83,10 @@ async def post_first_paid_page(db, owner, merchant_id, order_number, *,
 
     async def apply(state):
         await active_gate(db, owner, state)
-        await require_current_refresh_health(db, owner, state, at=stamp)
+        # The current native order-page identity and paid balance were
+        # verified before entering CAS. Still refuse technical source failures.
+        await require_current_refresh_health(db, owner, state, at=stamp,
+                                             event_proof_bound=True)
         if not _recent_source_snapshot(state, stamp):
             fail("paid_page_source_snapshot_stale",
                  "احتساب المصادر قديم ولا يسمح بتسجيل مالي جديد", 409)
@@ -117,11 +120,13 @@ async def post_first_paid_page(db, owner, merchant_id, order_number, *,
         return result
 
     async def final_source_check(before, after):
-        await require_current_refresh_health(db, owner, after, at=stamp)
         if await _resolve_user_id(db, merchant_id) != owner:
             fail("paid_page_merchant_owner_changed", "تغير ارتباط متجر سلة", 409)
         fresh = await _canonical_source(db, owner, order_number)
         if fresh is None or _financial_fingerprint(*fresh) != fingerprint:
             fail("paid_page_source_changed", "تغير إثبات سلة أثناء تسجيل القيد", 409)
+        # Event-scoped admission never overrides a different native snapshot.
+        await require_current_refresh_health(db, owner, after, at=stamp,
+                                             event_proof_bound=True)
 
     return await mutate(db, owner, apply, before_commit=final_source_check)
