@@ -1,0 +1,62 @@
+{
+  "task_id": "OPERATIONAL-PERFORMANCE-RECOVERY-20261124",
+  "status": "WIP: first cost-preview source slice; runtime incident remains unverified",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/operational-performance-recovery-20261124",
+  "source_base_commit": "3fd7594af806615d4c53616100dd546ef7b5fe9f",
+  "checkpoint_identity": "The Draft PR checkpoint records the exact full commit SHA containing this file.",
+  "scope": "Build the existing conservative cost catalogue index once per actual open-cost projection, then reuse it for historical item lookups. Prices, evidence validation, owner reads and financial semantics stay in their existing paths.",
+  "changed_files": [
+    "backend/operational_open_cost_exposure.py",
+    "backend/tests/test_operational_balance_cost_exposure_catalog_index.py",
+    "docs/operations/OPERATIONAL-PERFORMANCE-RECOVERY-20261124/STATUS.json"
+  ],
+  "verification": [
+    {
+      "kind": "baseline_regression",
+      "command": "PYTHONPATH=backend:backend/tests python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_exposure_catalog_index.py::test_preview_indexes_catalogue_once_for_many_historical_items --tb=short",
+      "exit_code": 1,
+      "result": "On unchanged base runtime, the independently computed synthetic amount 2124.00 matched, but the resource index was rebuilt 36 times rather than once."
+    },
+    {
+      "kind": "focused_and_adjacent",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_exposure_catalog_index.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_catalog_index.py backend/tests/test_operational_read_runtime.py --tb=short",
+      "exit_code": 0,
+      "result": "269 passed in 9.14 seconds, including 12 new cases. No skipped or failed tests. Synthetic indexed and legacy full outputs and source reads match; resource-index work is 1 versus 36 builds."
+    },
+    {
+      "kind": "independent_review",
+      "result": "An independent reviewer ran the first three modules: 237 passed in 6.43 seconds, exit 0; no functional blocker found in the runtime diff. Exact committed identity confirmation follows in the Draft PR."
+    },
+    {
+      "kind": "local_http_environment",
+      "exit_code": 1,
+      "result": "The six existing real-Mongo HTTP cases failed before business assertions because the dedicated localhost test Mongo was unavailable. Starting a separate local Mongo failed with open: Operation not permitted. These cases require the existing CI Mongo gate; they are not counted as passes."
+    },
+    {
+      "kind": "whitespace",
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "coverage": [
+    "Known independent totals with mixed product, variant, component and service costs",
+    "Complete legacy-path result and read-count parity",
+    "Duplicate resources and bindings, foreign cost currency and malformed selected prices",
+    "Custom mappings, complex and oversized identities retain legacy fallback and lazy validation",
+    "Fresh projection observes replaced catalogue and prices",
+    "Foreign-owner rows do not affect the result; input state and source rows remain unchanged"
+  ],
+  "ci_state": "Pending exact task-head CI after Draft PR creation",
+  "review_state": "Independent local review passed; commit identity confirmation pending",
+  "merge_state": "Not merged; root integrator owns all integration decisions",
+  "release_state": "No intent, guard lease, publication or deployment created by this task",
+  "production_changed": false,
+  "limitations": [
+    "This removes a demonstrated repeated catalogue lookup cost; it is not proof of the cause or resolution of the observed approximately 24-second cost-report failure.",
+    "No production timing, response status or exception was captured by this implementation task.",
+    "No snapshot clone, archive, retained-payment-basis, reconciliation or timeout change is included.",
+    "Issue 1006 has reached its comment limit; this task status and the Draft PR provide the recoverable checkpoint."
+  ],
+  "next_safe_action": "Require exact-head Operational Balance CI, inspect the real-Mongo HTTP results and independent commit review, then hand the isolated source to root. Assess the retained-basis lookup separately and communicate its proposed scope before any further implementation."
+}

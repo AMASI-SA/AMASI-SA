@@ -12,6 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import re
 
 from operational_cost_completeness import cost_completeness
+from operational_cost_catalog_index import build_cost_catalog_index
 from operational_prestart_cod_forecast import prestart_open_cod
 from operational_open_customer_cod import open_customer_cod
 from operational_courier_tariffs import matches as matches_courier_key, with_tariffs
@@ -156,6 +157,8 @@ async def _project(db, owner, state, *, as_of=None):
     if stamp < started:
         raise ValueError("operational_work_forecast_time_invalid")
     data = await load_collections(db, owner, READS, reader=rows)
+    # Index only this immutable source read; prices and validation remain per item.
+    cost_catalog_index = await prepare_in_thread(build_cost_catalog_index, data, unique_index)
     issues = Counter()
     declared_scopes = {}
     values = defaultdict(lambda: {"amount": ZERO, "units": 0, "orders": set()})
@@ -318,7 +321,7 @@ async def _project(db, owner, state, *, as_of=None):
                         raise ValueError("historical_catalog_cost_missing")
                     profile = dict(profile, base_cost=str(fallback))
                     fallback_used = True
-                unit, services = cost_components(data, product_id, item, profile)
+                unit, services = cost_components(data, product_id, item, profile, catalog_index=cost_catalog_index)
                 qty = number(item.get("quantity"))
                 if qty <= 0 or qty != qty.to_integral_value():
                     raise ValueError("historical_quantity_invalid")
