@@ -26,6 +26,18 @@ ERROR_CLASSES = frozenset({
     "ServerSelectionTimeoutError", "NetworkTimeout", "OperationFailure",
 })
 MAX_COUNT = 1000000
+SCHEDULE_PROJECTION = {
+    "_id": 0, "schedule_version": 1, "status": 1,
+    "started_at": 1, "last_success_at": 1, "completed_slot": 1,
+    "attempts": 1, "last_error_type": 1,
+    "last_result.errors_count": 1,
+    "last_result.incomplete_count": 1,
+    "last_result.truncated": 1,
+    "last_result.coverage_complete": 1,
+    "last_result.coverage_reason": 1,
+    "last_result.discovery": 1,
+}
+
 
 
 def _stamp(value):
