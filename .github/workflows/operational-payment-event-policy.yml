@@ -21,6 +21,8 @@ on:
       - "backend/operational_payment_first_capture_writer.py"
       - "backend/operational_payment_salla_order_page.py"
       - "backend/operational_payment_direct_order_page.py"
+      - "backend/operational_payment_first_order_page_writer.py"
+      - "backend/tests/test_operational_payment_first_order_page_writer.py"
       - "backend/tests/test_operational_payment_direct_order_page.py"
       - "backend/tests/test_operational_payment_salla_order_page.py"
       - "backend/tests/test_operational_payment_first_capture_writer.py"
@@ -66,4 +68,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_first_capture_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_salla_order_page.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_direct_order_page.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_first_order_page_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
