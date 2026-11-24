@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "READY_FOR_REVIEWED_HOST_REHEARSAL",
+  "state": "HOST_REHEARSAL_RUNNING",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Fresh original guard inactive and Production D/app J2/tracked-clean/untracked432/incoming-no-collision checks. Stage exact remotely preserved helper and envelope into private /tmp directory (hash verify; no source edits). Run reviewed helper from /app with Python optimization and bootstrap absent after the exact-D gates now passed. Require receipt PASS and preservation, then own prepare/prepublish/Republish, newer successful deployment and original three-probe verify/final inactive guard. No live cabinet creation/deletion.",
+  "next_safe_action": "Observe the existing helper process/receipt; do not rerun or reset. Public status waits on the operation lock while helper runs. If PASS, read complete receipt and proof/preservation, confirm original guard inactive, then prepare own lease/prepublish/one authorized Republish. If BLOCKED preserve backups/receipts and diagnose the exact failure; no automatic rollback. Live three-probe verification and read-only form preview/cancel remain pending.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1424,5 +1424,25 @@
       "expected_untracked_count": 432
     },
     "independent_review": "PASS: exactly seven fields, reviewed J2/A2/B2/D/tree/RID and integer432 matching root observed git_entries count; helper bytes and launch sequence rechecked"
+  },
+  "host_work_started": true,
+  "host_rehearsal": {
+    "state": "RUNNING_OBSERVED",
+    "observed_at_utc": "2026-11-24 17:49:50 UTC",
+    "operator_stage": "/tmp/mezan-pr2113-operator-2fvu2mqn",
+    "stage": "/tmp/mezan-pr2113-rehearsal-sbyjrhil",
+    "receipt": "/tmp/mezan-pr2113-rehearsal-sbyjrhil/receipt.json",
+    "evidence_commit": "9f70905566ef4ae7ce4938dcd78fa5ce6d29f8ac",
+    "staging_at_utc": "2026-11-24T17:46:23.064453+00:00",
+    "staging_original_guard_inactive": true,
+    "staging_app_head": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "staging_untracked_count": 432,
+    "helper_sha256": "cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb",
+    "envelope_sha256": "7f806d949e255c252097cabafa43851f63d932660396c5de7840ff33de865f0a",
+    "launch": "env -u MEZAN_RELEASE_BOOTSTRAP_INTENT -u PYTHONOPTIMIZE PYTHONDONTWRITEBYTECODE=1 python -B /tmp/mezan-pr2113-operator-2fvu2mqn/pr2113_guarded_rehearsal.py /tmp/mezan-pr2113-operator-2fvu2mqn/pr2113-reviewed-envelope.json",
+    "observed_stdout": "STAGE_PATH=/tmp/mezan-pr2113-rehearsal-sbyjrhil",
+    "terminal": "code-server tab5, owned Terminal8",
+    "own_lease_created": false,
+    "published": false
   }
 }

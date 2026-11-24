@@ -1,7 +1,7 @@
 # INVENTORY-LOCATION-CODES-20261124
 
 ## Current state
-**PR2113 merged with the reviewed tree preserved. All exact-B2 and exact-deployment D checks passed; the reviewed host rehearsal is next. Live numbering publication remains pending and is already authorized.**
+**PR2113 merged with the reviewed tree preserved. All exact-B2 and exact-deployment D checks passed; the reviewed host rehearsal is now running. Live numbering publication remains pending and is already authorized.**
 
 The owner settled **cabinet → column → row** and will create the cabinet themselves. This task changes numbering/display behavior only. Live cabinet creation and deletion of the old cabinet are deferred. No cabinet, location, inventory quantity, barcode identity, historical or financial record was directly changed by this task.
 
@@ -57,17 +57,25 @@ All **11 actual D check records passed**, across three automatic push workflows:
 Original read-only host preflight at17:34:56 UTC: guard inactive, app J2 on the Production branch, tracked clean,432non-ignored untracked entries, zero cleanup overlaps, no collisions for five incoming new paths or symlinked parents, Python optimization0, bootstrap flag absent, real .git directory and sufficient free space. These are preliminary readings; repeat applicable conditions immediately before staging/execution. The helper also rechecks under the original operation lock.
 
 ## Host coordination and publication boundary
-**Live Production changed by this task: no. The Production Git branch advanced to D through the approved PR merge. No own shared-host mutation, lease, prepare, prepublish or publication has occurred.**
+**Live Production changed by this task: no. The Production Git branch advanced to D through the approved PR merge. The reviewed host rehearsal has started. No own lease, prepare, prepublish or publication has occurred.**
 
 The predecessor PR2109 owner acquired the original guard for J2. The host was tracked-clean on J2 at 16:58:59 UTC. Its 100th platform version `d0a7e31` showed `Deployment finished Nov 24, 08:05 PM` (17:05 UTC). Our read-only original-status request at17:15 waited on an existing operation lock; the subsequent original status request began at17:19:35 and returned **active:false at17:25:38.667753 UTC** after the predecessor operation ended. This task did not clear, verify or reuse the foreign lease. A fresh original check at **17:28:11 UTC** again returned `active:false`, with `/app` tracked-clean on J2. Repeat these checks before host work.
 
 [Reviewed helper](operators/pr2113_guarded_rehearsal.py): 23,356 bytes; SHA256 `cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb`. It is preserved remotely and has not been executed. Only expected J/PR identity substitutions differ from the already reviewed helper. Original operation lock, full verified cleanup-target backups, foreign untracked preservation and all fail-closed checks remain intact.
 
-## Exact next safe actions
-1. All applicable exact-D automatic CI is now passed. Fresh-check Production still D, original guard inactive, clean app J2 and untracked count432; no incoming-path collisions. Stop if any condition changed.
-2. Stage the exact remotely preserved helper and envelope into an owned private directory, verify both byte hashes, and execute the reviewed helper from real `/app` using normal Python with bootstrap/optimization absent.
-3. Require helper receipt PASS: verified backups of four cleanup targets, fast-forward to D, original `yarn build`, exact identity/artifact/proof/packages and preserved foreign non-ignored files. The rehearsal creates no lease.
-4. Only then prepare this task's own lease and run prepublish immediately before one authorized Republish. Require a newer explicit successful platform deployment, original three-probe production verification and final guard inactive.
-5. Read-only live form check: verify row/column labels and short-number help, preview one row without saving, cancel. No live cabinet creation/deletion.
+## Active host process
+The original guard was freshly inactive, app J2 clean, Production ref D and untracked count432 at staging. Exact helper/envelope bytes were fetched from evidence commit `9f70905566ef4ae7ce4938dcd78fa5ce6d29f8ac` under the original operation lock and verified before execution.
 
-Publication is already authorized; no new owner confirmation is pending. Preserve later evidence on this separate branch and the bounded Issue1006 section. Do not merge the evidence branch or repeat the completed PR merge.
+- Operator staging: `/tmp/mezan-pr2113-operator-2fvu2mqn`, created17:46:23 UTC.
+- Active rehearsal stage: `/tmp/mezan-pr2113-rehearsal-sbyjrhil`.
+- Receipt: `/tmp/mezan-pr2113-rehearsal-sbyjrhil/receipt.json`.
+- Existing process: owned code-server Terminal8, running the reviewed helper from `/app` with bootstrap/optimization absent.
+- Observed stdout: `STAGE_PATH=/tmp/mezan-pr2113-rehearsal-sbyjrhil`. No final result observed yet.
+- **Do not rerun the helper, reset the workspace, or clear any lock.** Inspect the existing receipt/process. The tracked source may already have advanced under the helper; its exact phase is in the receipt. No platform publication or live cabinet operation has occurred.
+
+## Exact next safe actions
+1. Observe the already running helper and its receipt. Public guard status may wait on its operation lock; do not create a lease while it runs.
+2. After final PASS, independently review receipt, verified backups, exact identity/build/proof/package results and foreign-file preservation; verify source D and original guard inactive.
+3. Prepare this task's own lease, prepublish immediately before one authorized Republish, require a newer explicit successful deployment, run original three-probe production verification and confirm final inactive guard.
+4. Read-only live cabinet form check: verify row/column labels and short-number guidance, preview one row without saving, cancel. No creation/deletion.
+If the helper reports BLOCKED, preserve its stage/backups and diagnose that exact error. Never automatically rerun or roll back. Publication authorization persists; no new approval is pending.
