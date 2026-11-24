@@ -58,6 +58,29 @@ def apply_first_paid_order_page(state, *, raw, source, owner, order_number, as_o
     facts, obligations = engine["facts"], engine["obligations"]
     reports = engine["provider_reports"]
     key, page_key = "provider:" + oid, "provider_order_balance:" + oid
+    # A provider transaction reference is globally unique within this owner's
+    # operational source scope, not merely within one order. Reusing it for a
+    # second order can fabricate two receivables even when both individual
+    # order pages look fully paid.
+    reference = page["transaction_reference"]
+    for evidence_key, prior in facts.items():
+        if not isinstance(prior, dict):
+            continue
+        if (evidence_key.startswith("provider_order_balance:")
+                and prior.get("transaction_reference") == reference
+                and evidence_key != page_key):
+            raise FirstPageHold("paid_page_reference_reused")
+        if (evidence_key == "capture:" + reference
+                and (str(prior.get("order_id")) != oid
+                     or prior.get("provider") != provider)):
+            raise FirstPageHold("paid_page_reference_reused")
+    for row in state.get("customer_collections", []):
+        if (isinstance(row, dict) and row.get("status") == "confirmed"
+                and row.get("reference") == reference
+                and row.get("destination_type") == "provider"
+                and (str(row.get("order_id")) != oid
+                     or row.get("destination_id") != provider)):
+            raise FirstPageHold("paid_page_reference_reused")
     previous = facts.get(page_key)
     if previous is not None:
         # Original page evidence is cumulative. Never add it to a capture.
