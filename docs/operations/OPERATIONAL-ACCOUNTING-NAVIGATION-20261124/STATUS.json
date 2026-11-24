@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-24",
-  "state": "draft_ci_green_preview_recovery_in_progress",
+  "state": "draft_ci_green_blocked_on_exclusive_host_control",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -24,14 +24,40 @@
     "scripts/testing/simple_balances/browser.cjs"
   ],
   "verification": {
-    "exact_head_checks": {"total": 24, "success": 18, "skipped": 6, "failure": 0, "pending": 0},
-    "operational_frontend": {"job_id": 138745675560, "suites_passed": 115, "tests_passed": 1845},
-    "operational_backend": {"job_id": 138745675628, "tests_passed": 7605, "subtests_passed": 151, "demand_read_tests_passed": 106, "shipping_tests_passed": 16, "shipping_subtests_passed": 18},
+    "exact_head_checks": {
+      "total": 24,
+      "success": 18,
+      "skipped": 6,
+      "failure": 0,
+      "pending": 0
+    },
+    "operational_frontend": {
+      "job_id": 138745675560,
+      "suites_passed": 115,
+      "tests_passed": 1845
+    },
+    "operational_backend": {
+      "job_id": 138745675628,
+      "tests_passed": 7605,
+      "subtests_passed": 151,
+      "demand_read_tests_passed": 106,
+      "shipping_tests_passed": 16,
+      "shipping_subtests_passed": 18
+    },
     "browser_job_id": 138745675941,
     "synthetic_route_exit_samples_ms": [
-      {"viewport": "674x468", "milliseconds": 48.938},
-      {"viewport": "390x360", "milliseconds": 57.148},
-      {"viewport": "1440x420", "milliseconds": 57.597}
+      {
+        "viewport": "674x468",
+        "milliseconds": 48.938
+      },
+      {
+        "viewport": "390x360",
+        "milliseconds": 57.148
+      },
+      {
+        "viewport": "1440x420",
+        "milliseconds": 57.597
+      }
     ],
     "synthetic_limits": "Fixture click to destination-heading visibility only. Three samples; no p95, no enforced 500ms budget, no real Preview or Production latency proof.",
     "browser_behavior": "Read demand released exactly once, no report polling after departure, no POST/PUT/PATCH during exit.",
@@ -43,21 +69,35 @@
     "real_latency_measured": false,
     "known_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
     "admin_saved_session": "Read-only TinyFish attempt reached Emergent login wall; superseded as access blocker by existing native code-server terminal.",
-    "direct_host_access": "Existing native Chromium code-server terminal verified usable; a separate terminal was opened for this task.",
+    "direct_host_access": "Native code-server terminal is authenticated and usable for read-only inspection, but simultaneous global keyboard input caused an actual command collision. Root stopped UI input. Independent TinyFish browser reaches the code-server password wall.",
     "frontend_supervisor": "FATAL, exited too quickly",
     "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
     "known_failure": "Old frontend launcher uses Vite from an older worktree and serves an October supplier bundle. Repairing that dependency alone cannot prove PR2095 is running.",
-    "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it."
+    "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
+    "candidate_source_prepared": false,
+    "source_preparation_attempt": "Attempted isolated clone command was corrupted by simultaneous input; shell reported command not found. No successful clone or PREVIEW2095_DIRECTORY marker was observed. No candidate environment path is verified.",
+    "missing_runtime": "Old ready.json Node path does not exist. Existing pinned cache Node reports v22.23.2.",
+    "local_backend_routing": {
+      "live": {
+        "status": 200,
+        "mime": "application/json"
+      },
+      "unauthenticated_auth_me": {
+        "status": 401,
+        "mime": "application/json"
+      }
+    }
   },
   "shared_release": {
     "guard_active_observed": true,
     "owner": "chatgpt-operational-cost-report-20261124-pr2118",
     "deployment_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
-    "owner_state": "PR2118 describes an active publication after prepare/prepublish; its owner must finish verification and close its matching lease.",
+    "owner_state": "PR2118 reports platform publication completed at 23:41 Riyadh and its owner started original verification at 20:42:16.797387 UTC. Latest PR observation still has verification and inactive status pending. Do not take over this release.",
     "this_task_prepared": false,
     "this_task_merged": false,
     "this_task_published": false,
-    "production_changed_by_this_task": false
+    "production_changed_by_this_task": false,
+    "latest_guard_probe": "Reviewed preflight status subprocess timed out after 8 seconds; not evidence of inactivity. The earlier direct active lease remains the last successful original-guard observation."
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
@@ -67,7 +107,7 @@
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Run the reviewed read-only host preflight in the existing separate terminal, retaining sanitized output. Prepare isolated candidate source/dependencies away from /app. Before changing shared Preview services, freshly verify original guard inactive and review actual private backend isolation and API compatibility. Then run exact candidate Preview and measure cold/warm navigation p50/p95 before requesting release acceptance.",
+  "next_safe_action": "Obtain exclusive keyboard control of the authenticated code-server terminal, or have the owner authenticate the independent browser. First inspect owned terminal outcome and original guard state; do not blindly retry corrupted input. Complete isolated candidate preparation and private backend isolation review, then run exact candidate Preview and measure real cold/warm route-interactivity p50/p95. Shared service changes wait for the other release owner to finish verification and close its own lease.",
   "continuity": "Issue1006 has 2500 comments and current task documents report its comment limit. Preserve this evidence branch and link the exact checkpoint from Issue2094 and PR2095. Do not overwrite unrelated ledger sections.",
   "evidence_branch_is_deployable": false
 }

@@ -1,0 +1,47 @@
+{
+  "task_id": "OPERATIONAL-ACCOUNTING-NAVIGATION-20261124",
+  "observation_date": "2026-11-24",
+  "source": "native code-server terminal, reviewed helper executed in memory after SHA256 verification",
+  "helper_commit": "760c9d3aaf2dadbcf7d7e6f6a40a49b3647c4d1c",
+  "helper_sha256": "d2bd4d6e5df08b936d6bdfa1dc95f9f23912f0db31b27e55407b452454ac5fb7",
+  "shared_head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "guard_probe": "TimeoutExpired; earlier original status active with PR2118 owner; no inactivity inferred",
+  "supervisor": {
+    "frontend": "FATAL",
+    "backend": "RUNNING",
+    "config": "/etc/supervisor/conf.d/supervisord.conf",
+    "directory": "/root/mezan-preview-supplier-r2-20261026",
+    "executable": "/etc/supervisor/emergent-env-exec"
+  },
+  "old_ready_node_exists": false,
+  "cached_node_version": "v22.23.2",
+  "preview_api_origin": "https://salla-analytics.preview.emergentagent.com",
+  "free_bytes": {
+    "app": 423247872,
+    "tmp": 237566271488
+  },
+  "local_backend_8001": {
+    "/api/live": {
+      "status": 200,
+      "mime": "application/json"
+    },
+    "/api/auth/me": {
+      "status": 401,
+      "mime": "application/json"
+    }
+  },
+  "candidate_frontend_running": false,
+  "candidate_backend_compatibility_verified": false,
+  "real_performance_samples": [],
+  "shared_ui_collision": {
+    "observed": true,
+    "description": "Terminal selection changed and an isolated clone command was interleaved with another guard-status command. Shell rejected malformed input. Root stopped all global keyboard input.",
+    "verified_clone_directory": null
+  },
+  "independent_browser_discovery": {
+    "result": "code-server password wall; no commands run",
+    "evidence": "https://agent.tinyfish.ai/runs/b9da28a8-ae37-44f1-a720-09833b0b02de"
+  },
+  "production_mutated_by_this_task": false,
+  "limitations": "Summary transcribed from the observed bounded JSON output. No raw environment, credentials, response bodies, database rows or private adapter source retained."
+}

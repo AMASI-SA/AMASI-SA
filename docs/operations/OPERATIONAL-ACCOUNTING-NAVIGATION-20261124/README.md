@@ -75,3 +75,20 @@ Draft PR 2095 stays unmerged and undeployed until measured Preview acceptance an
 the user's explicit release acceptance. A later authorized release still needs
 a newly frozen A/B intent, full governed rehearsal and the original release
 protocol. Historical PR 2076 commands must not be reused.
+
+## Host inspection and control blocker
+
+The reviewed helper at evidence commit `760c9d3aaf2dadbcf7d7e6f6a40a49b3647c4d1c`
+ran in the existing native terminal after its SHA256 matched. See
+`HOST-INSPECTION.json` for the sanitized receipt. The backend returned JSON 200
+for `/api/live` and JSON 401 for unauthenticated `/api/auth/me`. The old Node path
+is missing; the separate pinned cache Node exists. The guard-status subprocess
+timed out during the other release owner's verifier, so inactivity is unproven.
+
+A later attempt to prepare isolated candidate source encountered simultaneous
+keyboard input in the shared native browser. The malformed command was rejected
+by the shell; no successful clone or candidate directory was observed. Root
+stopped all global keyboard input. An independent browser was also checked and
+reached a code-server password wall. No candidate setup or latency acceptance is
+claimed. Exclusive authenticated terminal control is the next prerequisite;
+preserve the other owner's verifier and lease while arranging it.
