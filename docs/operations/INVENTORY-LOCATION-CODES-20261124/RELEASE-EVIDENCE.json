@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24T19:06:00Z",
+  "observed_at_utc": "2026-11-24 19:10:25 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "PACK_PREPARATION_PASS_CAPACITY_APPLY_REVIEWED",
+  "state": "CAPACITY_RECOVERY_PASS_READY_FOR_CANONICAL_REHEARSAL",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Run reviewed capacity APPLY once after exact staging; inspect actual space and PASS. Then original canonical /app recovery rehearsal and review, own prepare/prepublish, authorized Republish, newer platform success, original three-probe verify, live form preview/cancel.",
+  "next_safe_action": "One unchanged strict-D recovery rehearsal using helper4fe507 and envelope7f806 after fresh guard inactive, exact D, absent generated targets and comparable available space. Then independent original proof review before own lease/publication.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1796,7 +1796,7 @@
     }
   },
   "capacity_apply": {
-    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "state": "PASS",
     "helper": {
       "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_apply_capacity.py",
       "bytes": 26580,
@@ -1809,6 +1809,55 @@
       "/tmp/mezan-pr2113-pack-hcsmx8wl",
       "27e0888953903d71320ca0f9fce802636a0dc426f00bc6516c36837f9690403e",
       "/tmp/mezan-pr2113-capacity-operator-4qx59frr/pr2113_prepare_capacity_archives.py"
-    ]
+    ],
+    "execution": {
+      "status": "PASS",
+      "stage": "/tmp/mezan-pr2113-capacity-apply-ruyxcz8w",
+      "durable_stage": "/app/.git/mezan-pr2113-capacity-applied-wdr7ug6g",
+      "staged_at_utc": "2026-11-24T19:07:15.328474+00:00",
+      "receipt": {
+        "bytes": 10553,
+        "sha256": "d3e7b6ca8acebfa7ce172d55a8a7858f33baa8151cc0054e740e10271233ebe0"
+      },
+      "operator_sha256": "2226db71ad93d7819ecee3480178d0618cd93c58a9975e088bb100b8abfdf080",
+      "steps_summary": {
+        "total": 13,
+        "all_pass": true
+      },
+      "preserved_foreign_count": 432,
+      "identical_foreign_entries": 432,
+      "append_only_path": null,
+      "preserved_logical_object_count": 82750,
+      "pruned_duplicate_count": 5760,
+      "keep_created_before_index": true,
+      "source_and_refs_unchanged": true,
+      "old_packs_unchanged": true,
+      "indices_and_worktree_metadata_unchanged": true,
+      "original_backup_preservation": {
+        "archive": "/app/.git/mezan-pr2113-capacity-applied-wdr7ug6g/original-node-modules-backup.tar.gz",
+        "bytes": 19991544,
+        "sha256": "f82674d9dc48b59ff06ca2e84a3013caf2e34c10fc4d045348fd565075eb7270",
+        "restore_manifest": "/app/.git/mezan-pr2113-capacity-applied-wdr7ug6g/original-node-modules-backup-restore-manifest.json",
+        "manifest_bytes": 1472585,
+        "manifest_sha256": "1e395e80d132c066e891cf9fc894128a192fd040c05ec8ac108066a3caee60ff",
+        "mode": 384,
+        "file_and_directory_fsync_completed": true
+      },
+      "original_raw_backup_removed": true,
+      "space_after": {
+        "available_bytes": 706215936,
+        "available_inodes": 224733,
+        "free_bytes": 722993152
+      },
+      "build_started": false,
+      "lease_created": false,
+      "published": false
+    },
+    "rehearsal_capacity_assessment": {
+      "available_bytes": 706215936,
+      "known_exact_release_footprint_bytes": 662798336,
+      "estimated_margin_bytes": 43417600,
+      "limitation": "Modest estimated headroom; not a peak or concurrent-write guarantee. One unchanged original canonical attempt after fresh capacity check; old generated targets absent, no repeated large backup."
+    }
   }
 }
