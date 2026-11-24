@@ -59,6 +59,14 @@ def require_healthy_source(state, health, *, at):
     return True
 
 
+def require_salla_current(row):
+    """Do not mistake a successful aggregate for a healthy Salla source."""
+    if (type(row) is not dict or row.get("key") != "salla"
+            or row.get("state") != "current" or row.get("code") != "salla_source_current"):
+        raise RefreshHealthHold("payment_salla_source_unverified")
+    return True
+
+
 async def require_current_refresh_health(db, owner, state, *, at):
     """Run the same owner-scoped read at preparation and immediately before CAS."""
     from operational_balance_freshness import HEALTH
@@ -69,5 +77,12 @@ async def require_current_refresh_health(db, owner, state, *, at):
             {"_id": 0, "owner_id": 1, "last_success_at": 1, "last_attempt": 1},
         )
         require_healthy_source(state, health, at=at)
+        # Source freshness is separate from aggregate completion. The actual
+        # owner Salla scheduled reconciliation can fail even after a successful
+        # 74-second operational engine refresh. Read only this bounded source.
+        from operational_source_freshness import _salla
+        source_now = _stamp(at)
+        salla = await _salla(db, owner, source_now)
+        require_salla_current(salla)
     except RefreshHealthHold as exc:
         fail(str(exc), "نتيجة تحديث المصادر غير سليمة؛ أوقف الترحيل المالي حتى نجاح التحديث", 409)
