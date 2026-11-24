@@ -145,7 +145,7 @@ class TrackingTests(unittest.IsolatedAsyncioTestCase):
         await self.db.store_delivery_events.insert_many([
             {**selector, "assignment_id": "assignment-a", "driver_id": "driver-a",
              "event_type": "store_delivery_customer_unreachable", "occurred_at": "2026-11-20T12:00:00Z",
-             "note": "PRIVATE_NOTE"},
+             "note": "اتصلت بالعميل ولم يرد", "evidence_url": "PRIVATE_EVIDENCE"},
             {**selector, "assignment_id": "assignment-a", "driver_id": "driver-a",
              "event_type": "store_delivery_resumed", "occurred_at": "2026-11-21T09:00:00Z"},
             {**selector, "assignment_id": "assignment-a", "driver_id": "different",
@@ -158,8 +158,19 @@ class TrackingTests(unittest.IsolatedAsyncioTestCase):
             row = next(row for row in steps if row["label"] == label)
             self.assertEqual(row["actor_name"], "الموصل الأول")
         self.assertEqual(steps[0]["at"], "2026-11-21T12:00:00+00:00")
-        for hidden in ("PRIVATE_NOTE", "FOREIGN_DRIVER", "WRONG_ORDER", "العميل طلب إلغاء الطلب"):
+        exception = next(row for row in steps if row["label"] == "العميل لا يرد")
+        self.assertEqual(exception["note"], "اتصلت بالعميل ولم يرد")
+        for hidden in ("PRIVATE_EVIDENCE", "FOREIGN_DRIVER", "WRONG_ORDER", "العميل طلب إلغاء الطلب"):
             self.assertNotIn(hidden, str(body))
+
+    async def test_explicit_return_status_is_not_inferred_from_cancel_request(self):
+        await self.source(status="returned")
+        await self.db.unified_orders.update_one({"user_id": "owner-a", "order_number": "10001"},
+            {"$set": {"raw_by_source.salla_direct.status_changed_at": "2026-11-22T10:00:00Z"}})
+        body = await self.get()
+        self.assertEqual(body["status"], "returned")
+        self.assertTrue(any(row["label"] == "تم استرجاع الشحنة" and row["source"] == "salla"
+                            for row in body["order_route_steps"]))
 
     async def test_independent_grant_live_revoke_and_manager_owner_access(self):
         await self.source()
