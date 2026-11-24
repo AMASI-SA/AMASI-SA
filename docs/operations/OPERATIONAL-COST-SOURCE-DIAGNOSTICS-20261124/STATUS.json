@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
-  "status": "WIP: frozen intent-only B and original tracked validator PASS; exact-B CI running; PR ready for review, not merged or published",
+  "status": "WIP: PR2118 normally merged with exact reviewed tree; B25success/10conditional skips; exact-M CI running; reviewed envelope ready, host rehearsal not started",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-cost-report-release-20261124",
   "source_base_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -63,9 +63,9 @@
     }
   ],
   "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards. External candidate provenance, full clean canonical-A checkout and original load_candidate_release_intent independently passed without mutation.",
-  "ci_state": "Exact-A21success/6conditional skips retained. Exact-B checks, including both Host adapter rehearsals and any ready-for-review additions, must all finish before merge.",
-  "merge_state": "PR2118 open and ready for review at exact B; unmerged.",
-  "release_state": "Reviewed intent-only B frozen after independently observed predecessor three-probe verification and inactive guard. No own host rehearsal, lease or publication yet.",
+  "ci_state": "Exact-B35latest records:25success/10conditional skips, no pending/failure/neutral. Both Host20/24 and all applicable no-skips gates passed. Exact-M push CI must complete before host rehearsal.",
+  "merge_state": "PR2118 normally merged20:08:54UTC as c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe; parents[J,B],treeB preserved.",
+  "release_state": "Production Git ref is exact M; live runtime is still preceding verified J. Envelope independently reviewed. No own host source/build change, lease or publication yet.",
   "production_changed": false,
   "limitations": [
     "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
@@ -74,7 +74,7 @@
     "No runtime latency reduction, source completeness or financial recovery is claimed.",
     "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
   ],
-  "next_safe_action": "Require all applicable exact-B CI including Host20/24 clean-clone/package/HTTP checks and additional ready-for-review gates. Merge normally with expected B and require parents[J,B]/treeB plus exact-merge CI. Then fresh original guard/capacity/foreign baseline and reviewed canonical /app rehearsal before own prepare.",
+  "next_safe_action": "Require every actual exact-M push check to pass. Recheck original inactive guard/currentJ/cleanworktree/capacity/432foreign entries; stage the reviewed helper and seven-field envelope, then execute the original canonical /app rehearsal under the original operation lock. Preserve foreign files and verified backups; only after PASS perform own prepare/prepublish/publication.",
   "integration": {
     "coordinator": "/root",
     "production_branch_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -113,7 +113,7 @@
     "history_gate": "The initial unpushed integration attempt b9675bea83bd2881cdf8fbd828a1f2a6562ac873 retained both earlier branches as parents but was rejected by the original full-history intent-path condition despite equal final intent bytes. It remains local only and will not be released. This fresh linear source avoids bringing old-intent branch history into J..A; keep the validator unchanged."
   },
   "continuation_evidence": {
-    "recorded_at_utc": "2026-11-24T19:54:25Z",
+    "recorded_at_utc": "2026-11-24T20:13:06Z",
     "source_pr": 2118,
     "source_branch": "codex/operational-cost-report-release-20261124",
     "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
@@ -229,7 +229,7 @@
         "app_available_bytes": 428056576
       }
     },
-    "next_safe_action": "Require all applicable exact-B CI including Host20/24 clean-clone/package/HTTP checks and additional ready-for-review gates. Merge normally with expected B and require parents[J,B]/treeB plus exact-merge CI. Then fresh original guard/capacity/foreign baseline and reviewed canonical /app rehearsal before own prepare.",
+    "next_safe_action": "Require every actual exact-M push check to pass. Recheck original inactive guard/currentJ/cleanworktree/capacity/432foreign entries; stage the reviewed helper and seven-field envelope, then execute the original canonical /app rehearsal under the original operation lock. Preserve foreign files and verified backups; only after PASS perform own prepare/prepublish/publication.",
     "production_changed_by_this_candidate": false,
     "preceding_publisher_history": [
       {
@@ -264,8 +264,15 @@
       "blob": "3222d1e6bc9b2fc0ed2aab3452fed32761b59a72",
       "independent_review": "PASS; original2092helper with five identity-only substitutions; controls unchanged",
       "executed": false,
-      "envelope_created": false,
-      "limitation": "Fresh capacity, exact B/M and foreign untracked baseline are required before execution."
+      "envelope_created": true,
+      "limitation": "Fresh capacity, exact B/M and foreign untracked baseline are required before execution.",
+      "envelope": {
+        "path": "operators/pr2118-reviewed-envelope.json",
+        "bytes": 400,
+        "sha256": "28f4649fc07cd9f710c8276177106bc3ee8d314da74a34f00d4de7d799849f6f",
+        "git_blob": "b18714ec34804ded612bb0d7bef7cf660c796bd4",
+        "independent_review": "PASS; seven fields, exact J/A/B/M/treeB/RID and integer432; helper original identity-only bytes unchanged"
+      }
     },
     "frozen_B": {
       "sha": "a0f5bd77f91b85b2d75885aa4173c4e48aa16ad7",
@@ -290,7 +297,64 @@
         "source_and_intent_unchanged": true
       },
       "pr_ready": true,
-      "merged": false
-    }
-  }
+      "merged": true,
+      "final_ci": {
+        "result": "PASS",
+        "total": 35,
+        "success": 25,
+        "conditional_skips": 10,
+        "pending": 0,
+        "failure": 0,
+        "neutral": 0,
+        "root_read_at": "2026-11-24T20:07:34Z",
+        "independent_read_at": "2026-11-24T20:07:28Z",
+        "evidence_path": "PR2118-B-CI-REVIEW.json",
+        "evidence_blob": "a2ecce32614be6b4de9cadb58b60fee2e1269b16",
+        "normal_and_required_tests_executed": true,
+        "manual_reruns": 0
+      }
+    },
+    "deployment_merge": {
+      "sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "merged_at": "2026-11-24T20:08:54Z",
+      "method": "merge",
+      "expected_head": "a0f5bd77f91b85b2d75885aa4173c4e48aa16ad7",
+      "parents": [
+        "cb98e5660380d362e78f937d60abc7139cd1c462",
+        "a0f5bd77f91b85b2d75885aa4173c4e48aa16ad7"
+      ],
+      "tree": "8f131ad2a92d8fb70bfd29f314491d8a3ab9adda",
+      "tree_equals_B": true,
+      "production_ref_matches": true,
+      "root_and_independent_structure_review": "PASS",
+      "ci_state": "pending",
+      "push_runs": [
+        45477709522,
+        45477709386,
+        45477709384
+      ]
+    },
+    "current_host_preflight": {
+      "at": "2026-11-24T20:10:28.800467+00:00",
+      "original_status_exit": 0,
+      "active": false,
+      "head": "cb98e5660380d362e78f937d60abc7139cd1c462",
+      "branch": "hotfix/prod-snap-meta-final",
+      "tracked_clean": true,
+      "git_dir": "/app/.git",
+      "guard_bytes_match_J": true,
+      "python_optimize": 0,
+      "bootstrap_enabled": false,
+      "untracked_count": 432,
+      "cleanup_overlaps": 0,
+      "incoming_path_collisions": 0,
+      "incoming_symlink_parents": 0,
+      "app_available_bytes": 427249664,
+      "tmp_available_bytes": 237653221376,
+      "limitation": "Preliminary mutable observations; repeat before execution. Shared-host canonical rehearsal remains pending exact-M CI."
+    },
+    "candidate_build_route_review": "Original workflow297-366 intentionally builds A twice, verifies/freezes/validates external candidate, uploads and proves clean worktree; protocol133-137 describes Candidate-A CI. This is reviewed candidate evidence, not shared-host rehearsal. Original /app rehearsal follows reviewed deployment FF and precedes prepare, per workflow736-740. No extra gate or waiver introduced."
+  },
+  "production_git_changed": true,
+  "live_production_changed": false
 }
