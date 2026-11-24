@@ -27,14 +27,18 @@
 - Original implementation commit
   `05333b6682be0cf5125568503bdd0175b8212121` and its local successor remain
   preserved on `codex/dashboard-split-payment-profit-local-20261124`.
-- [Draft PR #2121](https://github.com/AMASI-SA/AMASI-SA/pull/2121) remains the
-  historical reviewed dashboard candidate. A new release PR from the new branch
-  will supersede it; do not merge the old candidate. The new PR number is not
-  known at this source checkpoint.
-- The new enclosing source commit has **one parent, J2**, and exactly the ten
-  dashboard paths described below. Read the remote release-branch head for its
-  full SHA; this document does not embed its own commit SHA. It is source A2,
-  not an intent-only Protocol-v5 B commit.
+- [PR #2121](https://github.com/AMASI-SA/AMASI-SA/pull/2121) is the preserved
+  historical candidate, superseded by
+  [Draft PR #2122](https://github.com/AMASI-SA/AMASI-SA/pull/2122) on the new
+  release branch. Do not merge the old candidate.
+- Reviewed integrated source A2 is
+  `6a55a5772318bc33af69622dc0c6e71bf85d7990`, tree
+  `2e949590bd6bec8a5acc94734c8f78f976ea0d0e`, with sole parent J2.
+- The enclosing source A3 has **one parent, A2**. It changes only the existing
+  collector-context test expectation and this status document. All application
+  bytes and the inherited intent remain unchanged. Read the remote release
+  branch/PR head for the full enclosing SHA; this document does not embed its
+  own commit SHA. A3 is source, not an intent-only Protocol-v5 B commit.
 - Production changed by this task: **no**. No merge, shared `/app` change, release
   lease, publication, settings write, tariff change, sync, backfill or accounting
   post has occurred.
@@ -166,9 +170,90 @@ and other tasks' caches/checkouts were not changed.
 
 Additional build work was bound to source
 `9138afc446066d920d4373415f00e78b08520854` while the production branch advanced.
-That evidence is now historical too. The new single-parent source A2 must be
-rebuilt and verified before freezing a new intent-only B2; earlier artifacts do
-not identify the new source or its runtime release.
+That evidence is historical too. A2 subsequently completed its governed two-pass
+build, verification and external freeze, but its later CI test-expectation
+failure requires a fresh A3 build and intent. The superseded A2 candidate had:
+
+- Source: `6a55a5772318bc33af69622dc0c6e71bf85d7990`.
+- Intent bytes: 1,531,723; SHA256
+  `b5e5a87de13bad59a1640a4ed0202a611ccb21a2471b73a7f93c312a3bc427e1`.
+- Runtime ID:
+  `rg5-529dbcf25fd156d81c277a70335a3c097bbf648d4aebfefce054436fa873d387`.
+- Artifact tree:
+  `3c51000b2a0c0f86bb01a5d29726170c47137db286a82d4a49a7cc19580f7690`.
+- Reproducibility proof:
+  `21682042b2f8bead811ea06fae54a3ca09ca8f55cde08c95e1d1afd3b3769773`.
+
+The original `load_candidate_release_intent` independently accepted that external
+A2 file with exact source/base, public origin and deterministic identity, exit 0.
+The B uploader stopped before any remote blob, tree, commit or ref mutation when
+CI reported the source-test blocker. No B was created for A2. Do not reuse this
+historical intent for A3; rebuild and freeze against the new exact source SHA.
+
+## CI follow-up and source A3
+
+[A2 four-platform backend CI](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45492074123/job/138792731397)
+reported 448 passed, one failed and seven subtests passed. The failure was
+`test_existing_hydration_query_carries_only_precise_source_time_and_settings_without_extra_reads`
+in `backend/tests/test_dashboard_ads_account_results.py`, at its exact-context
+comparison. The existing expectation omitted the deliberately added owner-bound
+context fields `owner_id="a"` and `split_fee_reference_conflicts=[]`.
+
+The unchanged A2 test reproduced that precise assertion locally: one failed,
+exit 1, in 3.47 seconds. A3 adds only those two expected values on one line.
+The dictionary comparison remains exact; the no-extra-query counts, source
+context nonmutation, bounded hydration, private-field exclusions and endpoint
+result assertions remain intact. No application change or assertion relaxation
+was needed.
+
+Verification after that correction:
+
+- Isolated regression: one passed, exit 0, in 3.28 seconds.
+- All 19 test files selected by the `backend-contract` job in
+  `.github/workflows/prod-dashboard-four-platform-spend-v1.yml`:
+  **449 passed and seven subtests passed**, exit 0, in 17.33 seconds.
+  Five existing Pydantic deprecation warnings remain unrelated.
+- The earlier exact-A2 payment-fee regression also passed all 300 tests,
+  exit 0, in 16.45 seconds. These overlapping suites are not additive unique
+  test counts.
+- `git diff --check` passed. The source correction is one added test line;
+  this status document is the only other changed path after A2.
+
+The first full local attempt encountered environment prerequisites: the cached
+review environment lacked SOCKS support, and the clone lacked nine historical
+blob objects required by the existing source-parity oracles. `socksio==1.0.0`
+was installed in a task-owned target directory, with the shared review environment
+and configured network proxy unchanged. The nine original blobs were read from
+GitHub, verified against their pinned Git IDs, and added only to the object
+store. No oracle, Git ref or application file was changed. The successful run
+used those prerequisites and disabled repository bytecode/pytest-cache writes.
+
+Portable reproduction from `backend`, with the workflow dependencies installed
+and its pinned historical source objects available:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=.:tests python -B -m pytest \
+  --noconftest -p no:cacheprovider -q --tb=short \
+  tests/test_dashboard_four_platform_spend_v1.py \
+  tests/test_dashboard_tiktok_native_spend_basis.py \
+  tests/test_dashboard_snapchat_spend_issue_727.py \
+  tests/test_google_ads_reporting_v1.py \
+  tests/test_dashboard_ads_hourly_spend_v1.py \
+  tests/test_dashboard_ads_account_results.py \
+  tests/test_dashboard_ads_costs.py \
+  tests/test_dashboard_dated_payment_fees.py \
+  tests/test_dashboard_ads_periods.py \
+  tests/test_dashboard_runtime_source_contract.py \
+  tests/test_dashboard_card_snapshots.py \
+  tests/test_payment_method_setup.py \
+  tests/test_payment_method_fee_status.py \
+  tests/test_awaiting_payment_cohort.py \
+  tests/test_payment_method_setup_routes.py \
+  tests/test_dashboard_bundle_cost_authority.py \
+  tests/test_snapchat_reporting_v2_account_display.py \
+  tests/test_tiktok_scheduler_hourly.py \
+  tests/test_ads_auto_sync_scheduler_v2.py
+```
 
 ## Why a fresh linear source is required
 
@@ -182,14 +267,14 @@ original `_assert_candidate_source_transition` check: the complete candidate
 history included an intent change. That trial is not a releasable source and
 was not published. The validator remains unchanged.
 
-The replacement source has J2 as its sole parent. It overlays the exact nine
+The replacement source A2 has J2 as its sole parent. It overlays the exact nine
 reviewed application/test/workflow blobs from `9138afc...`, plus this updated
 status document, onto J2. It does not include the old source as a second parent
 or rewrite either preserved branch. Every PR #2120 path and its inherited
 `release/release-intent-v5.json` blob
 `ba1de70733b798225dd8aa39a4c7569b55df3a4c` are preserved.
 
-The only changed paths relative to J2 are:
+The only A2 changed paths relative to J2 are:
 
 - `.github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml`
 - `backend/dashboard_payment_fees.py`
@@ -202,11 +287,13 @@ The only changed paths relative to J2 are:
 - `frontend/src/lib/paymentFeeCompleteness.js`
 - `frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx`
 
-The integration uploader independently calculates the desired Git tree from J2
-and these exact blobs, requires the remote tree to match, and confirms the
-production ref is still J2 before creating the previously absent release branch.
-No local checkout edit, old-branch rewrite, intent change, PR creation, merge or
-publication is part of this source upload.
+The A2 uploader independently calculated the desired Git tree from J2 and these
+exact blobs, required the remote tree to match, and confirmed production still
+at J2 before creating the absent release branch. A3 now extends A2 linearly with
+the one-line test correction and this updated document. Its only additional
+path relative to J2 is `backend/tests/test_dashboard_ads_account_results.py`.
+The full J2-to-A3 history still carries no intent change. Both source uploads
+preserve the earlier branches and every PR #2120 application/intent byte.
 
 ## Published-base evidence and shared release coordination
 
@@ -244,23 +331,23 @@ other owners' leases and keep the original release validators unchanged.
 ## Release state and exact next actions
 
 Upload, merge and publication remain authorized. Original PR #2121 and its
-source history are preserved. The replacement source A2, new release PR, exact
-source-head CI/review, governed build, new intent-only B2, original adapter
-rehearsal and publication verification form the remaining release path.
+source history are preserved; Draft PR #2122 is the release candidate. Corrected
+source A3 still requires its exact-head CI/review, governed build, new intent-only
+B, original adapter rehearsal and publication verification.
 
-1. Read and verify the new remote release-branch commit: sole parent J2, exact
-   ten changed paths, nine original implementation blobs, updated status, and
-   unchanged inherited intent. Adopt it in an isolated or clean task checkout
-   while preserving both earlier branches and all unrelated local work.
-2. Create the replacement reviewable PR and link it to superseded PR #2121.
+1. Read and verify remote A3: sole parent A2, exactly the test and status paths
+   changed after A2, all application bytes unchanged, and no inherited intent
+   change anywhere in J2-to-A3 history. Preserve the verified local edits before
+   adopting that exact remote source; retain both earlier branches.
+2. Re-read Draft PR #2122 and exact-head CI after the source update.
    Confirm current production J2, current published identity, and the actual
    original shared guard before any shared workspace action. Wait for the
    active publisher if its lease remains active; do not clear or reuse it.
 3. Follow `AGENTS.md` and `docs/PRODUCTION_RELEASE_PROTOCOL.md`: run the original
-   candidate-transition check, build exact A2 with the governed toolchain,
-   validate its candidate, and freeze B2 changing only
+   candidate-transition check, build exact A3 with the governed toolchain,
+   validate its candidate, and freeze B changing only
    `release/release-intent-v5.json`. Require exact-head CI/review and a normal
-   merge preserving A2/B2 ancestry.
+   merge preserving A3/B ancestry.
 4. Complete the original adapter rehearsal and Release Guard preparation and
    prepublication checks. Publish once through the authorized production flow.
 5. Require a newer explicit deployment success and all three original verifier

@@ -562,6 +562,7 @@ async def test_existing_hydration_query_carries_only_precise_source_time_and_set
     assert fee_context == context_before
     assert collector.fee_context == {
         **fee_context, "as_of": PARAMS["to_date"], "statement_plans": {},
+        "owner_id": "a", "split_fee_reference_conflicts": [],
     }
     raw = on[0]["raw_by_source"]["salla_direct"]
     assert raw["date"]["timezone"] == "Asia/Riyadh"
