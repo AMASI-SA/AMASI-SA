@@ -2,7 +2,7 @@
 
 ## Current state
 
-**IMPLEMENTING — frontend checkpoint verified; backend integration in progress.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**SOURCE REVIEWED — focused tests passed; governed release pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -47,16 +47,30 @@ Root coordinates integration, docs, GitHub and any separately governed release. 
 
 Required evidence: focused public-behavior tests; real Mongo transaction, rollback and concurrency checks; frontend cancellation, errors, exact target and restore tests; combined diff review; applicable CI/build/release gates; live verification of only the intended old cabinet after publication. Preserve all unrelated source work and production release leases.
 
-## Verified frontend checkpoint
+## Verified implementation
 
 The warehouse page now provides an exact-target archive confirmation, archived-cabinet reader, restoration, server rejection messages, duplicate-submit prevention, stale-read protection and saved-write/failed-refresh handling. The list remains reachable after archiving the last active cabinet. Delegated access cannot expose manager lifecycle controls.
 
 Changed frontend paths: `frontend/src/pages/WarehouseHierarchyWorkspace.jsx`, `frontend/src/pages/warehouseHierarchy.css`, and new `frontend/src/pages/WarehouseHierarchyWorkspace.archive.test.jsx`.
 
-The frontend implementer ran both warehouse workspace suites with the existing installed dependencies: **26/26 tests passed, two suites, exit 0**, including the unchanged 14 numbering/creation/print tests. The initial regression failed because the archive control was absent. `git diff --check` passed. This diagnostic run used Node 24.22.3; the required Node 22.23.2 verification and governed build remain pending. The frontend writer has stopped editing.
+The frontend implementer ran both warehouse workspace suites with the existing installed dependencies: **26/26 tests passed, two suites, exit 0**, including the unchanged 14 numbering/creation/print tests. The initial regression failed because the archive control was absent. Root then ran both suites through the original `frontend_release_toolchain.py exec` on the required Node 22.23.2/Yarn 1.22.22: **26/26 passed, two suites, exit 0, 5.699 seconds**. `git diff --check` passed. The three frontend paths were durably checkpointed at `ea37eab77b7054ce98438b002958d9e94c87a6ec`.
 
-Backend lifecycle code, allocation guards and real Mongo tests remain work in progress in the shared checkout. They are not part of this frontend-only remote checkpoint. Independent review identified legacy `current_quantity` and conflicting section/room identifiers as additional fail-closed conditions; the backend writer is addressing both. No PR, CI, release lease, publish or live mutation has been started for this follow-up.
+Backend implementation and focused tests are complete. `warehouse_cabinet_lifecycle.py` adds the three routes and restricted `warehouse_lifecycle` transaction profile. Existing warehouse readers and directly relevant bundle, receipt, opening, stocktake and component paths exclude archived slots. Stale placement uses state/occupancy compare-and-set and checks the matched count. Current bundle pins are validated on save inside the shared owner transaction; frozen history remains readable.
+
+The backend author ran the two new archive test files on an exclusively owned MongoDB 7.0.14 replica: **73 passed in 15.60 seconds, exit 0, no skips**. The raw log is retained as `backend-focused.log` beside this document. Its SHA-256 is `f69a5756be355512dcdcc39d3570254f17e781a24e90c46e44b16aa4af02812f`.
+
+The real transaction tests cover archive/restore with preserved parents, employee assignments, new cabinet, identities and history; active references; scope and manager boundaries; complete slot sets; rollback of both operations on audit failure; repeated concurrent requests; both orders of the placement/archive race; refused receipt initialization; current bundle pins and readable frozen history; and malformed markers. Legacy `current_quantity`, conflicting section/room IDs and non-text or blank parent aliases fail closed before writing.
+
+Independent review of the final backend, frontend and new `.github/workflows/warehouse-cabinet-archive.yml` reports **PASS, no remaining source blockers**. The reviewer read the raw 73-test log and matched these source SHA-256 values:
+
+| Path | SHA-256 |
+| --- | --- |
+| `backend/warehouse_cabinet_lifecycle.py` | `1bc7d2d75a0b2b5cf1275506be5c1817e45269924c4d03770b606e8213c39d9c` |
+| `backend/tests/test_warehouse_cabinet_archive.py` | `f39ccc99e251b6c1c68802c29bba0e056ca0681267af23eb495a07d2cce869d8` |
+| `backend/tests/test_warehouse_cabinet_archive_mongo.py` | `2ea8b852c32b2bba0bc59e35b128dee96723c56b19c71007d5b4dfc2d1a92268` |
+
+The new workflow checks the actual PR head, uses a checksum-pinned owned Mongo binary with no external URI fallback, and rejects skipped/failing archive tests. It also runs the two frontend suites on the required Node version. Existing gates are unchanged. All source writers have stopped. Final-head CI, the governed build/intent and original release guard remain pending; there has been no lease, publish or live mutation for this follow-up.
 
 ## Next safe action
 
-Complete the bounded backend implementation and real Mongo tests, run the two frontend suites on the required Node version, then inspect and checkpoint the integrated diff with the new CI workflow. Do not archive live data until the new operation has passed review and the repository's complete production release protocol. This frontend checkpoint is not release readiness.
+Checkpoint this reviewed source, run the relevant existing regression contracts and final-head CI, and complete the original two-commit release protocol. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.

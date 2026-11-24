@@ -193,7 +193,7 @@ def leaf_key(leaf):
 
 async def inventory_lots(db, owner, warehouses, *, pin=True):
     from fulfillment_v2_routes import _load_inventory_evidence, _inventory_eligibility, _pin_inventory_locations
-    locations = await _rows(db[LOCATIONS], {"user_id": owner, "state": {"$ne": "disabled"}})
+    locations = await _rows(db[LOCATIONS], {"user_id": owner, "state": {"$ne": "disabled"}, "cabinet_archive": {"$exists": False}})
     if warehouses:
         locations = [r for r in locations if r.get("warehouse_id") in warehouses]
     evidence = await _load_inventory_evidence(db, owner, locations)

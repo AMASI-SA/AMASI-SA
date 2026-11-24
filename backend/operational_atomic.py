@@ -27,6 +27,7 @@ _OWNED = frozenset({
     "warehouse_location_events", "unified_orders",
 })
 _PROFILES = {
+    "warehouse_lifecycle": frozenset({"warehouse_locations_cabinets", "warehouse_locations", "warehouse_location_events"}),
     "purchase_receiving": frozenset({"mz2_inventory_purchase_receipts_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events", "operational_balance_states_v1"}),
     "standalone_inventory": frozenset({"mz2_standalone_inventory_entries_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "opening_inventory": frozenset({"mz2_operational_inventory_openings_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
@@ -317,6 +318,10 @@ class _Collection:
             name = self.__collection.name
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
+            if self.__state["profile"] == "warehouse_lifecycle":
+                expected = "insert_one" if name == "warehouse_location_events" else "update_one"
+                if method != expected or kwargs or len(args) != (1 if expected == "insert_one" else 2):
+                    _reject(self.__state)
             if self.__state["profile"] == "bundle_supplier_adoption":
                 if method not in {"insert_one", "update_one"} or kwargs or len(args) != (1 if method == "insert_one" else 2):
                     _reject(self.__state)
@@ -532,6 +537,11 @@ class _Collection:
         return await self.__collection.update_one(query, args[1], session=self.__session)
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "warehouse_lifecycle":
+            from warehouse_cabinet_lifecycle import validate_insert
+            if not validate_insert(name, doc):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "bundle_supplier_adoption":
             from bundle_supplier_adoption import validate_adoption_insert
             if not validate_adoption_insert(name, doc):
@@ -604,6 +614,11 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "warehouse_lifecycle":
+            from warehouse_cabinet_lifecycle import validate_update
+            if kwargs or not await validate_update(self.__state["db"], self.__owner, name, query, update):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "salla_status_snapshot":
             from salla_integration.status_snapshot_completion import validate_update
             if not await validate_update(self.__state["db"], self.__owner, name, query, update, kwargs):

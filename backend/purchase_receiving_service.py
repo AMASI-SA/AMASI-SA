@@ -269,7 +269,7 @@ async def _validate_posting(db, owner, actor, invoice):
 
 async def _location(db, owner, receipt, identity, quantity, context):
     location = await db[LOCATIONS].find_one({"user_id": owner, "id": receipt["location_id"]})
-    if not location or not location.get("warehouse_id") or location.get("state") == "disabled":
+    if not location or not location.get("warehouse_id") or location.get("state") == "disabled" or "cabinet_archive" in location:
         fail("inventory_location_unavailable")
     from fulfillment_v2_routes import _warehouse_allowed
     if not _warehouse_allowed(context, [location["warehouse_id"]]):

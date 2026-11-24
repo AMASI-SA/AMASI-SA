@@ -218,7 +218,7 @@ def rank_purchase_receiving_locations(
         )
         if purpose != "permanent_storage":
             continue
-        if location.get("state") == "disabled":
+        if location.get("state") == "disabled" or "cabinet_archive" in location:
             continue
         current_quantity = _location_current_quantity(location)
         remaining_capacity = _location_remaining_capacity(
@@ -654,7 +654,8 @@ def make_product_inventory_receipt_router(
             {
                 "user_id": merchant_id,
                 "warehouse_id": {"$in": warehouse_ids},
-                "status": {"$ne": "disabled"},
+                "status": {"$nin": ["disabled", "archived"]},
+                "archive": {"$exists": False},
             },
             {
                 "_id": 0,
@@ -702,6 +703,7 @@ def make_product_inventory_receipt_router(
                 "user_id": merchant_id,
                 "warehouse_id": {"$in": warehouse_ids},
                 "state": {"$ne": "disabled"},
+                "cabinet_archive": {"$exists": False},
             },
             {
                 "_id": 0,
@@ -784,6 +786,7 @@ def make_product_inventory_receipt_router(
                 "user_id": merchant_id,
                 "warehouse_id": {"$in": warehouse_ids},
                 "state": {"$ne": "disabled"},
+                "cabinet_archive": {"$exists": False},
                 "occupancy": {"$ne": None},
             },
             {
@@ -972,6 +975,7 @@ def make_product_inventory_receipt_router(
                 "user_id": merchant_id,
                 "warehouse_id": warehouse_id,
                 "state": {"$ne": "disabled"},
+                "cabinet_archive": {"$exists": False},
             },
             {
                 "_id": 0,
