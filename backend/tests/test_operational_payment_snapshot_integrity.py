@@ -73,6 +73,19 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(len(result["issues"]), 1)
         self.assertNotIn("customer_email", str(result))
 
+    def test_payment_evidence_inbox_counts_without_changing_balances(self):
+        original = state()
+        original["payment_event_evidence_inbox"] = {
+            "ref1": {"status": "evidence_received"},
+            "ref2": {"status": "already_recognized"},
+        }
+        snapshot = copy.deepcopy(original)
+        result = audit_payment_snapshot(original)
+        self.assertEqual(original, snapshot)
+        self.assertEqual(result["counts"]["payment_evidence_pending_projection"], 1)
+        self.assertEqual(result["counts"]["payment_evidence_already_recognized"], 1)
+        self.assertFalse(result["safe_for_automatic_posting"])
+
     def test_invalid_scope_fails_closed(self):
         with self.assertRaises(ValueError):
             audit_payment_snapshot({"engine": {}, "customer_collections": "not a list"})
