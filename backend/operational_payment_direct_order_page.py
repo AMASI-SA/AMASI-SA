@@ -41,6 +41,15 @@ def apply_first_paid_order_page(state, *, raw, source, owner, order_number, as_o
     page = native_paid_order_page(raw, owner=owner, order_number=order_number, source=source)
     if not page:
         raise FirstPageHold("salla_paid_order_page_unverified")
+    # HARD FINANCIAL FENCE: the canonical reconciliation engine calls
+    # operational_provider_dates.recognition_day(), which REQUIRES dated
+    # transaction captures to establish a NEW provider receivable's business
+    # date. A cumulative paid-order page is an amount observation only.
+    # Creating a provider_order_balance fact here would be accepted by this
+    # adapter, then later rejected by full refresh as
+    # provider_original_capture_date_unproven. Never write that claim.
+    # Dated original captures go through apply_first_provider_capture instead.
+    raise FirstPageHold("paid_page_original_capture_date_required")
     now, start, created = (_time(value) for value in
                            (as_of, state["started_at"], raw.get("date") or raw.get("created_at")))
     version = _time(raw.get("updated_at") or raw.get("date_updated"))
