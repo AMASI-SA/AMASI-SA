@@ -2,7 +2,7 @@
 
 ## Current state
 
-**IMPLEMENTING — reversible retirement of an empty cabinet.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**IMPLEMENTING — frontend checkpoint verified; backend integration in progress.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -47,6 +47,16 @@ Root coordinates integration, docs, GitHub and any separately governed release. 
 
 Required evidence: focused public-behavior tests; real Mongo transaction, rollback and concurrency checks; frontend cancellation, errors, exact target and restore tests; combined diff review; applicable CI/build/release gates; live verification of only the intended old cabinet after publication. Preserve all unrelated source work and production release leases.
 
+## Verified frontend checkpoint
+
+The warehouse page now provides an exact-target archive confirmation, archived-cabinet reader, restoration, server rejection messages, duplicate-submit prevention, stale-read protection and saved-write/failed-refresh handling. The list remains reachable after archiving the last active cabinet. Delegated access cannot expose manager lifecycle controls.
+
+Changed frontend paths: `frontend/src/pages/WarehouseHierarchyWorkspace.jsx`, `frontend/src/pages/warehouseHierarchy.css`, and new `frontend/src/pages/WarehouseHierarchyWorkspace.archive.test.jsx`.
+
+The frontend implementer ran both warehouse workspace suites with the existing installed dependencies: **26/26 tests passed, two suites, exit 0**, including the unchanged 14 numbering/creation/print tests. The initial regression failed because the archive control was absent. `git diff --check` passed. This diagnostic run used Node 24.22.3; the required Node 22.23.2 verification and governed build remain pending. The frontend writer has stopped editing.
+
+Backend lifecycle code, allocation guards and real Mongo tests remain work in progress in the shared checkout. They are not part of this frontend-only remote checkpoint. Independent review identified legacy `current_quantity` and conflicting section/room identifiers as additional fail-closed conditions; the backend writer is addressing both. No PR, CI, release lease, publish or live mutation has been started for this follow-up.
+
 ## Next safe action
 
-Complete the bounded implementation and its focused tests, then inspect the integrated diff. Do not archive live data until the new operation has passed review and the repository's complete production release protocol. A remote checkpoint of this diagnosis is not release readiness.
+Complete the bounded backend implementation and real Mongo tests, run the two frontend suites on the required Node version, then inspect and checkpoint the integrated diff with the new CI workflow. Do not archive live data until the new operation has passed review and the repository's complete production release protocol. This frontend checkpoint is not release readiness.
