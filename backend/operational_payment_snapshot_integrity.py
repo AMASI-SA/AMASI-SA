@@ -93,6 +93,19 @@ def audit_payment_snapshot(state: dict, *, max_issues: int = MAX_ISSUES) -> dict
         else:
             record("collection_source_unmatched", case)
 
+    inbox = state.get("payment_event_evidence_inbox", {})
+    if not isinstance(inbox, dict) or len(inbox) > MAX_CASES:
+        raise ValueError("operational_payment_inbox_scope_invalid")
+    for evidence in inbox.values():
+        if not isinstance(evidence, dict):
+            record("payment_evidence_record_invalid")
+        elif evidence.get("status") == "already_recognized":
+            counts["payment_evidence_already_recognized"] += 1
+        elif evidence.get("status") == "evidence_received":
+            counts["payment_evidence_pending_projection"] += 1
+        else:
+            record("payment_evidence_status_invalid")
+
     # Capture IDs are authoritative only within the existing projection.
     # Never invent a transaction from order status or a statement row alone.
     for key, fact in facts.items():
@@ -109,6 +122,7 @@ def audit_payment_snapshot(state: dict, *, max_issues: int = MAX_ISSUES) -> dict
         "issues": issues,
         "issues_truncated": sum(n for code, n in counts.items() if code not in
                                  {"collection_not_confirmed", "collections_confirmed",
-                                  "collections_source_matched", "canonical_capture_facts"}) > len(issues),
+                                  "collections_source_matched", "canonical_capture_facts",
+                                  "payment_evidence_already_recognized", "payment_evidence_pending_projection"}) > len(issues),
         "safe_for_automatic_posting": False,
     }
