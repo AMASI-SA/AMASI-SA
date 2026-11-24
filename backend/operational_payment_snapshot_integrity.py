@@ -108,6 +108,18 @@ def audit_payment_snapshot(state: dict, *, max_issues: int = MAX_ISSUES) -> dict
         else:
             record("payment_evidence_status_invalid")
 
+    reviews = state.get("payment_evidence_review_inbox", {})
+    if not isinstance(reviews, dict) or len(reviews) > MAX_CASES:
+        raise ValueError("operational_payment_review_scope_invalid")
+    for pending in reviews.values():
+        if not isinstance(pending, dict):
+            record("payment_review_record_invalid")
+        elif pending.get("status") == "pending_evidence":
+            record("payment_review_needs_evidence",
+                   {"order_number": pending.get("order_id")})
+        else:
+            counts["payment_review_not_pending"] += 1
+
     # Capture IDs are authoritative only within the existing projection.
     # Never invent a transaction from order status or a statement row alone.
     for key, fact in facts.items():
@@ -125,6 +137,7 @@ def audit_payment_snapshot(state: dict, *, max_issues: int = MAX_ISSUES) -> dict
         "issues_truncated": sum(n for code, n in counts.items() if code not in
                                  {"collection_not_confirmed", "collections_confirmed",
                                   "collections_source_matched", "canonical_capture_facts",
-                                  "payment_evidence_already_recognized", "payment_evidence_pending_projection"}) > len(issues),
+                                  "payment_evidence_already_recognized", "payment_evidence_pending_projection",
+                                  "payment_review_not_pending"}) > len(issues),
         "safe_for_automatic_posting": False,
     }
