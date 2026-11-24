@@ -1,0 +1,41 @@
+{
+  "task": "INVENTORY-CABINET-ARCHIVE-20261124",
+  "attempt": 2,
+  "status": "REVIEWED_NOT_EXECUTED",
+  "helper": {
+    "name": "cabinet_archive_release_operator_live_scope.py",
+    "bytes": 43560,
+    "sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+    "ast": "PASS",
+    "primary_independent_review": "PASS",
+    "second_path_preservation_review": "PASS"
+  },
+  "envelope": {
+    "name": "cabinet_archive_release_envelope_live_scope.json",
+    "bytes": 1366,
+    "sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5",
+    "original_nine_fields_unchanged": true,
+    "live_scope_literal_exact": true
+  },
+  "root_review": "PASS",
+  "v1_pair_unchanged": true,
+  "source_A": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+  "intent_B": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+  "deployment_D": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "production_ref_still_D": true,
+  "release_gates_unchanged": true,
+  "host_evidence": {
+    "scope_inventory": {
+      "git_entries": [],
+      "ignored_entries": [
+        ".worktrees"
+      ]
+    },
+    "dbpath_separate_argument": true,
+    "dbpath_equals_argument": false
+  },
+  "claim": "A fresh run and baseline are required. Bind the observed live process and root identities, permit only that DB subtree's own concurrent changes without accessing it, preserve the independent log's full original prefix and file identity, preserve every other foreign path/record exactly, and reject lexical or resolved collisions with every operator/adapter/incoming write target. The v1 BLOCKED result remains unchanged.",
+  "lease_created": false,
+  "published": false,
+  "live_cabinet_mutated": false
+}

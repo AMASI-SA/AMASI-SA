@@ -2,7 +2,7 @@
 
 ## Current state
 
-**HOST REHEARSAL BLOCKED BEFORE SOURCE UPDATE — owned clone passed; existing live Mongo files changed during the foreign-file check. Recovery helper under independent review.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**READY FOR FRESH HOST REHEARSAL — scoped live-service preservation reviewed twice; original source and release gates unchanged.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -130,3 +130,11 @@ Read-only metadata comparison identified size changes in the separate `.worktree
 The writer and independent reviewer agreed a narrow recovery contract: explicitly bind only that live dbpath to the observed process and real root identities, preserve its active service while allowing its own data descendants to change, and keep the sibling log append-only with unchanged inode/mode and original prefix. All other foreign files remain exact, and all incoming-source/adapter/staging write paths must be disjoint. Original A/J/B/D, CI, guard, adapter and artifact verification remain unchanged. This is an adjustment to the external helper's live-file preservation model, not a bypass of the original release controls. The original helper/envelope/receipt remain immutable. New separate files are being implemented and must be independently reviewed, remotely saved and hash-verified before a fresh run.
 
 The actual first download directory is `/tmp/mezan-cabinet-archive-operator-ezig9yqb` (g). Earlier handwritten E5 continuation text contained a q; the current record corrects that transcription. Read `host-operator-v1-observation.json` for exact process/root/log evidence and scope. Do not restart v1, reuse the partial attempt as full rehearsal proof, or prepare a lease yet.
+
+## Release checkpoint E7 — narrow recovery pair reviewed and frozen
+
+The separate helper `cabinet_archive_release_operator_live_scope.py` is 43,560 bytes, SHA-256 `1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f`. The separate envelope `cabinet_archive_release_envelope_live_scope.json` is 1,366 bytes, SHA-256 `b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5`. Root checked both hashes and the complete delta. Both independent preservation reviews and AST validation passed. The original v1 pair remains byte-for-byte unchanged. All nine original envelope fields are unchanged, with one exact `live_foreign_scope` object added; its literal matches the pinned process/root evidence in E6.
+
+The scope exclusion uses the exact slash-delimited Mongo data subtree only. It cannot include sibling files or `mongo.log*` names. The independent log keeps its original prefix through bounded reads with O_NOFOLLOW and stable dev/inode/mode/ownership; truncation, replacement or rotation rejects the run. Non-live inventory/record sets and bytes remain exact. Both lexical and resolved path checks reject overlaps with source changes, adapter cleanup targets, Git metadata and owned stage writes. Root confirmed the live scope is under ignored `.worktrees`, not a nonignored tracked-candidate path, and the actual command has a separate `--dbpath` argument. No original release controls, A/B/D source, tests or CI gates changed.
+
+The latest remote production ref still equals D. E7 is not execution or publication proof. Next: download only this commit's new pair into a new owned /tmp directory, verify exact hashes, run from /app and require fresh original inactive guard, current identities and complete clone/canonical adapter receipts. Preserve v1 and its owned stage. No lease may be prepared until the new canonical rehearsal completes successfully.
