@@ -117,6 +117,20 @@ class SallaEventCaptureTests(unittest.TestCase):
                     self.assertTrue(asyncio.run(stage_verified_payment_update(None, source)))
         review.stage_unverified_review.assert_not_awaited()
 
+    def test_paid_order_unknown_provider_enters_review_only(self):
+        source = source_item()
+        source["event"]["data"]["payment"] = {"status":"paid"}
+        review = types.ModuleType("operational_payment_evidence_review")
+        review.stage_unverified_review = AsyncMock(return_value={"status":"pending_evidence"})
+        with patch.dict(os.environ, {FLAG:"1"}):
+            with patch("operational_payment_salla_event_capture.normalized_webhook_capture",
+                       return_value=("o1", None,
+                                     [{"code":"provider_payment_method_conflict"}])):
+                with patch.dict(sys.modules, {"operational_payment_evidence_review":review}):
+                    self.assertTrue(asyncio.run(stage_verified_payment_update(None, source)))
+        args = review.stage_unverified_review.await_args.args
+        self.assertEqual(args[4], "unknown")
+
     def test_review_staging_failure_keeps_retry(self):
         source = source_item()
         source["event"]["data"]["payment"] = {"status": "paid"}
