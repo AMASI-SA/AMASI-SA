@@ -126,8 +126,8 @@ def apply_first_provider_capture(state, *, order_id, order_number, normalized, a
         raise InitialCaptureHold("settled_provider_requires_review")
     provider_opening_in_scope = any(
         isinstance(row, dict) and row.get("party_type") == "provider"
-        and row.get("party_id") in {None, "", provider}
-        and row.get("currency") in {None, "", currency}
+        and row.get("party_id") in (None, "", provider)
+        and row.get("currency") in (None, "", currency)
         for row in state.get("openings", {}).values()
     )
     if state.get("movements") or provider_opening_in_scope:
