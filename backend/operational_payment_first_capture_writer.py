@@ -63,8 +63,8 @@ def _assert_staged_evidence(state, owner, source_ref, order_id, normalized):
         raise InitialCaptureHold("staged_financial_evidence_conflict")
 
 
-async def post_first_salla_capture(db, owner, order_id, order_number, normalized, *,
-                                   source_ref, clock=None):
+async def post_first_salla_capture(db, owner, merchant_id, order_id, order_number,
+                                   normalized, *, source_ref, clock=None):
     """Owner-scoped CAS posting behind a SECOND opt-in flag.
 
     If the native proof or financial settings changed, fail closed. Separate
@@ -77,8 +77,15 @@ async def post_first_salla_capture(db, owner, order_id, order_number, normalized
     from operational_payment_cas_reconciliation import reconcile_staged_payment_evidence
 
     stamp = clock or now()
-    if not isinstance(source_ref, str) or not source_ref.strip():
+    if not isinstance(source_ref, str) or not source_ref.strip() or not isinstance(merchant_id, str) or not merchant_id.strip():
         fail("payment_source_reference_missing", "إثبات الدفع الأصلي غير متاح", 409)
+
+    async def verify_merchant():
+        # Independently recheck current merchant->owner authorization at
+        # commit, not just when an inbound Salla event entered the queue.
+        from salla_integration.webhook_order_sync import _resolve_user_id
+        if await _resolve_user_id(db, merchant_id) != owner:
+            fail("payment_merchant_owner_changed", "تغير ارتباط متجر سلة؛ أوقف الترحيل", 409)
 
     async def apply(state):
         await active_gate(db, owner, state)
@@ -103,4 +110,5 @@ async def post_first_salla_capture(db, owner, order_id, order_number, normalized
                   "salla_verified_payment", stamp)
         return result
 
-    return await mutate(db, owner, apply)
+    await verify_merchant()
+    return await mutate(db, owner, apply, before_commit=lambda before, after: verify_merchant())
