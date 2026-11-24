@@ -414,10 +414,34 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     a fee, collection approval, refund, or how a pooled opening should settle.
     """
     if owner_confirmation is not None:
-        from operational_delivery_confirmation import confirmed_event
-        return confirmed_event(owner_confirmation, raw, source=source, owner=owner, assignments=assignments,
+        from operational_delivery_confirmation import binding, confirmed_event
+        attested = confirmed_event(owner_confirmation, raw, source=source, owner=owner, assignments=assignments,
             setup=setup, started_at=started_at, as_of=as_of, history=history, shipment_conflicts=shipment_conflicts,
             **({'assignment_index': assignment_index} if assignment_index is not None else {}))
+        # An already posted undated event keeps its original money and dates.
+        # A pending attestation, however, must not hide a later native date.
+        if (status_delivery(frozen_event)
+                or isinstance(frozen_shipping, dict) and frozen_shipping.get('delivered_at') is None):
+            return attested
+        try:
+            native = resolve_delivery_event(raw, source=source, owner=owner, assignments=assignments,
+                setup=setup, started_at=started_at, as_of=as_of, history=history,
+                shipment_conflicts=shipment_conflicts, frozen_event=frozen_event,
+                frozen_shipping=frozen_shipping, recorded_fee=recorded_fee,
+                owner_confirmation=None, assignment_index=assignment_index)
+        except ValueError as error:
+            if str(error) != 'operational_delivery_timestamp_missing':
+                raise
+            return attested
+        if native is None:
+            return attested
+        if (native.get('schema') != 'operational_delivery_event_v1'
+                or binding(native) != binding(attested)
+                or not max(_instant(started_at), _instant(attested['order_created_at']))
+                    <= _instant(native.get('delivered_at')) <= _instant(owner_confirmation['confirmed_at'])):
+            _fail('confirmed_evidence_changed')
+        return {**native, 'confirmation_id': owner_confirmation['id'],
+                'confirmation_seal': owner_confirmation['seal']}
     if not _text(owner) or not isinstance(source, dict) or source.get("user_id") != owner:
         _fail("owner_mismatch")
     if not isinstance(raw, dict):

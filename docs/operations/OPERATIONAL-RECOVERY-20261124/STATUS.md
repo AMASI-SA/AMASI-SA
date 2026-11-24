@@ -306,3 +306,57 @@ Next safe actions: preserve the exact candidate rooted in the latest reviewed J,
 and governed A/B build, freeze intent-only B, then rehearse and publish through
 the unchanged guard protocol. No runtime financial/source recovery or
 automation enable has been performed by this task.
+
+## Reviewed source follow-up for PR #2101
+
+Source candidate A1 is `c3a474ea73bfca3ed8323d69e87a3e5bea9d07e2` on
+`codex/operational-recovery-release-20261124`, with sole parent reviewed J
+`5cfaac21a1775a0d0761d05aa571f94dbfc02d32`. PR #2101 supersedes the preserved
+draft WIP PR #2098. Its complete-history source transition and frontend build
+gate pass. The local governed two-clean-build rehearsal also passed, but its
+proof binds A1 only and must not be reused for the follow-up source commit.
+No intent B has been frozen.
+
+Real-Mongo eligibility CI on A1 completed with 5,830 passed, 17 failed and
+97 passing subtests. Every failed case belongs to the corrected native-delivery,
+owner-confirmation, historical-provider or provider-policy fixtures below.
+These are failed CI results, not a readiness claim. The follow-up exact-head
+Mongo gates remain mandatory; none is skipped or weakened.
+
+- COD fixtures now identify the genuinely active native assignment, and their
+  conflict probe changes the authoritative native delivery date. All monetary
+  and independent-collection preservation assertions remain.
+- Workspace statement fixtures supply the native original delivery evidence
+  required by the new original-date contract. Existing financial assertions
+  remain unchanged.
+- Provider history HTTP approval uses the same authenticated dated evidence
+  it later reconciles. Replacing that evidence cannot reuse its approval.
+  Provider settlement tests now supply an owner-bound accounting fee policy
+  effective on the original capture date, rather than display-only settings.
+- A saved pending owner delivery attestation no longer hides later matching
+  original native delivery evidence. Owner, binding, seal, conflicts and time
+  bounds are checked before admission. Previously booked undated financial
+  snapshots remain unchanged. New integration checks distinguish pending
+  owner evidence from real delivered evidence and verify original dates,
+  separate COD/commission effects, saved manual/opening state and exact replay.
+- Driver bank-review effect validation now indexes only requested valid string
+  movement IDs in one request-local pass. Duplicate markers and the original
+  malformed-ID fallback preserve prior semantics. See DRIVER_REVIEW_LOOKUP.md
+  for paired synthetic measurements and exact-output parity on all 12 views.
+
+Independent review found no blocker in either runtime correction. The driver
+review selection passed 104 tests; the independent combined financial/proof
+selection passed 210 tests (two real-Mongo cases reserved for CI); a separate
+independent delivery-confirmation run passed 63 tests. The 51 provider history
+pure cases pass. These selections overlap and are not additive. No production
+identifiers appear in the synthetic performance fixture or its evidence doc.
+
+At 01:07:50 UTC, the original shared Release Guard reported `active: false`,
+tracked `/app` was clean at reviewed J above, and production retained the
+concurrent PR #2097 identity and all verification flags. This task has still
+not published, synced native financial sources, refreshed balances or enabled
+automation. Refresh the guard before a shared checkout or release rehearsal.
+Next safe action: preserve this ordinary source follow-up on PR #2101, run
+focused isolated Mongo verification and all exact-head gates, rebuild the new
+source with the governed toolchain, then freeze an intent-only B. The exact
+new commit SHA and subsequent status must be recorded in the PR continuation.

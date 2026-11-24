@@ -195,7 +195,7 @@ def test_prepaid_delivery_zero_custody_marker_is_not_a_cash_collection():
 
 def test_http_review_requires_owner_scoped_evidence_and_only_writes_idempotent_metadata():
     async def scenario(db):
-        s,order=history()
+        s,order=history(captures=True)
         await db[STATES].insert_one(s)
         app=FastAPI()
         async def user(x_test_user: str=Header(default="owner")):
@@ -221,11 +221,13 @@ def test_http_review_requires_owner_scoped_evidence_and_only_writes_idempotent_m
             assert updated["openings"]==s["openings"] and updated["movements"]==s["movements"] and updated["engine"]==s["engine"]
             assert len(updated["audit"])==1
             assert (await c.get(url)).json()["items"][0]["awaiting_refresh"]
-            held = reconcile(updated,{"orders":[order]},T2)
+            # Approval remains bound to the reviewed original capture evidence.
+            # Removing that evidence cannot reuse the approval for another source.
+            _, undated = history()
+            held = reconcile(updated,{"orders":[undated]},T2)
             assert KEY not in held["engine"]["obligations"]
-            assert any(i["code"] == "provider_original_capture_date_unproven" for i in held["engine"]["issues"])
-            _, dated = history(captures=True)
-            confirmed = reconcile(updated,{"orders":[dated]},T2)
+            assert any(i["code"] == HISTORICAL for i in held["engine"]["issues"])
+            confirmed = reconcile(updated,{"orders":[order]},T2)
             assert confirmed["engine"]["obligations"][KEY]["confirmed"] == "100.00"
             assert confirmed["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
     run(scenario)

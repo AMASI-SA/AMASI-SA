@@ -61,6 +61,18 @@ def public_record(state, record):
                and event.get('confirmation_seal') == record['seal'] and event.get('recognition_basis') == BASIS
                and event.get('delivered_at') is None and event.get('recorded_at') == record['confirmed_at']
                and binding(event) == {key: record[key] for key in BINDING_FIELDS if key in record})
+    if not applied and event.get('schema') == 'operational_delivery_event_v1':
+        from operational_delivery_evidence import _instant
+        try:
+            validate_record(record, owner=record.get('owner_id'), started_at=record.get('started_at'),
+                            order_id=event.get('order_id'))
+            applied = (event.get('confirmation_id') == record['id']
+                and event.get('confirmation_seal') == record['seal']
+                and binding(event) == {key: record[key] for key in BINDING_FIELDS if key in record}
+                and max(_instant(record['started_at']), _instant(record['order_created_at']))
+                    <= _instant(event.get('delivered_at')) <= _instant(record['confirmed_at']))
+        except (ValueError, TypeError, KeyError):
+            applied = False
     return {'id': record['id'], 'confirmed_at': record['confirmed_at'],
             'state': 'applied' if applied else 'pending_reconciliation'}
 

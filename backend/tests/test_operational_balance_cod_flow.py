@@ -13,7 +13,7 @@ async def native_order(db, method=None):
         rate.update(party_type='store_driver', party_id='driver')
         data['store_drivers'] = [{'user_id':'owner','id':'driver','name':'Driver','status':'active'}]
         data['store_delivery_assignments'] = [{'user_id':'owner','id':'assignment','order_id':'100','order_number':'10',
-            'driver_id':'driver','status':'delivered','delivered_at':NOW}]
+            'driver_id':'driver','status':'delivered','active':True,'delivered_at':NOW}]
         data['store_delivery_collections'] = [{'user_id':'owner','id':'collection','assignment_id':'assignment','order_number':'10',
             'order_id':'100','driver_id':'driver','amount':'200','amount_source':'unified_orders.remaining_amount','payment_method':method,
             'cod_custody_amount':'200' if method=='cash' else '0','collected_at':NOW}]
@@ -171,7 +171,7 @@ def test_held_delivery_evidence_preserves_the_established_independent_collection
         # A later canonical assignment introduces contradictory delivery proof.
         # It cannot erase or rewrite the already verified collection contract.
         await db.store_delivery_assignments.update_one({'user_id': 'owner'}, {
-            '$set': {'order_id': '100', 'active': True}})
+            '$set': {'delivered_at': START}})
         await db.unified_orders.update_one({'user_id': 'owner'}, {'$set': {
             'raw_by_source.salla_direct.status_changed_at': START,
             'raw_by_source.salla_direct.paid_amount': '200'}})
