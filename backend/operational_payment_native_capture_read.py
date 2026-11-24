@@ -37,14 +37,16 @@ async def preview_one_native_capture(db, owner, order_number, *, as_of):
         raise ValueError("payment_owner_scope_invalid")
     number = _bounded_order_number(order_number)
     import pymongo
+    from operational_read_runtime import read_source_cursor
 
     # Independently bounded owner reads; duplicate or over-limit results are
     # unknown, NEVER interpreted as a single valid payment.
     with pymongo.timeout(2.0):
         async with asyncio.timeout(3.0):
-            found = await db["unified_orders"].find(
-                {"user_id":owner,"order_number":number}, ORDER_FIELDS
-            ).limit(2).to_list(length=2)
+            found = await read_source_cursor(
+                db["unified_orders"].find(
+                    {"user_id":owner,"order_number":number}, ORDER_FIELDS
+                ).limit(2), 2)
     if not isinstance(found,list) or len(found) != 1 or not isinstance(found[0],dict):
         return {"status":"not_verified","reason":"canonical_salla_order_count_invalid",
                 "posting_permitted":False}
@@ -60,10 +62,11 @@ async def preview_one_native_capture(db, owner, order_number, *, as_of):
 
     with pymongo.timeout(2.0):
         async with asyncio.timeout(3.0):
-            evidence = await db["order_payment_transactions_v2"].find({
-                "user_id":owner, "order_number":number,
-                "provider_order_id":order_id, "source":"salla_transactions",
-            },TRANSACTION_FIELDS).limit(MAX_DOCS+1).to_list(length=MAX_DOCS+1)
+            evidence = await read_source_cursor(
+                db["order_payment_transactions_v2"].find({
+                    "user_id":owner, "order_number":number,
+                    "provider_order_id":order_id, "source":"salla_transactions",
+                },TRANSACTION_FIELDS).limit(MAX_DOCS+1), MAX_DOCS+1)
     if type(evidence) is not list or len(evidence) > MAX_DOCS:
         return {"status":"not_verified","reason":"transaction_rows_incomplete",
                 "posting_permitted":False}
