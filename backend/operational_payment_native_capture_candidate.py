@@ -41,10 +41,14 @@ def recovered_dated_native_capture(*, source, raw, rows, owner, order_number, as
     order_id = str(raw.get("id") or "")
     if not order_id or str(raw.get("reference_id") or raw.get("order_number") or "") != order_number:
         return rejected("transaction_order_identity_conflict")
-    if not provider_order_page_current(
-        source, raw, owner=owner, order_number=order_number,
-        provider_order_id=order_id,
-    ):
+    try:
+        current = provider_order_page_current(
+            source, raw, owner=owner, order_number=order_number,
+            provider_order_id=order_id,
+        )
+    except (ValueError, TypeError, KeyError, OverflowError):
+        current = False
+    if not current:
         return rejected("transaction_salla_source_stale")
     for row in rows:
         if (not isinstance(row, dict)
