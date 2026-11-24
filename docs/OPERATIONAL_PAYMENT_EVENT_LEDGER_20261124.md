@@ -264,3 +264,17 @@ New safeguards:
 Previous CI PASS (source commit `d9b8a35647ddf3bc3baa5e38b1b62555f1e61aa3`, run `45475354071`) covered actual pooled payout tests. New opening-balance cases **PASS** on code SHA `fcc22a8e71f6c9875c9c91ed3e961ce608eb4d51`, `Operational Payment Event Policy` workflow run `45475596417`. This is still isolated unit/integration validation, not a live Preview reconciliation.
 
 This remains draft/flags OFF with no Preview or production financial mutation.
+
+
+## 2026-11-24 — One-order native capture Preview reader and financial zero-delta comparator
+Added an owner-only read-only route `GET /api/operational-balances/payment-events/native-capture-preview?order_number=<digits>` on the Draft branch (NOT deployed). The route:
+- validates active authenticated reports scope and owner identity before **and after** the read;
+- selects exactly one owner-scoped `unified_orders` canonical source record (read max 2 to fail closed on duplicates), and at most 33 `order_payment_transactions_v2` saved native-envelope records for the same owner/order/native provider order ID; rejects any over-limit result;
+- uses the system's existing cancellation-joined `operational_read_runtime.read_source_cursor`, with short Mongo/request timeouts so abandoned active Motor reads are not detached;
+- passes only saved original source observations to `operational_payment_native_capture_candidate.recovered_dated_native_capture`; returns a proof state and dates/references for the owner, **always `posting_permitted=False`**, never fetching a remote transaction, generating a capture, or changing any financial balance.
+
+Added owner-scoped capture guard against the same native transaction reference previously recognized in a DIFFERENT order's cumulative page fact or in ANY confirmed manual provider collection (including same-order manual collection, until reviewed). Such collisions are held as `capture_reference_reused` or `capture_manual_collection_overlap`, with the latter sent to the no-money review inbox. Tests also reject malformed customer collection scope and verify no mutation.
+
+Added pure `operational_payment_full_refresh_parity.compare_first_provider_capture(before, direct, recomputed, order_id, provider, reference)`. This is the proposed exact **read-only** Preview acceptance comparator for a live first dated capture after the later FULL operational source refresh. It verifies native capture fact, provider claim gross confirmed/expected, business date, party/currency/direction, fee policy identity, fee/fee-VAT/net principal fields, bank movements and opening balances unchanged, and no preexisting order claim. Returns only fixed conflict codes and **`release_verified=False`**; passing synthetic copies is not a valid production UAT. After real Preview source re-acquisition, the two independent states must compare without differences before any money feature flag can be considered.
+
+**Focused CI:** Operational Payment Event Policy PASS on code SHA `a9bb7854e15e38c511b5c82790a1c3bde06ae3b4` (run `45477504995`). Both new pure/read-source test suites plus prior policy suites passed. **No Preview deployment, live Salla transaction read, or production money write was carried out in this turn.**
