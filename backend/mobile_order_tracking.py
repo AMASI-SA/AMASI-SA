@@ -40,7 +40,10 @@ _STATUS_LABELS = {
     "in_progress": "قيد التنفيذ", "completed": "تم التنفيذ",
     "shipped": "تم الشحن", "delivering": "جاري التوصيل",
     "delivered": "تم التوصيل", "cancelled": "ملغى", "refunded": "مسترجع",
-    "deleted": "محذوف",
+    "deleted": "محذوف", "returned": "تم استرجاع الشحنة",
+    "returning": "الشحنة في طريق العودة", "customer_unreachable": "العميل لا يرد",
+    "customer_requested_delay": "العميل طلب تأجيل التوصيل",
+    "customer_requested_cancel": "العميل طلب إلغاء الطلب",
 }
 _ALIASES = {label: slug for slug, label in _STATUS_LABELS.items()}
 _ALIASES.update({"تم المراجعة": "reviewed", "تم المراجعه": "reviewed",
@@ -48,7 +51,10 @@ _ALIASES.update({"تم المراجعة": "reviewed", "تم المراجعه": "
                  "جاري التنفيذ": "in_progress", "shipping": "shipped",
                  "canceled": "cancelled", "ملغي": "cancelled",
                  "انتظار المراجعة": "under_review", "بإنتظار المراجعة": "under_review",
-                 "waiting_review": "under_review", "pending_review": "under_review"})
+                 "waiting_review": "under_review", "pending_review": "under_review",
+                 "out_for_delivery": "delivering", "قيد التوصيل": "delivering",
+                 "returned_to_sender": "returned", "مرتجع": "returned", "تم الاسترجاع": "returned",
+                 "return_to_sender": "returning", "تم استرجاع الشحنة": "returned"})
 
 
 def _text(value: Any) -> str:
@@ -522,17 +528,24 @@ async def _delivery_steps(db, owner, number, source):
     if identity:
         selector["order_id"] = identity
     assignment_projection = {"_id": 0, "id": 1, "driver_id": 1, "driver_name_snapshot": 1,
-        "delivery_exception_code": 1, "delivery_exception_at": 1,
+        "delivery_exception_code": 1, "delivery_exception_at": 1, "delivery_exception_note": 1,
         **{field: 1 for field in _DELIVERY_ASSIGNMENT_FIELDS}}
     assignments = await db.store_delivery_assignments.find(selector, assignment_projection
         ).sort("assigned_at", -1).limit(MAX_HISTORY + 1).max_time_ms(1500).to_list(MAX_HISTORY + 1)
-    events = await db.store_delivery_events.find({**selector, "event_type": {"$in": list(_DELIVERY_EVENT_LABELS)}},
+    # Older completion events omit the public order number. Bind them to
+    # a verified assignment and canonical order id instead of broad matching.
+    event_selector = {"user_id": owner, "assignment_id": {"$in": [
+        row["id"] for row in assignments[:MAX_HISTORY] if _text(row.get("id"))]},
+        "event_type": {"$in": list(_DELIVERY_EVENT_LABELS)}}
+    if identity:
+        event_selector["order_id"] = identity
+    events = await db.store_delivery_events.find(event_selector,
         {"_id": 0, "assignment_id": 1, "driver_id": 1, "driver_name_snapshot": 1,
-         "event_type": 1, "occurred_at": 1}
+         "order_number": 1, "event_type": 1, "occurred_at": 1, "note": 1}
         ).sort("occurred_at", -1).limit(MAX_ORDER_EVENTS + 1).max_time_ms(1500).to_list(MAX_ORDER_EVENTS + 1)
     legacy = await db.mezan_fulfillment_events_v2.find(
         {"user_id": owner, "order_number": number, "event_type": {"$in": list(_LEGACY_COURIER_LABELS)}},
-        {"_id": 0, "event_type": 1, "courier_name": 1, "occurred_at": 1}
+        {"_id": 0, "event_type": 1, "courier_name": 1, "occurred_at": 1, "note": 1}
         ).sort("occurred_at", -1).limit(MAX_HISTORY + 1).max_time_ms(1500).to_list(MAX_HISTORY + 1)
     cut = len(assignments) > MAX_HISTORY or len(events) > MAX_ORDER_EVENTS or len(legacy) > MAX_HISTORY
     assignments = assignments[:MAX_HISTORY]
@@ -541,10 +554,15 @@ async def _delivery_steps(db, owner, number, source):
              if _text(row.get("id")) and counts[_text(row.get("id"))] == 1}
     result = []
 
-    def add(label, actor, timestamp):
+    def add(label, actor, timestamp, note=None):
         at = _iso(timestamp)
         if at:
-            result.append(_step(label, actor, at))
+            step = _step(label, actor, at)
+            # Only the explicit driver note field; no evidence URLs, payment
+            # fields or arbitrary provider history title in the public row.
+            if isinstance(note, str) and note.strip():
+                step["note"] = note.strip()[:2000]
+            result.append(step)
 
     for row in by_id.values():
         name = row.get("driver_name_snapshot")
@@ -553,22 +571,32 @@ async def _delivery_steps(db, owner, number, source):
         code = _text(row.get("delivery_exception_code"))
         label = _DELIVERY_EVENT_LABELS.get("store_delivery_" + code)
         if label and code.startswith("customer_"):
-            add(label, name, row.get("delivery_exception_at"))
+            add(label, name, row.get("delivery_exception_at"), row.get("delivery_exception_note"))
     for event in events[:MAX_ORDER_EVENTS]:
         assignment = by_id.get(_text(event.get("assignment_id")))
-        if not assignment or not _text(event.get("driver_id")) or event.get("driver_id") != assignment.get("driver_id"):
+        if (not assignment or not _text(event.get("driver_id"))
+                or event.get("driver_id") != assignment.get("driver_id")
+                or event.get("order_number") not in (None, "", number)):
             continue
         add(_DELIVERY_EVENT_LABELS[event["event_type"]],
-            event.get("driver_name_snapshot") or assignment.get("driver_name_snapshot"), event.get("occurred_at"))
+            event.get("driver_name_snapshot") or assignment.get("driver_name_snapshot"), event.get("occurred_at"),
+            event.get("note"))
     for event in legacy[:MAX_HISTORY]:
-        add(_LEGACY_COURIER_LABELS[event["event_type"]], event.get("courier_name"), event.get("occurred_at"))
+        add(_LEGACY_COURIER_LABELS[event["event_type"]], event.get("courier_name"), event.get("occurred_at"),
+            event.get("note"))
     return result, cut
 
 
 def _merge_delivery_steps(original, delivery):
     # Prefer the named immutable delivery fact over a duplicate workflow
     # projection. Different drivers or repeated timestamps remain distinct.
-    rows = {(row["source"], row["label"], row["at"], row.get("actor_name")): row for row in original + delivery}
+    rows = {}
+    for row in original + delivery:
+        key = (row["source"], row["label"], row["at"], row.get("actor_name"))
+        prior = rows.get(key)
+        if prior and prior.get("note") and not row.get("note"):
+            continue
+        rows[key] = row
     named = {(row["source"], row["label"], row["at"]) for row in rows.values() if row.get("actor_name")}
     result = [row for row in rows.values() if row.get("actor_name")
               or (row["source"], row["label"], row["at"]) not in named]
@@ -694,6 +722,11 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
     carrier_name, _ = current_carrier(source)
     if status_steps and status_steps[0]["status"] == status:
         changed = status_steps[0]["at"]
+    if status in {"shipped", "delivering", "delivered", "returned", "returning", "refunded",
+                  "customer_unreachable", "customer_requested_delay", "customer_requested_cancel"} and changed:
+        if not any(row["source"] == "salla" and row["at"] == changed and
+                   row["label"] in {label, _STATUS_LABELS.get(status)} for row in order_steps):
+            order_steps = _merge_delivery_steps(order_steps, [_step(label, at=changed, source="salla")])
     local_contract = workflow.get("completion_mode") is not None
     local_review = status in {"under_review", "reviewed", "in_progress"} and await _fresh_local_review(
         db, owner, number, workflow, raw, changed if status == "under_review" else None, status_steps)
