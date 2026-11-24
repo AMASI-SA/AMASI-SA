@@ -1,0 +1,370 @@
+{
+  "backups": [
+    {
+      "bytes": 11403687,
+      "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/frontend--build",
+      "entries": 390,
+      "present": true,
+      "source": "frontend/build",
+      "state": "COPY_VERIFIED"
+    },
+    {
+      "bytes": 1521,
+      "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/frontend--.release",
+      "entries": 2,
+      "present": true,
+      "source": "frontend/.release",
+      "state": "COPY_VERIFIED"
+    },
+    {
+      "bytes": 504124,
+      "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/backend--release_identity.json",
+      "entries": 1,
+      "present": true,
+      "source": "backend/release_identity.json",
+      "state": "COPY_VERIFIED"
+    },
+    {
+      "bytes": 405526531,
+      "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/frontend--node_modules",
+      "entries": 76640,
+      "present": true,
+      "source": "frontend/node_modules",
+      "state": "COPY_VERIFIED"
+    }
+  ],
+  "deployment_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "envelope_sha256": "28f4649fc07cd9f710c8276177106bc3ee8d314da74a34f00d4de7d799849f6f",
+  "external_precondition": "operator verified completed successful exact-D CI",
+  "foreign_preservation": {
+    "append_only_path": null,
+    "identical_entries": 432,
+    "paths": 432
+  },
+  "helper_sha256": "5f739900a685e4fcd17cc8f8894426dab06a9dc1fe1e2675f6f0ac3a3bf8696c",
+  "initial_head": "cb98e5660380d362e78f937d60abc7139cd1c462",
+  "initial_public_status": {
+    "active": false
+  },
+  "intent_sha": "a0f5bd77f91b85b2d75885aa4173c4e48aa16ad7",
+  "lease_created": false,
+  "published": false,
+  "recalculated": false,
+  "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+  "source_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+  "stage": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_",
+  "status": "PASS",
+  "steps": [
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "git-root",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "git-directory",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.005,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "original-guard-bytes",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.098,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "initial-public-status",
+      "timeout_seconds": 45
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.007,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.716,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetch-production",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "remote-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetched-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "deployment-tree",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-tree",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.007,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "deployment-parents",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-parents",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-intent-history",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-intent-diff",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "base-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.015,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-only-diff",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "untracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.007,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "untracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.064,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fast-forward",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.015,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 1.868,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "validate-intent",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "untracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 68.495,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "canonical-app-adapter",
+      "timeout_seconds": 2400
+    },
+    {
+      "elapsed_seconds": 1.417,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "verify-frontend",
+      "timeout_seconds": 180
+    },
+    {
+      "elapsed_seconds": 2.62,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "verify-packages",
+      "timeout_seconds": 240
+    },
+    {
+      "elapsed_seconds": 1.417,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "canonical-full-proof",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.015,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "untracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.516,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetch-production",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "remote-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetched-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.007,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    }
+  ],
+  "task": "PR2118_guarded_app_rehearsal",
+  "tree": "8f131ad2a92d8fb70bfd29f314491d8a3ab9adda",
+  "unchanged_untracked_count": 432
+}

@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
-  "status": "WIP: PR2118 merged; exact-B and exact-M CI PASS; original shared-host rehearsal running; no own lease or publication yet",
+  "status": "WIP: exact B/M CI PASS; canonical /app rehearsal44/44PASS; original own prepare PASS; publication not started",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-cost-report-release-20261124",
   "source_base_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -65,7 +65,7 @@
   "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards. External candidate provenance, full clean canonical-A checkout and original load_candidate_release_intent independently passed without mutation.",
   "ci_state": "PASS: exact B25success/10conditional skips; exact M11success/0skip, no pending/failure/neutral. All applicable gates executed.",
   "merge_state": "PR2118 normally merged20:08:54UTC as c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe; parents[J,B],treeB preserved.",
-  "release_state": "The reviewed one-shot helper has started under the original operation lock. Its final receipt is required before prepare; do not repeat the J-only helper while running. Live runtime remains the preceding verified release.",
+  "release_state": "Shared host is exact M with verified build/packages/proof and432identical foreign entries. Original prepare created this task's reviewed lease. Prepublish/publication/live verification pending.",
   "production_changed": false,
   "limitations": [
     "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
@@ -74,7 +74,7 @@
     "No runtime latency reduction, source completeness or financial recovery is claimed.",
     "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
   ],
-  "next_safe_action": "Read the current helper receipt. Only after canonical /app rehearsal PASS and unchanged foreign files perform own original prepare/prepublish and one publication, followed by all three original verify probes and inactive guard. Never rerun the J-only helper after its FF.",
+  "next_safe_action": "Run the original prepublish immediately before one Manage Republish; require explicit newer platform success, then original three-probe verify and inactive guard before any bounded cost diagnostic/financial continuation.",
   "integration": {
     "coordinator": "/root",
     "production_branch_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -113,7 +113,7 @@
     "history_gate": "The initial unpushed integration attempt b9675bea83bd2881cdf8fbd828a1f2a6562ac873 retained both earlier branches as parents but was rejected by the original full-history intent-path condition despite equal final intent bytes. It remains local only and will not be released. This fresh linear source avoids bringing old-intent branch history into J..A; keep the validator unchanged."
   },
   "continuation_evidence": {
-    "recorded_at_utc": "2026-11-24T20:22:35Z",
+    "recorded_at_utc": "2026-11-24T20:27:26.133466+00:00",
     "source_pr": 2118,
     "source_branch": "codex/operational-cost-report-release-20261124",
     "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
@@ -229,7 +229,7 @@
         "app_available_bytes": 428056576
       }
     },
-    "next_safe_action": "Read the current helper receipt. Only after canonical /app rehearsal PASS and unchanged foreign files perform own original prepare/prepublish and one publication, followed by all three original verify probes and inactive guard. Never rerun the J-only helper after its FF.",
+    "next_safe_action": "Run the original prepublish immediately before one Manage Republish; require explicit newer platform success, then original three-probe verify and inactive guard before any bounded cost diagnostic/financial continuation.",
     "production_changed_by_this_candidate": false,
     "preceding_publisher_history": [
       {
@@ -366,7 +366,7 @@
     },
     "candidate_build_route_review": "Original workflow297-366 intentionally builds A twice, verifies/freezes/validates external candidate, uploads and proves clean worktree; protocol133-137 describes Candidate-A CI. This is reviewed candidate evidence, not shared-host rehearsal. Original /app rehearsal follows reviewed deployment FF and precedes prepare, per workflow736-740. No extra gate or waiver introduced.",
     "host_execution": {
-      "status": "RUNNING; no final result observed yet",
+      "status": "PASS",
       "staging_at": "2026-11-24T20:21:33.641686+00:00",
       "staging_path": "/tmp/mezan-pr2118-operator-k659pph5",
       "rehearsal_stage": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_",
@@ -376,8 +376,72 @@
       "untracked_count_before": 432,
       "app_available_bytes_before": 425648128,
       "tmp_available_bytes_before": 238907887616,
-      "own_lease_prepared": false,
-      "publication_started": false
+      "own_lease_prepared": true,
+      "publication_started": false,
+      "result_observed_at": "2026-11-24T20:24:30.461715+00:00",
+      "receipt_path": "PR2118-HOST-REHEARSAL.json",
+      "receipt_git_blob": "b2cf55c203a83fb04cdf62ac94764783f1936280",
+      "receipt_bytes": 8755,
+      "receipt_sha256": "23acb737ee6be364c4fb8183ab61d7ad6ac501250146087266251df5cb7b726b",
+      "steps": 44,
+      "passed": 44,
+      "failed": 0,
+      "canonical_adapter_seconds": 68.495,
+      "foreign_entries_identical": 432,
+      "backups": [
+        {
+          "bytes": 11403687,
+          "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/frontend--build",
+          "entries": 390,
+          "present": true,
+          "source": "frontend/build",
+          "state": "COPY_VERIFIED"
+        },
+        {
+          "bytes": 1521,
+          "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/frontend--.release",
+          "entries": 2,
+          "present": true,
+          "source": "frontend/.release",
+          "state": "COPY_VERIFIED"
+        },
+        {
+          "bytes": 504124,
+          "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/backend--release_identity.json",
+          "entries": 1,
+          "present": true,
+          "source": "backend/release_identity.json",
+          "state": "COPY_VERIFIED"
+        },
+        {
+          "bytes": 405526531,
+          "destination": "/tmp/mezan-pr2118-rehearsal-sa6z_hs_/backups/frontend--node_modules",
+          "entries": 76640,
+          "present": true,
+          "source": "frontend/node_modules",
+          "state": "COPY_VERIFIED"
+        }
+      ]
+    },
+    "own_publication": {
+      "prepare": {
+        "phase": "prepare",
+        "started_at": "2026-11-24T20:27:23.053755+00:00",
+        "finished_at": "2026-11-24T20:27:26.133466+00:00",
+        "exit_code": 0,
+        "stage": "/app/.git/mezan-pr2118-publication-tc6xyu29",
+        "bytes": 667926,
+        "sha256": "173637342b3fd7f43243e181e95f18fcbe3eb20a00db0b2e01149e9240ff35a5",
+        "actor": "chatgpt-operational-cost-report-20261124-pr2118",
+        "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+        "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+        "deployment_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+        "prepared_at": "2026-11-24T20:27:24.900360+00:00"
+      },
+      "prepublish": "pending",
+      "platform_publication": "not started",
+      "verify": "pending",
+      "lease": "active; own actor"
     }
   },
   "production_git_changed": true,
