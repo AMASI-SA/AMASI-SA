@@ -22,13 +22,17 @@ from provider_fee_sources import bind_statement_plan, load_statement_plans
 from operational_provider_statement_fees import statement_average_projection
 from provider_fee_weekly_sources import load_weekly_statement_averages, load_weekly_fee_source_state
 from provider_fee_statement_actual_sources import load_operational_statement_fee_index
+from dashboard_split_payment_fees import estimate_split_fees, split_reference_conflicts, internal_wallet_paid_sar
 
 BASIS = "actual_statement_then_dated_provider_policy_then_legacy_settings"
 AVERAGE_BASIS = "actual_statement_then_dated_provider_policy_then_weekly_statement_average_then_operational_balance_average_then_legacy_settings"
 FEE_SOURCE_PROJECTION = {
     "_id": 0, "order_number": 1,
     **{f"raw_by_source.salla_direct.{key}": 1 for key in (
-        "payment", "payment_method", "payment_methods", "created_at", "date", "updated_at", "currency",
+        "id", "reference_id", "order_number", "amounts.total", "amounts.currency", "total", "total_amount",
+        "payment", "payment_method", "payment_methods", "created_at", "date", "updated_at", "date_updated", "currency",
+        "payment_status", "payment_collection_status", "paid_amount", "remaining_amount", "has_remaining_amount",
+        "refunds", "cancellations", "refunded_transactions", "pending_refund_amount", "cancelled", "refunded",
         "refunded_amount", "status", "is_pending_payment", "payment_actions.refund_action", "payment_actions.remaining_action")},
 }
 
@@ -40,8 +44,16 @@ def attach_fee_source_evidence(orders, projected_rows):
         raw = (index.get(str(order.get("order_number")), {}).get("raw_by_source") or {}).get("salla_direct")
         if isinstance(raw, dict):
             order["_dashboard_fee_source"] = {key: deepcopy(raw[key]) for key in (
-                "payment", "payment_method", "payment_methods", "created_at", "date", "updated_at", "currency",
+                "id", "reference_id", "order_number", "total", "total_amount",
+                "payment", "payment_method", "payment_methods", "created_at", "date", "updated_at", "date_updated", "currency",
+                "payment_status", "payment_collection_status", "paid_amount", "remaining_amount", "has_remaining_amount",
+                "refunds", "cancellations", "refunded_transactions", "pending_refund_amount", "cancelled", "refunded",
                 "refunded_amount", "status", "is_pending_payment") if key in raw}
+            if "amounts" in raw:
+                amounts = raw["amounts"]
+                order["_dashboard_fee_source"]["amounts"] = (
+                    {key: deepcopy(amounts[key]) for key in ("total", "currency") if key in amounts}
+                    if isinstance(amounts, dict) else deepcopy(amounts))
             if "payment_actions" in raw:
                 actions = raw["payment_actions"]
                 order["_dashboard_fee_source"]["payment_actions"] = (
@@ -68,7 +80,8 @@ async def load_dashboard_fee_context(db, owner, orders, *, as_of=None, fee_conte
     # The optional memo is owned by one compute request. Tasks never enter the
     # copied fee context, collector, API response, or persistent card cache.
     context = deepcopy({key: value for key, value in supplied.items() if key != "_request_fee_reads"})
-    context.update(as_of=as_of or context.get("evidence_as_of") or datetime.now(timezone.utc), statement_plans={})
+    context.update(owner_id=owner, as_of=as_of or context.get("evidence_as_of") or datetime.now(timezone.utc),
+                   statement_plans={}, split_fee_reference_conflicts=await split_reference_conflicts(orders, owner))
 
     async def read_once(key, reader):
         if request_reads is None:
@@ -397,6 +410,10 @@ def _override(order, context):
         methods = []
     if not isinstance(methods, list) or len(methods) > 100 or any(not isinstance(item, dict) for item in methods):
         raise ValueError("provider_payment_shape_invalid")
+    if provider == "salla":
+        split_fees = estimate_split_fees(order, raw, context)
+        if split_fees is not None:
+            return split_fees
     if payment.get("split"):
         raise ValueError("provider_split_payment_review_required")
     routes = {_provider(item.get("payment_method")) for item in methods}
@@ -579,12 +596,20 @@ def _legacy_terms_valid(method, settings):
 async def dashboard_fee_breakdown(orders, settings, context=None):
     """Numeric known amounts plus explicit completeness; consumers mask unknowns."""
     priced = [{**order, "payment_method": _method(order)} for order in orders]
+    if context is not None:
+        context = {**context, "split_fee_reference_conflicts": sorted(set(
+            context.get("split_fee_reference_conflicts") or []) | set(
+            await split_reference_conflicts(priced, context.get("owner_id"))))}
     parsed = await orders_to_parsed_cooperative(priced)
-    legacy, overrides, errors, term_validity = [], {}, {}, {}
+    legacy, overrides, errors, term_validity, wallet_principal = [], {}, {}, {}, {}
     budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
     for order in priced:
         await budget.checkpoint()
         name = order["payment_method"]
+        wallet = internal_wallet_paid_sar(order, context)
+        prior_wallet = wallet_principal.get(name, 0.0)
+        wallet_principal[name] = (
+            round(prior_wallet + wallet, 2) if prior_wallet is not None and wallet is not None else None)
         try:
             result = _override(order, context)
         except (ValueError, TypeError, KeyError, ArithmeticError) as error:
@@ -630,13 +655,17 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
         fee = round(float(net + vat), 2)
         output.append({**row, **group, "base_commission": round(float(net), 2), "vat_amount": round(float(vat), 2),
             "fee_amount": fee, "net_amount": round(group["total_sales"] - fee, 2), "matched": complete,
+            "internal_wallet_paid_sar": wallet_principal.get(name, 0.0),
             "fees_complete": complete, "fee_review_reasons": sorted(errors.get(name, [])),
             "fee_sources": sorted(sources),
             "fee_calculation_basis": AVERAGE_BASIS if row.get("fees_estimated") else BASIS if overrides.get(name) or errors.get(name) else row.get("fee_calculation_basis")})
     estimates = {}
     for row in output:
         merge_statement_estimate_metadata(estimates, row)
+    wallet_total = (round(sum(wallet_principal.values()), 2)
+                    if all(value is not None for value in wallet_principal.values()) else None)
     return {"payment_breakdown": output, "total_payment_fees": round(sum(row["fee_amount"] for row in output), 2),
+            "internal_wallet_paid_sar": wallet_total,
             "payment_fees_complete": all(row["fees_complete"] for row in output),
             "fee_review_reasons": sorted({reason for reasons in errors.values() for reason in reasons}),
             "basis": AVERAGE_BASIS if estimates else BASIS,
