@@ -46,6 +46,9 @@ _CONSUMER = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
 METRIC_PREFIX = "mezan_demand_read_metrics "
 _METRIC_NUMBERS = frozenset({"pid", "wall_ms", "build_ms", "materialize_ms", "check_ms", "check_calls",
                             "authorize_ms", "process_cpu_ms", "peak_rss_kib", "queue_ms",
+                            "startup_ms", "runner_import_ms", "builder_import_ms", "state_read_ms", "state_decode_ms", "state_decode_cpu_ms",
+                            "report_build_ms", "report_build_cpu_ms", "report_copy_cpu_ms", "forecast_sources_ms",
+                            "order_labels_ms", "response_encode_ms", "response_encode_cpu_ms", "response_prepare_ms",
                             "mongo_driver_command_p50_ms", "mongo_driver_command_p95_ms", "mongo_driver_command_p99_ms",
                             "mongo_driver_checkout_p95_ms", "mongo_driver_command_timeouts", "mongo_driver_checkout_timeouts"})
 

@@ -28,7 +28,7 @@
     "Other task branches and worktrees",
     "Pending source admission and manual financial records"
   ],
-  "next_safe_action": "Fetch this WIP into the isolated Emergent worktree and run the composed normal-import and actual-Mongo transaction suites. Integrate numeric read diagnostics only after separate review. No release freeze or financial source retry until all exact integrated gates pass.",
+  "next_safe_action": "Fetch this integrated WIP into the isolated Emergent worktree; execute diagnostics HTTP/child/Mongo tests and affected demand/report-copy/encoding suites. Require final exact-head CI, then freeze source A and an intent-only B through the unchanged governed release protocol.",
   "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00",
   "integrated_candidates": [
     {
@@ -58,7 +58,27 @@
         "backend/tests/test_salla_sync_component_snapshot.py"
       ],
       "review": "Independent frozen static/adversarial review passed. Baseline composition reproduced five keyword failures; corrected composition passed six cases.",
-      "runtime_acceptance": "Pending normal installed bootstrap 20 cases, component transaction 34 cases and adjacent suites on owned Mongo. Existing Salla CI selection and no-skip gates strengthened."
+      "runtime_acceptance": "Normal installed bootstrap and owned real-Mongo execution passed: 167 cases plus 10 subtests in 24.24s, zero skips/failures/errors. Required runtime20 and component34 executed. Exact633a Salla CI passed560 cases plus53 subtests with strict gates; final integrated CI remains mandatory."
+    },
+    {
+      "name": "bounded numeric owner read diagnostics",
+      "patch_sha256": "b4b205f66a6fea2cd0a7fe1f7da7d04a0d3263575d5cd58c6dbb7e946c130999",
+      "files": [
+        "backend/demand_read_diagnostics.py",
+        "backend/demand_read_jobs.py",
+        "backend/demand_read_runner.py",
+        "backend/demand_read_store.py",
+        "backend/operational_balance_automation_routes.py",
+        "backend/operational_financial_position_state.py",
+        "backend/operational_financial_report_read.py",
+        "backend/operational_report_copy.py",
+        "backend/operational_response_encoding.py",
+        "backend/operational_workspace_demand_routes.py",
+        "backend/tests/test_operational_balance_read_diagnostics.py"
+      ],
+      "review": "Root and independent static review passed; all11 hashes bound. Independent20 assertions and two real-driver stalled-socket checks passed. Actual production AcceptanceConfigDatabase route chain confirmed.",
+      "runtime_acceptance": "Full owner HTTP, spawned child and real-Mongo suite pending.",
+      "limits": "The 200ms driver deadline is not a strict wall-clock ceiling; independent joined socket observations were about504ms. Telemetry does not itself repair cold report latency."
     }
   ]
 }

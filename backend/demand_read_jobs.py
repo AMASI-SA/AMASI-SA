@@ -149,7 +149,7 @@ def _builder_module(family):
     return importlib.import_module(name)
 
 
-async def execute_claim(db, key, token, generation, *, builder=None, authorize=None):
+async def execute_claim(db, key, token, generation, *, builder=None, authorize=None, startup_started=None, runner_import_ms=None):
     """Child entry; test injections stay process-local, never in stored jobs."""
     # The child rebuilds from the scoped source; it never consumes the stale header.
     row = await db[store.JOBS].find_one({"_id": key, "status": "running", "lease_token": token,
@@ -160,6 +160,11 @@ async def execute_claim(db, key, token, generation, *, builder=None, authorize=N
     started, cpu_started = time.monotonic(), time.process_time()
     metrics = {"family": row["family"], "outcome": "failed", "pid": os.getpid(),
                "build_ms": 0.0, "materialize_ms": 0.0, "authorize_ms": 0.0, "check_ms": 0.0, "check_calls": 0}
+    from demand_read_diagnostics import _number, capture, save_owner_trace
+    if _number(startup_started) and 0 <= started - startup_started <= MAX_JOB_SECONDS + LEASE_SECONDS:
+        metrics["startup_ms"] = (started - startup_started) * 1000
+    if _number(runner_import_ms) and runner_import_ms <= (MAX_JOB_SECONDS + LEASE_SECONDS) * 1000:
+        metrics["runner_import_ms"] = runner_import_ms
     async def checkpoint():
         stamp = time.monotonic()
         try:
@@ -179,7 +184,11 @@ async def execute_claim(db, key, token, generation, *, builder=None, authorize=N
         if store.projection_key(spec) != row["_id"] or (spec["owner_id"], spec["actor_id"]) != (row["owner_id"], row["actor_id"]):
             raise store.InvalidReadSpec("read_scope_invalid")
         if builder is None or authorize is None:
-            module = _builder_module(spec["family"])
+            stamp = time.monotonic()
+            try:
+                module = _builder_module(spec["family"])
+            finally:
+                metrics["builder_import_ms"] = (time.monotonic() - stamp) * 1000
             builder = builder or module.build_projection
             authorize = authorize or module.authorize_spec
         if await authorize_current(spec) is not True:
@@ -188,7 +197,8 @@ async def execute_claim(db, key, token, generation, *, builder=None, authorize=N
         await checkpoint()
         stamp = time.monotonic()
         try:
-            result = await builder(db, spec, checkpoint)
+            with capture(metrics, enabled=spec["owner_id"] == spec["actor_id"]):
+                result = await builder(db, spec, checkpoint)
         finally:
             metrics["build_ms"] = (time.monotonic() - stamp) * 1000
         await checkpoint()
@@ -247,6 +257,8 @@ async def execute_claim(db, key, token, generation, *, builder=None, authorize=N
             metrics["queue_ms"] = max(0.0, (row["started_at"] - row["requested_at"]).total_seconds() * 1000)
         with suppress(Exception):
             metrics.update(_mongo_driver_metrics())
+        with suppress(Exception):
+            await save_owner_trace(db, row, metrics)
         _emit_metrics(metrics)
 
 
@@ -320,7 +332,8 @@ async def run_claim(db, row, *, launcher=None):
     try:
         await check_claim(db, row)
         process = await launcher(sys.executable, "-B", str(Path(__file__).with_name("demand_read_runner.py")),
-            row["_id"], row["lease_token"], row["generation"], cwd=str(Path(__file__).resolve().parent),
+            row["_id"], row["lease_token"], row["generation"], format(started, ".9f"),
+            cwd=str(Path(__file__).resolve().parent),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         def accept(record):
             if record["family"] == row["family"] and not child_metrics:

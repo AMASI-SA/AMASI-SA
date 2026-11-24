@@ -5,6 +5,7 @@ from weakref import WeakKeyDictionary, ref
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from demand_read_diagnostics import phase
 
 from operational_financial_activity_runtime import preparation_checkpoint, prepare_in_thread
 
@@ -34,9 +35,10 @@ def _encode(value):
         preparation_checkpoint()
     try:
         preparation_checkpoint()
-        content = jsonable_encoder(value)
-        preparation_checkpoint()
-        result = JSONResponse(content=content, headers={'Cache-Control': 'no-store'})
+        with phase("response_encode_cpu_ms", cpu=True):
+            content = jsonable_encoder(value)
+            preparation_checkpoint()
+            result = JSONResponse(content=content, headers={'Cache-Control': 'no-store'})
         preparation_checkpoint()
         return result
     finally:
@@ -55,3 +57,4 @@ async def encode_saved_response(value):
         result = await prepare_in_thread(_encode, value)
         preparation_checkpoint()
         return result
+

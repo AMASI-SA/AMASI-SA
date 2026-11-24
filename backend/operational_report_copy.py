@@ -6,6 +6,7 @@ use this path; BSON types, subclasses and custom copy hooks retain deepcopy.
 from copy import _keep_alive, deepcopy
 
 from operational_financial_activity_runtime import preparation_checkpoint
+from demand_read_diagnostics import phase
 
 
 _ATOMIC = frozenset((str, int, float, bool, bytes, type(None)))
@@ -52,6 +53,8 @@ def copy_report_value(value):
         return result
 
     preparation_checkpoint()
-    result = clone(value)
+    with phase("report_copy_cpu_ms", cpu=True):
+        result = clone(value)
     preparation_checkpoint()
     return result
+

@@ -1,291 +1,305 @@
-"""Request-local read evidence must not alter source admission or ownership."""
+"""Numeric, exact-generation owner traces cannot alter finance or authorization."""
 import asyncio
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import json
+import math
+import os
+import time
 
-from fastapi import HTTPException
+import httpx
 import pytest
+from pymongo import _csot
+from pymongo.errors import PyMongoError
+from motor.motor_asyncio import AsyncIOMotorClient
 
-import operational_demand_refresh as demand
-from operational_balance_store import STATES, mutate
-from operational_source_diagnostics import source_failure_detail
-from test_operational_balance_demand_refresh import DB, Request, allowed
-from test_operational_read_runtime import MotorSourceDB, ThreadedMotorCursor
-
-
-class SourceDB(DB):
-    def __init__(self, cursor):
-        super().__init__()
-        self.source = MotorSourceDB(cursor)
-
-    def __getitem__(self, name):
-        return self.source[name] if name == 'unified_orders' else super().__getitem__(name)
+import demand_read_diagnostics as diagnostics
+import demand_read_jobs as jobs
+import demand_read_store as store
+from operational_balance_store import STATES
+from operational_financial_activity_runtime import prepare_in_thread
+from operational_financial_position import build_financial_position
+from operational_workspace_read_builders import authorize_spec, build_projection
+from test_operational_balance_demand_metadata_reads import read_db, read_mongo_uri
+from test_operational_workspace_demand_http import BASE, HEADERS, application, seed_workspace
 
 
-async def source_refresh(database, captured, *, observed=True, timeout=15):
-    from operational_balance_sources import refresh_source_rows
-    from operational_read_runtime import load_collections, SourceReadError
+def test_phase_context_is_bounded_numeric_and_does_not_swallow_function_errors():
+    outer, inner, disabled = {}, {}, {}
+    with diagnostics.capture(outer):
+        with diagnostics.phase("state_read_ms"):
+            pass
+        with diagnostics.capture(inner):
+            with diagnostics.phase("report_build_ms"):
+                pass
+        with pytest.raises(ValueError, match="synthetic failure"):
+            with diagnostics.phase("state_decode_ms"):
+                raise ValueError("synthetic failure")
+        with diagnostics.phase("not-a-metric"):
+            pass
+    with diagnostics.capture(disabled, enabled=False):
+        with diagnostics.phase("state_read_ms"):
+            pass
+    assert set(outer) == {"state_read_ms", "state_decode_ms"}
+    assert set(inner) == {"report_build_ms"} and disabled == {}
+    assert diagnostics._CURRENT.get() is None
+    assert all(type(value) is float and math.isfinite(value) and value >= 0
+               for value in [*outer.values(), *inner.values()])
 
-    async def operation():
-        captured.append(demand.demand_context())
+
+@pytest.mark.parametrize("value", [True, None, "1", float("nan"), float("inf"), -1, 10 ** 1000])
+def test_invalid_or_unbounded_numeric_values_are_rejected(value):
+    assert diagnostics._number(value) is False
+
+
+def test_maximal_metric_record_fits_the_existing_bounded_child_stream():
+    value = {key: 10 ** 12 for key in store._METRIC_NUMBERS}
+    value.update(family="operational_statement", outcome="claim_lost")
+    assert store.safe_metrics(value) == value
+    assert len((store.METRIC_PREFIX + json.dumps(value) + "\n").encode()) < 2048
+    assert store.safe_metrics({**value, "customer_name": "must not escape"}) is None
+
+
+@pytest.mark.asyncio
+async def test_thread_phase_keeps_result_identity_and_request_context():
+    item, metrics = {"currency": "SAR", "amount": "12.34"}, {}
+    with diagnostics.capture(metrics):
+        result = await prepare_in_thread(diagnostics.thread_call("report_build_cpu_ms", lambda: item))
+    assert result is item and set(metrics) == {"report_build_cpu_ms"}
+    assert diagnostics._CURRENT.get() is None
+
+
+async def prepared_owner_report(db):
+    state = await seed_workspace(db, movements=0)
+    state["started_at"] = "2030-04-01T00:00:00+00:00"
+    state["engine"]["as_of"] = "2030-04-05T00:00:00+00:00"
+    for opening in state["openings"].values():
+        opening["created_at"] = state["started_at"]
+    await db[STATES].replace_one({"_id": "owner"}, state)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(db)), base_url="http://isolated") as client:
+        pending = await client.get(BASE + "/report", params={"view": "employees"}, headers=HEADERS)
+        assert pending.status_code == 202, pending.text
+        claim = await jobs.claim_next(db)
+        assert claim["_id"] == pending.json()["key"]
+        assert await jobs.execute_claim(db, claim["_id"], claim["lease_token"], claim["generation"],
+            builder=build_projection, authorize=authorize_spec, startup_started=time.monotonic() - .01,
+            runner_import_ms=4.0)
+        ready = await client.get(BASE + "/report", params={"view": "employees"}, headers=HEADERS)
+        assert ready.status_code == 200, ready.text
+    return state, claim, ready.json()
+
+
+def reference(body):
+    value = body["read_diagnostics_ref"]
+    return {"read_key": value["key"], "read_generation": value["generation"]}
+
+
+@pytest.mark.asyncio
+async def test_actual_http_trace_exposes_only_owner_numeric_phases_without_changing_finance(read_db):
+    before, claim, body = await prepared_owner_report(read_db)
+    expected = build_financial_position(deepcopy(before), view="employees")
+    assert json.dumps(body["currencies"], sort_keys=True, ensure_ascii=False) == json.dumps(expected["currencies"], sort_keys=True, ensure_ascii=False)
+    assert await read_db[STATES].find_one({"_id": "owner"}) == before
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(read_db)), base_url="http://isolated") as client:
+        plain = await client.get("/api/operational-balances/automation")
+        assert plain.status_code == 200 and "read_diagnostics" not in plain.json()
+        response = await client.get("/api/operational-balances/automation", params=reference(body))
+        assert response.status_code == 200, response.text
+        trace = response.json()["read_diagnostics"]
+        assert trace["available"] is True and trace["view"] == "employees" and trace["source_revision"] == 5
+        required = {"startup_ms", "runner_import_ms", "state_read_ms", "state_decode_ms", "state_decode_cpu_ms",
+            "report_build_ms", "report_build_cpu_ms", "report_copy_cpu_ms", "materialize_ms",
+            "response_encode_ms", "response_encode_cpu_ms", "response_prepare_ms"}
+        assert required <= trace["metrics"].keys()
+        assert trace["metrics"]["runner_import_ms"] == 4.0
+        assert trace["metrics"]["startup_ms"] >= 10
+        assert "builder_import_ms" not in trace["metrics"]  # The pure test builder was injected.
+        assert "forecast_sources_ms" not in trace["metrics"]  # Not run means unknown/absent, never invented zero.
+        assert all(diagnostics._number(v) for k, v in trace["metrics"].items() if k not in {"family", "outcome"})
+        assert "lease_token" not in response.text and claim["lease_token"] not in response.text
+        assert "financial-source" not in response.text and "header" not in trace
+        employee = await client.get("/api/operational-balances/automation", params=reference(body), headers={"x-test-user": "staff"})
+        assert employee.status_code == 403
+        for params, headers in [(reference(body), {"x-test-user": "other"}),
+                ({**reference(body), "read_generation": "f" * 32}, {}),
+                ({**reference(body), "read_key": "e" * 64}, {})]:
+            hidden = await client.get("/api/operational-balances/automation", params=params, headers=headers)
+            assert hidden.status_code == 200 and hidden.json()["read_diagnostics"] == {"available": False}
+        assert (await client.get("/api/operational-balances/automation", params={"read_key": claim["_id"]})).status_code == 422
+    assert await read_db[STATES].find_one({"_id": "owner"}) == before
+
+
+@pytest.mark.asyncio
+async def test_actual_child_persists_launch_import_and_build_phases(read_db, read_mongo_uri, monkeypatch):
+    before = await seed_workspace(read_db, movements=0)
+    before["started_at"] = "2030-04-01T00:00:00+00:00"
+    before["engine"]["as_of"] = "2030-04-05T00:00:00+00:00"
+    for opening in before["openings"].values():
+        opening["created_at"] = before["started_at"]
+    await read_db[STATES].replace_one({"_id": "owner"}, before)
+    monkeypatch.setenv("MONGO_URL", read_mongo_uri)
+    monkeypatch.setenv("DB_NAME", read_db.name)
+    monkeypatch.setenv("MEZAN_BACKGROUND_WORKER_PROCESS", "1")
+    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
+    metrics = []
+    monkeypatch.setattr(jobs, "_emit_metrics", lambda value: metrics.append(value))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(read_db)), base_url="http://isolated") as client:
+        pending = await client.get(BASE + "/report", params={"view": "employees"}, headers=HEADERS)
+        assert pending.status_code == 202, pending.text
+        claim = await jobs.claim_next(read_db)
+        await asyncio.wait_for(jobs.run_claim(read_db, claim), 30)
+        ready = await client.get(BASE + "/report", params={"view": "employees"}, headers=HEADERS)
+        assert ready.status_code == 200, (ready.text, metrics)
+        trace = (await client.get("/api/operational-balances/automation", params=reference(ready.json()))).json()["read_diagnostics"]
+    assert trace["available"] is True and trace["metrics"]["outcome"] == "ready"
+    measured = trace["metrics"]
+    assert measured["pid"] != os.getpid()
+    assert measured["startup_ms"] >= measured["runner_import_ms"] >= 0
+    assert measured["builder_import_ms"] >= 0 and measured["report_build_cpu_ms"] >= 0
+    assert len(metrics) == 1 and metrics[0]["pid"] == measured["pid"]
+    assert await read_db[STATES].find_one({"_id": "owner"}) == before
+
+
+@pytest.mark.asyncio
+async def test_stale_generation_token_actor_and_retention_never_reuse_trace(read_db):
+    before, claim, body = await prepared_owner_report(read_db)
+    original = (await read_db[store.JOBS].find_one({"_id": claim["_id"]}))["read_diagnostics"]
+    metrics = {"family": "operational_report", "outcome": "ready", "build_ms": 999}
+    for changed in ({**claim, "generation": "f" * 32}, {**claim, "lease_token": "wrong-token"},
+                    {**claim, "actor_id": "staff"}, {**claim, "owner_id": "other"}):
+        assert not await diagnostics.save_owner_trace(read_db, changed, metrics)
+    assert not await diagnostics.save_delivery_trace(read_db, claim["spec"], claim["_id"], "f" * 32,
+                                                     {"response_encode_ms": 999})
+    assert (await read_db[store.JOBS].find_one({"_id": claim["_id"]}))["read_diagnostics"] == original
+    await read_db[store.JOBS].update_one({"_id": claim["_id"]}, {"$set": {"retire_at": datetime.now(timezone.utc) - timedelta(seconds=1)}})
+    assert await diagnostics.read_owner_trace(read_db, "owner", claim["_id"], claim["generation"]) == {"available": False}
+    assert await read_db[STATES].find_one({"_id": "owner"}) == before
+
+
+@pytest.mark.asyncio
+async def test_telemetry_failure_cannot_fail_job_ready_delivery_or_automation_status(read_db, monkeypatch):
+    async def unavailable(*_args, **_kwargs):
+        raise RuntimeError("private synthetic telemetry failure")
+    monkeypatch.setattr(diagnostics, "_io", unavailable)
+    before, claim, body = await prepared_owner_report(read_db)
+    assert (await read_db[store.JOBS].find_one({"_id": claim["_id"]}))["status"] == "ready"
+    monkeypatch.setattr(diagnostics, "read_owner_trace", unavailable)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(read_db)), base_url="http://isolated") as client:
+        response = await client.get("/api/operational-balances/automation", params=reference(body))
+        assert response.status_code == 200 and response.json()["read_diagnostics"] == {"available": False}
+        assert "private synthetic" not in response.text
+    assert await read_db[STATES].find_one({"_id": "owner"}) == before
+
+
+@pytest.mark.asyncio
+async def test_owner_authorization_is_rechecked_after_diagnostic_read(read_db, monkeypatch):
+    _, _, body = await prepared_owner_report(read_db)
+    original = diagnostics.read_owner_trace
+    async def revoke(db, *args):
+        value = await original(db, *args)
+        await db.users.update_one({"id": "owner"}, {"$set": {"disabled": True}})
+        return value
+    monkeypatch.setattr(diagnostics, "read_owner_trace", revoke)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(read_db)), base_url="http://isolated") as client:
+        response = await client.get("/api/operational-balances/automation", params=reference(body))
+        assert response.status_code == 403 and "state_decode_ms" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_driver_budget_precedes_dispatch_and_is_cleared_after_io(read_db):
+    budgets = []
+    def operation():
+        budgets.append(_csot.remaining())
+        return read_db[store.JOBS].find_one({"_id": "synthetic-missing"}, {"_id": 1})
+    assert _csot.remaining() is None
+    assert await diagnostics._io(operation) is None
+    assert len(budgets) == 1 and 0 < budgets[0] <= diagnostics.IO_SECONDS
+    assert _csot.remaining() is None
+
+
+@pytest.mark.asyncio
+async def test_cancelled_telemetry_joins_its_admitted_future_and_preserves_cancellation():
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+    entered = asyncio.Event()
+    def operation():
+        entered.set()
+        return future
+    task = asyncio.create_task(diagnostics._io(operation))
+    await entered.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done() and not future.cancelled()
+    future.set_result(None)
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert future.done() and _csot.remaining() is None
+
+
+@pytest.mark.asyncio
+async def test_opaque_or_session_wrappers_cannot_acquire_telemetry_capability(read_db):
+    class Opaque:
+        __slots__ = ()
+        def __getitem__(self, _name):
+            raise AssertionError("Unsupported database wrapper must not be accessed")
+    assert diagnostics._collection(Opaque()) is None
+    assert await diagnostics.read_owner_trace(Opaque(), "owner", "a" * 64, "b" * 32) == {"available": False}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_actual_stalled_local_socket_has_finite_budget_and_is_joined(cancel):
+    connected = asyncio.Event()
+    writers, handlers = set(), set()
+    async def stalled(reader, writer):
+        task = asyncio.current_task()
+        writers.add(writer); handlers.add(task)
+        connected.set()
         try:
-            return await load_collections(database, 'owner', ['unified_orders'],
-                reader=refresh_source_rows, per_read_timeout=timeout,
-                observe_primary_orders=observed)
-        except SourceReadError as error:
-            raise HTTPException(409, source_failure_detail(error.code, error.collection)) from None
-
-    return await demand.run_visible_refresh(Request(), database, 'owner', 'staff', allowed, operation)
-
-
-def sample_observation():
-    return {
-        'collection': 'unified_orders', 'outcome': 'failed', 'cursor_kind': 'motor',
-        'queue_ms': 1.25, 'budget_ms': 15000, 'first_row_ms': None,
-        'rows_retained': 0, 'last_checkpoint_rows': 0, 'last_checkpoint_ms': None,
-        'read_elapsed_ms': 17000, 'cancel_join_ms': 1990, 'close_ms': 1,
-    }
-
-
-def test_snapshot_failure_reports_existing_read_unpack_and_copy_boundaries():
-    async def scenario():
-        database = DB()
-        saved = deepcopy(database.data)
-
-        async def reject_after_load(state):
-            raise HTTPException(409, source_failure_detail(
-                'operational_source_read_timeout', 'unified_orders'))
-
-        with pytest.raises(HTTPException) as raised:
-            await demand.run_visible_refresh(Request(), database, 'owner', 'staff', allowed,
-                lambda: mutate(database, 'owner', reject_after_load))
-
-        assert raised.value.status_code == 409
-        assert raised.value.detail['cause'] == 'operational_source_read_timeout'
-        timings = raised.value.detail['stage_timings']
-        names = [row['stage'] for row in timings]
-        assert names[:4] == [
-            'snapshot_raw_read', 'snapshot_unpack', 'snapshot_copy_prepare', 'snapshot_load']
-        assert all(row['outcome'] == 'complete' and row['duration_ms'] >= 0 for row in timings)
-        assert database.data[STATES] == saved[STATES]
-        assert not database.data[demand.LEASES]
-        assert not any(operation in {'insert', 'replace'} for _, operation, _ in database.writes)
-        assert database.writes[-1][1] == 'release'
-
-    asyncio.run(scenario())
-
-
-@pytest.mark.asyncio
-async def test_observed_primary_read_preserves_query_full_evidence_and_owned_operations():
-    rows = [{'user_id': 'owner', 'order_id': 'SYNTHETIC-ORDER',
-             'raw_by_source': {'salla': {'private_payload': 'SYNTHETIC-PRIVATE'}},
-             'salla_paid_sar_evidence': {'contradictory_shape': ['retained', {'all': 'fields'}]}}]
-    executions = []
-    for observed in (False, True):
-        cursor = ThreadedMotorCursor(deepcopy([rows]), block=False)
-        database, captured = SourceDB(cursor), []
-        result = await source_refresh(database, captured, observed=observed)
-        assert result == {'unified_orders': rows}
-        assert cursor.close_calls == 1 and not cursor.closed_during_read
-        assert len(cursor.operations) == 1 and cursor.consumed == 1
-        assert all(operation.done() for operation in cursor.operations)
-        assert not database.data[demand.LEASES]
-        executions.append((database.source.queries,
-                           [(name, operation) for name, operation, _ in database.writes],
-                           list(captured[0].primary_orders_reads)))
-    assert executions[0][:2] == executions[1][:2]
-    query, projection = executions[1][0][0]
-    assert query == {'user_id': 'owner'}
-    assert projection['raw_by_source'] == 1 and projection['salla_paid_sar_evidence'] == 1
-    assert not any('.' in field for field in projection)
-    assert executions[0][2] == []
-    observed = executions[1][2]
-    assert len(observed) == 1
-    assert observed[0]['cursor_kind'] == 'motor' and observed[0]['outcome'] == 'complete'
-    assert observed[0]['rows_retained'] == 1 and observed[0]['first_row_ms'] >= 0
-    assert observed[0]['cancel_join_ms'] == 0
-    assert 'SYNTHETIC' not in json.dumps(observed)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('timeout_kind', ['source', 'request'])
-async def test_first_row_timeout_reports_only_after_owned_driver_and_close_finish(monkeypatch, timeout_kind):
-    if timeout_kind == 'request':
-        monkeypatch.setattr(demand, 'REQUEST_SECONDS', .01)
-    cursor = ThreadedMotorCursor([[{'user_id': 'owner'}], [{'user_id': 'owner'}]], block_close=True)
-    database, captured = SourceDB(cursor), []
-    saved = deepcopy(database.data[STATES])
-    task = asyncio.create_task(source_refresh(database, captured, timeout=.01 if timeout_kind == 'source' else 15))
+            await reader.read()  # Own local server accepts bytes but never answers Mongo's handshake.
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except ConnectionError:
+                pass
+            writers.discard(writer); handlers.discard(task)
+    server = await asyncio.start_server(stalled, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    client = AsyncIOMotorClient(f"mongodb://127.0.0.1:{port}/?directConnection=true",
+        serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, socketTimeoutMS=5000)
+    task = None
     try:
-        await asyncio.wait_for(cursor.entered.wait(), 1)
-        await asyncio.sleep(.03)
-        assert not task.done() and cursor.close_calls == 0
-        assert len(cursor.operations) == 1
-        cursor.release.set()
-        await asyncio.wait_for(cursor.close_entered.wait(), 1)
-        assert not task.done() and cursor.close_calls == 1
-        assert not cursor.closed_during_read
-        cursor.close_release.set()
-        with pytest.raises(HTTPException) as raised:
-            await asyncio.wait_for(task, 1)
-        if timeout_kind == 'source':
-            assert raised.value.status_code == 409
-            assert raised.value.detail['cause'] == 'operational_source_read_timeout'
-            assert raised.value.detail['source_collection'] == 'unified_orders'
-        else:
-            assert raised.value.status_code == 408
-            assert raised.value.detail['code'] == 'operational_refresh_timeout'
-        record, = raised.value.detail['primary_orders_reads']
-        assert record['outcome'] == ('failed' if timeout_kind == 'source' else 'cancelled')
-        assert record['cursor_kind'] == 'motor'
-        assert record['rows_retained'] == 0 and record['first_row_ms'] is None
-        assert 0 < record['budget_ms'] <= 10
-        assert record['read_elapsed_ms'] >= record['cancel_join_ms'] > 0
-        assert record['close_ms'] >= 0
-        assert database.data[STATES] == saved and not database.data[demand.LEASES]
-        assert all(operation.done() for operation in cursor.operations)
-        assert len(cursor.operations) == 1
+        started = time.monotonic()
+        task = asyncio.create_task(diagnostics._io(lambda: client.synthetic_traces.jobs.find_one({"_id": "synthetic"})))
+        await asyncio.wait_for(connected.wait(), 2)
+        if cancel:
+            task.cancel()
+        with pytest.raises(asyncio.CancelledError if cancel else PyMongoError):
+            await asyncio.wait_for(task, 2)
+        assert task.done() and time.monotonic() - started < 2
+        assert _csot.remaining() is None
     finally:
-        cursor.release.set()
-        cursor.close_release.set()
-        if not task.done():
+        client.close()
+        server.close()
+        await server.wait_closed()
+        for writer in list(writers):
+            writer.close()
+        if handlers:
+            await asyncio.gather(*list(handlers), return_exceptions=True)
+        if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
-async def test_cancelled_partial_iteration_retains_progress_without_starting_another_batch():
-    class SecondBatchCursor(ThreadedMotorCursor):
-        def __init__(self):
-            super().__init__([[{'user_id': 'owner'} for _ in range(256)],
-                              [{'user_id': 'owner'}], [{'user_id': 'owner'}]],
-                             block=False, block_close=True)
-            self.second_started = asyncio.Event()
-
-        def _refresh(self):
-            if self.index == 1:
-                self.release.clear()
-                self.second_started.set()
-            return super()._refresh()
-
-    cursor = SecondBatchCursor()
-    database, captured = SourceDB(cursor), []
-    task = asyncio.create_task(source_refresh(database, captured))
-    try:
-        await asyncio.wait_for(cursor.second_started.wait(), 1)
-        task.cancel()
-        for _ in range(12):
-            await asyncio.sleep(0)
-        assert not task.done() and cursor.close_calls == 0
-        cursor.release.set()
-        await asyncio.wait_for(cursor.close_entered.wait(), 1)
-        assert not task.done() and not cursor.closed_during_read
-        cursor.close_release.set()
-        with pytest.raises(asyncio.CancelledError):
-            await asyncio.wait_for(task, 1)
-        record, = captured[0].primary_orders_reads
-        assert record['outcome'] == 'cancelled'
-        assert record['rows_retained'] == record['last_checkpoint_rows'] == 256
-        assert record['first_row_ms'] <= record['last_checkpoint_ms'] <= record['read_elapsed_ms']
-        assert record['cancel_join_ms'] > 0
-        assert cursor.consumed == 257  # The already-owned late row was discarded.
-        assert len(cursor.operations) == 2 and cursor.close_calls == 1
-        assert all(operation.done() for operation in cursor.operations)
-        assert not database.data[demand.LEASES]
-    finally:
-        cursor.release.set()
-        cursor.close_release.set()
-        if not task.done():
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('violation', ['overflow', 'owner'])
-async def test_observation_cannot_prune_overflow_or_foreign_evidence(violation):
-    rows = ([{'user_id': 'owner'} for _ in range(20002)] if violation == 'overflow'
-            else [{'user_id': 'SYNTHETIC-FOREIGN'}])
-    cursor = ThreadedMotorCursor([rows], block=False)
-    database, captured = SourceDB(cursor), []
-    with pytest.raises(HTTPException) as raised:
-        await source_refresh(database, captured)
-    expected = 'operational_source_scope_too_large' if violation == 'overflow' else 'operational_source_owner_mismatch'
-    assert raised.value.detail['cause'] == expected
-    record, = raised.value.detail['primary_orders_reads']
-    assert record['rows_retained'] == (20001 if violation == 'overflow' else 1)
-    assert record['outcome'] == 'failed'
-    stages = {row['stage']: row['outcome'] for row in raised.value.detail['stage_timings']}
-    assert stages['orders_cursor_read'] == 'complete' and stages['orders_rows_validate'] == 'failed'
-    assert cursor.close_calls == 1 and len(cursor.operations) == 1
-    assert cursor.consumed == record['rows_retained']
-    assert 'SYNTHETIC-FOREIGN' not in json.dumps(raised.value.detail)
-
-
-def test_primary_read_records_are_fixed_schema_bounded_and_request_local():
-    first = demand.DemandRefreshContext(Request(), DB(), 'PRIVATE-OWNER', 'PRIVATE-ACTOR', allowed)
-    other = demand.DemandRefreshContext(Request(), DB(), 'OTHER-OWNER', 'OTHER-ACTOR', allowed)
-    for index in range(20):
-        first.record_primary_orders_read({**sample_observation(), 'queue_ms': index,
-                                         'query': {'user_id': 'PRIVATE-OWNER'}, 'token': 'PRIVATE-TOKEN'})
-    records = first.primary_read_details()['primary_orders_reads']
-    assert len(records) == 12 and records[0]['queue_ms'] == 8 and records[-1]['queue_ms'] == 19
-    assert all(set(record) == set(sample_observation()) for record in records)
-    assert 'PRIVATE' not in json.dumps(records) and other.primary_read_details() == {}
-    for key, invalid in [('budget_ms', float('nan')), ('read_elapsed_ms', float('inf')),
-                         ('queue_ms', True), ('close_ms', -1), ('rows_retained', 20002),
-                         ('rows_retained', '1'), ('collection', 'PRIVATE-COLLECTION'),
-                         ('cursor_kind', 'PRIVATE'), ('outcome', 'PRIVATE')]:
-        first.record_primary_orders_read({**sample_observation(), key: invalid})
-    assert first.primary_read_details()['primary_orders_reads'] == records
-
-
-@pytest.mark.asyncio
-async def test_diagnostic_failure_does_not_replace_canonical_source_exception(monkeypatch):
-    def broken(*args, **kwargs):
-        raise RuntimeError('SYNTHETIC-DIAGNOSTIC-FAILURE')
-
-    monkeypatch.setattr(demand.DemandRefreshContext, 'record_primary_orders_read', broken)
-    monkeypatch.setattr(demand._LOG, 'info', broken)
-    cursor = ThreadedMotorCursor([[{'user_id': 'SYNTHETIC-FOREIGN'}]], block=False)
-    with pytest.raises(HTTPException) as raised:
-        await source_refresh(SourceDB(cursor), [])
-    assert raised.value.detail['cause'] == 'operational_source_owner_mismatch'
-    assert 'SYNTHETIC' not in json.dumps(raised.value.detail)
-    assert cursor.close_calls == 1 and not cursor.closed_during_read
-
-
-@pytest.mark.asyncio
-async def test_unrelated_http_failure_retains_its_exact_contract():
-    async def fail():
-        context = demand.demand_context()
-        context.record_primary_orders_read(sample_observation())
-        raise HTTPException(409, {'code': 'unrelated', 'message': 'unchanged'})
-
-    with pytest.raises(HTTPException) as raised:
-        await demand.run_visible_refresh(Request(), DB(), 'owner', 'staff', allowed, fail)
-    assert raised.value.detail == {'code': 'unrelated', 'message': 'unchanged'}
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(('visible', 'collection', 'enabled'), [
-    (True, 'unified_orders', False),
-    (True, 'mezan_employees_v2', True),
-    (False, 'unified_orders', True),
-])
-async def test_primary_observation_requires_visible_context_opt_in_and_orders(visible, collection, enabled):
-    import operational_read_runtime as runtime
-    context = demand.DemandRefreshContext(Request(), DB(), 'owner', 'staff', allowed)
-    token = demand._CURRENT.set(context if visible else None)
-    calls = []
-
-    async def reader(database, owner, name):
-        calls.append(name)
-        return []
-
-    try:
-        assert await runtime.load_collections(object(), 'owner', [collection], reader=reader,
-            observe_primary_orders=enabled) == {collection: []}
-        assert calls == [collection] and list(context.primary_orders_reads) == []
-        assert runtime._PRIMARY_ORDERS_READ.get() is None
-    finally:
-        demand._CURRENT.reset(token)
+async def test_corrupt_or_non_numeric_saved_diagnostics_are_unknown_and_do_not_escape(read_db):
+    before, claim, _ = await prepared_owner_report(read_db)
+    saved = (await read_db[store.JOBS].find_one({"_id": claim["_id"]}))["read_diagnostics"]
+    for bad in ({**saved, "schema_version": True}, {**saved, "source_revision": True},
+            {**saved, "metrics": {**saved["metrics"], "customer_name": "private synthetic data"}},
+            {**saved, "metrics": {**saved["metrics"], "build_ms": float("nan")}},
+            {**saved, "family": "operational_home"}):
+        await read_db[store.JOBS].update_one({"_id": claim["_id"]}, {"$set": {"read_diagnostics": bad}})
+        assert await diagnostics.read_owner_trace(read_db, "owner", claim["_id"], claim["generation"]) == {"available": False}
+    assert await read_db[STATES].find_one({"_id": "owner"}) == before

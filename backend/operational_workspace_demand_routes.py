@@ -37,6 +37,9 @@ async def _serve_projection(db, user, request, family, *, filters=None, resource
                             page=1, page_size=24, focus_id=None, ownership):
     from demand_read_store import (InvalidReadSpec, ProjectionUnavailable, SnapshotChanged,
         demand, find_row_ordinal, projection_key, read_ready)
+    import time
+    from demand_read_diagnostics import capture, phase, save_delivery_trace
+    response_started = time.monotonic()
     consumer = request.headers.get("X-Mezan-Read-Consumer")
     spec = await make_spec(db, user, request, family, filters=filters, resource=resource)
     key = projection_key(spec)
@@ -60,6 +63,9 @@ async def _serve_projection(db, user, request, family, *, filters=None, resource
             await authorize_spec(db, spec)
             response = {**result["header"], "snapshot": {"generated_at": result["generated_at"],
                 **spec["source_revision"], "display_only": True}}
+            owner_read = spec["owner_id"] == spec["actor_id"]
+            if owner_read:
+                response["read_diagnostics_ref"] = {"key": key, "generation": result["snapshot"]}
             if result["items"] is not None:
                 if family == "operational_statement":
                     items = list(result["items"])
@@ -75,7 +81,16 @@ async def _serve_projection(db, user, request, family, *, filters=None, resource
                         page_size=page_size, total_pages=pages, pages=pages)
             from operational_response_encoding import encode_saved_response
             from operational_financial_activity_runtime import preparation_checkpoint
-            encoded = await encode_saved_response(response)
+            response_metrics = {}
+            with capture(response_metrics, enabled=owner_read):
+                with phase("response_encode_ms"):
+                    encoded = await encode_saved_response(response)
+            if owner_read:
+                response_metrics["response_prepare_ms"] = (time.monotonic() - response_started) * 1000
+                try:
+                    await save_delivery_trace(db, spec, key, result["snapshot"], response_metrics)
+                except Exception:
+                    pass  # The final authorization below still controls delivery.
             # Serialization is awaited CPU work. Current permissions and the
             # sole disconnect listener must win before any saved bytes return.
             await authorize_spec(db, spec)
@@ -173,3 +188,4 @@ def install_demand_workspace_routes(router, db, current_user):
         except InvalidReadSpec:
             fail("operational_read_invalid", "تعذر إنهاء قراءة الصفحة", 422)
         return {"released": True}
+

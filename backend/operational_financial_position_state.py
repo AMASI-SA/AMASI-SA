@@ -11,6 +11,7 @@ from operational_balance_archive import (
 from operational_balance_store import STATES, fail, initial
 from operational_financial_activity_runtime import preparation_checkpoint, prepare_in_thread
 import read_path_diagnostics as read_diagnostics
+import demand_read_diagnostics as demand_diagnostics
 
 
 def _report_state(stored, owner):
@@ -48,11 +49,13 @@ def _report_state(stored, owner):
 async def read_financial_position_state(db, owner):
     # These two write-only histories were discarded by _report_state. Keep
     # engine.audit and its manifest for the existing integrity checks.
-    with read_diagnostics.phase("state_read"):
+    with read_diagnostics.phase("state_read"), demand_diagnostics.phase("state_read_ms"):
         stored = await db[STATES].find_one({"_id": owner, "owner_id": owner}, {"requests": 0, "audit": 0})
     try:
-        return await prepare_in_thread(read_diagnostics.thread_call("state_decode", _report_state),
-                                       stored if stored is not None else initial(owner), owner)
+        with demand_diagnostics.phase("state_decode_ms"):
+            return await prepare_in_thread(demand_diagnostics.thread_call("state_decode_cpu_ms",
+                read_diagnostics.thread_call("state_decode", _report_state)),
+                stored if stored is not None else initial(owner), owner)
     except ArchiveError:
         fail("operational_financial_snapshot_invalid", "تعذر التحقق من لقطة التقرير المالي المحفوظة", 503)
 
@@ -76,3 +79,4 @@ async def require_current_snapshot(db, owner, state):
         fail("operational_financial_snapshot_changed", "تغيرت اللقطة المحفوظة؛ أعد قراءة الملخص قبل التوقعات", 409)
     require_snapshot_binding(current, revision=state["revision"],
         as_of=state.get("engine", {}).get("as_of"), started_at=state.get("started_at"))
+

@@ -4,6 +4,7 @@ The calculation and source-validation order are unchanged. Importing this module
 creates no application, scheduler, database client, or external synchronization.
 """
 from fastapi import HTTPException
+import demand_read_diagnostics as demand_diagnostics
 from operational_balance_store import read, digest, fail, now
 from operational_financial_activity_runtime import prepare_in_thread
 from operational_financial_position_views import FORECAST_VIEWS, LABEL_VIEWS
@@ -47,7 +48,8 @@ async def read_financial_position(db, user, *, scope, view="all", expected_revis
                 raise
         else:
             try:
-                cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
+                with demand_diagnostics.phase("forecast_sources_ms"):
+                    cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
             except ValueError as exc:
                 # The optional bounded reader can reject its source scope.
                 # Preserve the verified balance snapshot while explicitly
@@ -65,10 +67,12 @@ async def read_financial_position(db, user, *, scope, view="all", expected_revis
                         "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
                 }
     import asyncio
-    result = await prepare_in_thread(build_financial_position, state,
-        cost_exposure=cost_exposure, generated_at=now(), view=view)
+    with demand_diagnostics.phase("report_build_ms"):
+        result = await prepare_in_thread(demand_diagnostics.thread_call("report_build_cpu_ms", build_financial_position), state,
+            cost_exposure=cost_exposure, generated_at=now(), view=view)
     if view in LABEL_VIEWS:
-        result = await attach_order_numbers(db, owner, result)
+        with demand_diagnostics.phase("order_labels_ms"):
+            result = await attach_order_numbers(db, owner, result)
     latest_actor, latest_owner, _ = await scope(db, user, "reports")
     if latest_owner != owner or latest_actor["id"] != actor["id"]:
         fail("operational_actor_scope_changed", "تغير نطاق الجلسة؛ أعد فتح الصفحة", 409)
@@ -80,3 +84,4 @@ async def read_financial_position(db, user, *, scope, view="all", expected_revis
         "confirm_delivery_after_start": state['status'] == 'active' and latest_actor.get('role') == 'owner'
                                         and latest_actor['id'] == owner})
     return result
+
