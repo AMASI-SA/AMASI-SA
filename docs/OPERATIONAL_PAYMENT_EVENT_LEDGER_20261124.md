@@ -261,6 +261,6 @@ New safeguards:
 - A uniquely identified, valid single provider opening without movements, or an unrelated fully allocated payout for another provider order, may still pass this **particular** overlap check; all remaining event, date, fee, source and idempotency guards remain mandatory.
 - Added isolated tests that load the REAL `operational_provider_history.late_payment_blocks` function with only filesystem-free database/runtime stubs. Covers unallocated provider incoming settlement, fully allocated payout for another order, two ambiguous provider openings without movements, and one valid opening.
 
-Previous CI PASS (source commit `d9b8a35647ddf3bc3baa5e38b1b62555f1e61aa3`, run `45475354071`) covered actual pooled payout tests. New opening-balance cases have been submitted at code SHA `fcc22a8e71f6c9875c9c91ed3e961ce608eb4d51`, run `45475596417` currently QUEUED at last inspection; do not report their CI success until completed.
+Previous CI PASS (source commit `d9b8a35647ddf3bc3baa5e38b1b62555f1e61aa3`, run `45475354071`) covered actual pooled payout tests. New opening-balance cases **PASS** on code SHA `fcc22a8e71f6c9875c9c91ed3e961ce608eb4d51`, `Operational Payment Event Policy` workflow run `45475596417`. This is still isolated unit/integration validation, not a live Preview reconciliation.
 
 This remains draft/flags OFF with no Preview or production financial mutation.
