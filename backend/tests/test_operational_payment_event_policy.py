@@ -81,6 +81,25 @@ class TestOperationalPaymentEventPolicy(unittest.TestCase):
         self.assertEqual(cash.action, Decision.POST)
         self.assertEqual(cash.balance_bucket, "courier_receivable")
 
+    def test_pos_requires_pos_statement_not_bank_statement(self):
+        args = dict(kind=Kind.COD, provider="pos-gateway", delivered=True,
+                    cod_collection_method="pos", transaction_id="pos-01",
+                    statement_match_verified=True)
+        from_bank = decide(event(evidence=Evidence.MATCHED_BANK_STATEMENT, **args))
+        from_pos = decide(event(evidence=Evidence.MATCHED_POS_STATEMENT, **args))
+        self.assertEqual(from_bank.action, Decision.PENDING_ACCOUNTANT)
+        self.assertEqual(from_pos.action, Decision.POST)
+        self.assertEqual(from_pos.balance_bucket, "pos_receivable")
+
+    def test_bank_cod_requires_bank_statement_not_pos_statement(self):
+        args = dict(kind=Kind.COD, provider="bank-inma", delivered=True,
+                    cod_collection_method="bank", transaction_id="bank-01",
+                    statement_match_verified=True)
+        from_pos = decide(event(evidence=Evidence.MATCHED_POS_STATEMENT, **args))
+        from_bank = decide(event(evidence=Evidence.MATCHED_BANK_STATEMENT, **args))
+        self.assertEqual(from_pos.action, Decision.PENDING_ACCOUNTANT)
+        self.assertEqual(from_bank.action, Decision.POST)
+
     def test_cod_not_delivered_does_not_post(self):
         self.assertEqual(decide(event(kind=Kind.COD, delivered=False,
                                       cod_collection_method="cash",
