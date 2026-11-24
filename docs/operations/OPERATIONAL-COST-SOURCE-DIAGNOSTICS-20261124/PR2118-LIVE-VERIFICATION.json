@@ -1,0 +1,28 @@
+{
+  "schema": "mezan_original_live_verification_summary_v1",
+  "platform_version": "eeecd3f",
+  "platform_finished_riyadh": "2026-11-24 23:41",
+  "started_at": "2026-11-24T20:42:16.797387+00:00",
+  "finished_at": "2026-11-24T20:58:44.300370+00:00",
+  "exit_code": 0,
+  "verified": true,
+  "checks": 3,
+  "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+  "deployment_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+  "original_stdout_path": "/app/.git/mezan-pr2118-publication-tc6xyu29/verify.json",
+  "original_stdout_bytes": 43129,
+  "original_stdout_sha256": "d4b9e6a2728da8016ebfad2cd1d1ef268c178272081532b8e5289e8f91c8d9ab",
+  "stderr_bytes": 0,
+  "frontend_checked_request_count": 770,
+  "frontend_artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+  "boot_started_at_observations": [
+    "2026-11-24T20:40:32.864555+00:00",
+    "2026-11-24T20:40:25.833532+00:00"
+  ],
+  "original_guard_status": {
+    "observed_at": "2026-11-24T21:01:19.329863+00:00",
+    "exit_code": 0,
+    "active": false
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "platform_version": "eeecd3f",
+  "route": "/operational-balances?view=specialized&section=reports",
+  "attempts": [
+    {
+      "kind": "one automatic section read from new tab; no cost refresh click",
+      "navigation_started_at": "2026-11-24T21:01:38.974Z",
+      "loading_observed_at": "2026-11-24T21:02:07.201Z",
+      "result_observed_at": "2026-11-24T21:02:29.864Z",
+      "navigation_to_result_ms": 50890,
+      "loading_observation_to_result_ms": 22663,
+      "result": "generic UI failure",
+      "limits": "Navigation includes parent/context reads. Time after loading observation is not isolated source or HTTP duration.",
+      "log_view": "First View Logs for new version opened immediately after result in next tool call;100retainedrecords; current timestamps span21:02:29..21:02:44UTC; no SourceReadError or diagnostic note or cost endpoint in rendered log text. Error logs0/no logs."
+    },
+    {
+      "kind": "one explicit bounded cost refresh to reduce log observation gap",
+      "started_at": "2026-11-24T21:11:47.679Z",
+      "loading_observed_at": "2026-11-24T21:11:48.009Z",
+      "result_observed_at": "2026-11-24T21:12:21.802Z",
+      "log_opened_at": "2026-11-24T21:12:25.051Z",
+      "elapsed_upper_bound_ms": 34123,
+      "result": "same generic UI failure",
+      "limits": "A browser wait operation timed out while the same request remained loading; resumed waiting without a further click. Therefore elapsed interval is an observation upper bound.",
+      "log_view": "Fresh snapshot timestamps21:12:11..21:12:20UTC, no safe diagnostic note or operational source code."
+    }
+  ],
+  "cause": "unknown",
+  "collection": "unknown",
+  "raw_logs_exported": false,
+  "private_customer_or_credential_log_data_exported": false,
+  "financial_refresh_from_attempts": false,
+  "limits": [
+    "No cause or collection attribution from the generic UI error.",
+    "Retained logs are limited to100records; absent note does not prove source-read success or a different stage.",
+    "No production latency improvement claimed."
+  ]
+}
