@@ -446,3 +446,45 @@ receipt before another financial calculation. Issue #1006 reached GitHub's
 comment limit; the task PR body is the continuation fallback already recorded
 by this task. The next safe action is to push this verified checkpoint and
 open a draft continuation PR, then integrate only reviewed verifier changes.
+
+## Native-date verification and saved-report read checkpoint
+
+PR #2102 is an open Draft. Its first remote checkpoint is
+`b6a6e9c911853a9f7110ba7bf5b8bc7d4b5f6367`, tree
+`5139aa42611cd36d0cf8b4fb66879319472134c4`. A fresh GitHub ref read still
+reports production D `0ffa962d3cfda3eb49b5750c7bdc2f932a645d4d`.
+
+The next source checkpoint additionally verifies advertising native micros
+using the engine's exact cent conversion and funding allocation. Supplier
+original-date certification requires a unique native approved invoice paired
+with the frozen receipt, exact identity/currency/money and Riyadh approval day;
+returns, estimates and incomplete sources remain unverified. This changes only
+future proof classification, never financial amounts, original dates or saved
+historical receipts. All added fixtures use synthetic dates and values.
+Two independent runs of the same five focused suites passed 183 tests each.
+Runtime SHA256: `5d11b801fb86e69e72f89860baa2fec1838302122f3e63d6f29ef7a52e7e17f0`.
+Synthetic test SHA256: `d344bf593cf7aaa11cfd531d80ac479e1078cbd61447fd586bb19b2873c92737`.
+
+The legacy saved `/reports` route now uses the existing financial-state reader,
+avoiding historical audit-page hydration that its response discards. Complete
+response equality, owner reauthorization, financial/issue packet and manifest
+integrity, and cancellation are retained. Explicit `/audit` remains unchanged.
+Four fail-first cases reproduced audit reads on the prior source. Both author
+and independent reviewer passed all 60 affected cases. See
+`SAVED_REPORT_STATE_READ.md`; production latency is not yet measured for this
+change.
+
+The full first financial receipt has now been privately archived and checked.
+The private audit enumerates every group and keeps original-date additions,
+unverified additions and changed-existing deltas separate. A supplemental
+native invoice comparison is underway; no financial data is included here.
+No second financial calculation or automation enablement has occurred at this
+checkpoint. The prior PR #2101 deployment remains the live version.
+
+Remaining source work: bounded Salla native detail fallback for existing
+missing-clock candidates, explicit creation-date recovery bounds, and truthful
+partial/truncated status. An isolated worktree owns that change. Root alone
+owns integration, merge, deployment and live recovery. No new intent or lease
+has been created. Next safe action: preserve this exact reviewed tree remotely
+on PR #2102, finish and independently review Salla, then run integrated gates
+and the complete new A/B release protocol.
