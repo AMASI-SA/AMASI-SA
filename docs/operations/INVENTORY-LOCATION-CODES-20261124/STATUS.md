@@ -2,8 +2,14 @@
 
 ## Status
 
-**Research and source inspection complete; implementation awaits one physical-layout clarification.**
-Production changed: **no**. No source, configuration, stored location, inventory quantity, barcode or deployment changes were made.
+**Replacement scope reviewed; no deletion or implementation performed.**
+Production changed: **no**. No application source, configuration, stored location, inventory quantity, barcode or deployment changes were made. The owner now requests deleting the existing unused cabinets and creating replacements with short names. This is authorization for that bounded replacement, not a warehouse-wide reset.
+
+The live warehouse UI showed one cabinet with a 3-by-3 grid and all nine locations marked empty. That is current UI occupancy evidence, not proof that receipts, reservations, purchasing, stocktakes or archived history contain no references. The existing API has no cabinet-specific delete/rename operation; its reset operation permanently deletes the entire owner's warehouse hierarchy, events and counters and is outside this request.
+
+An independent source review and the root inspection agree that recreating a cabinet under a legacy warehouse retains legacy numbering. A cabinet name alone does not change location codes. See [REPLACEMENT-REVIEW.md](REPLACEMENT-REVIEW.md).
+
+The authorized host's Release Guard status returned active=false. A bounded read-only query using the existing backend interpreter found zero matches for the live target in the host-configured local database. That database was therefore not accepted as the live data target, and no write or wider database search followed. Production reference counts remain unverified.
 
 The owner requests shorter storage names in inventory selectors. The supplied example is cabinet 1 / column 2 / row 2 / bin 1 -> 1221, replacing a long location label such as RUH-WH001-S01-C01-001. The follow-up asks how Odoo and established warehouse systems number locations and requests a similar approach.
 
@@ -53,6 +59,10 @@ These are naming/design references, not a claim that Mezan implements Odoo or SA
 ## Required clarification and next safe action
 
 Ask whether each cabinet row/column intersection is the final storage compartment, or contains independently numbered bins/boxes. This changes the data model and cannot be decided from a display example alone.
+
+The later instruction to replace the unused cabinets changes the data-operation scope but does not establish a fourth physical coordinate. Use the observed 3-by-3 dimensions as the preservation baseline unless the owner requests a new layout. Do not fabricate a fourth coordinate, silently replace deletion with renaming, or use the global reset endpoint.
+
+Next: settle the physical layout/naming contract and prepare a cabinet-scoped replacement path with referential checks, an exact target preview and a recoverable record of the original rows. Run the checks against the authenticated production scope before any replacement. The current host-local database does not prove access to those production records.
 
 After the answer, implement the smallest consistent change across catalog labels, entry/purchase/receiving selectors, warehouse map and print labels as applicable. Preserve frozen document labels and underlying IDs. Use targeted validation for coordinate correctness, multi-digit values, cross-warehouse duplicates, legacy fallback and unchanged write payload identities. No tests were executed for this research-only milestone, and no deployment claim is made.
 
