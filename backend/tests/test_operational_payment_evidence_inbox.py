@@ -3,7 +3,7 @@ import copy
 import unittest
 from operational_payment_event_policy import Evidence, Kind, PaymentEvent
 from operational_payment_evidence_inbox import (
-    event_record, queue_evidence_in_state, INBOX_KEY,
+    event_record, queue_evidence_in_state, queue_verified_batch_in_state, INBOX_KEY,
 )
 
 
@@ -79,6 +79,18 @@ class EvidenceInboxTests(unittest.TestCase):
         }}}
         with self.assertRaisesRegex(ValueError, "canonical_conflict"):
             queue_evidence_in_state(state, record(), "2026-11-24T18:00:00Z")
+
+    def test_one_cas_batch_handles_two_installments(self):
+        state = {"status": "active"}
+        records = [record(), record(payment(transaction_id="tx-2", amount="150.00"))]
+        results = queue_verified_batch_in_state(state, records, "2026-11-24T18:00:00Z")
+        self.assertEqual(len(results), 2)
+        self.assertEqual(len(state[INBOX_KEY]), 2)
+        self.assertNotIn("movements", state)
+
+    def test_batch_rejects_invalid_size(self):
+        with self.assertRaisesRegex(ValueError, "batch_size"):
+            queue_verified_batch_in_state({"status": "active"}, [], "2026-11-24T18:00:00Z")
 
     def test_unverified_payment_cannot_enter(self):
         with self.assertRaisesRegex(ValueError, "payment_event_not_confirmed"):
