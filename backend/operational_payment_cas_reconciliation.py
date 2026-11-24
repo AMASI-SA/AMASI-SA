@@ -44,6 +44,11 @@ def reconcile_staged_payment_evidence(state: dict) -> dict:
         status = evidence.get("status")
         if status not in {"evidence_received", "already_recognized", "conflict"}:
             raise ValueError("operational_payment_evidence_status_invalid")
+        # Conflicted evidence requires explicit reviewed correction; a later
+        # source update must never silently clear a recorded identity conflict.
+        if status == "conflict":
+            counts["conflict"] += 1
+            continue
         kind, ref = evidence.get("kind"), evidence.get("native_ref")
         if kind == "payment":
             key = "capture:" + ref if isinstance(ref, str) and ref else None
