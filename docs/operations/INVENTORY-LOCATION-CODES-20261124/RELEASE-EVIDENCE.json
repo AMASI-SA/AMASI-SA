@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 18:18:54 UTC",
+  "observed_at_utc": "2026-11-24 18:33:35 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "HOST_RECOVERY_BLOCKED_ENOSPC",
+  "state": "CAPACITY_ARCHIVE_PREPARATION_REVIEWED_READY",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Preserve failed-run evidence and verified backups. Diagnose a capacity recovery confined to proven task-owned generated outputs or an explicitly supported original adapter path; no blind retry, foreign cleanup, source/guard weakening, lease or publication.",
+  "next_safe_action": "Stage exact reviewed archive helper via private /tmp bare object database (app objectstore read-only alternate), execute preparation only from/app, read exact compressed sizes/proof. Independently review pack preparation. No capacity mutation until evidence-backed plan.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1602,5 +1602,29 @@
     "numbering_related_host_worktrees": [],
     "capacity_changes_performed": false,
     "foreign_cleanup_performed": false
+  },
+  "capacity_archive_preparation": {
+    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "helper": {
+      "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_prepare_capacity_archives.py",
+      "bytes": 14107,
+      "sha256": "ef26f2b6b6583fea369619b9e7bd685adb37521180fcb38d3e6135e21a5ce18a",
+      "git_blob": "a6b7fa6da03c002885abbb1772b1a5efabb3c562"
+    },
+    "scope": "Read-only /app; create and verify two owned generated-output tar.gz archives only in unique private /tmp. No extraction, deletion, packing, source mutation or space reclamation.",
+    "reviewer": "numbering_release_review",
+    "review": "Full byte/hash/AST review PASS; original guard, D clean, fresh432preservation, nofollow fd-relative reads, exact archive members/modes/bytes/hashes/link values, known backup equality and stable source manifests.",
+    "targets": [
+      "/app/.git/mezan-pr2113-recover-d-cm4y9sgc/backups/frontend--node_modules",
+      "/app/frontend/node_modules"
+    ]
+  },
+  "capacity_pack_plan": {
+    "status": "PRELIMINARY_ACCEPT_PENDING_PREP_HELPER_REVIEW_AND_MEASUREMENT",
+    "scope": "Pack ALL real loose Git objects including unreachable into a new verified nonthin pack on /tmp. Only later, after separate review, install verified pack/idx with owned.keep and remove redundant loose copies via original git prune-packed. Retain all logical objects, old packs, refs, indices and worktrees.",
+    "observed_git_version": "2.39.5",
+    "observed_loose_objects": 5760,
+    "observed_loose_kib": 115172,
+    "actual_space_gain": "not yet measured"
   }
 }
