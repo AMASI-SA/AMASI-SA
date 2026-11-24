@@ -141,3 +141,12 @@ Approved APPLY completed successfully. Durable stage `/app/.git/mezan-pr2113-cap
 Original dependency backup survives as a fully verified/fsynced durable19,991,544-byte archive (SHA256 `f82674d9dc48b59ff06ca2e84a3013caf2e34c10fc4d045348fd565075eb7270`) and1,472,585-byte restore manifest (SHA256 `1e395e80d132c066e891cf9fc894128a192fd040c05ec8ac108066a3caee60ff`) before its raw copy was removed. Only the owned failed install and owned archived raw backup were removed. The failed pack's1.2MB temporary artifact remains retained.
 
 Available space706,215,936 bytes exceeds the known exact complete build footprint662,798,336 bytes by43,417,600 bytes. This is modest estimated headroom, not a peak/concurrency guarantee. Proceed with one unchanged original `/app` canonical rehearsal after fresh capacity check; no new large backup is expected because generated targets are absent. No source/intent/CI changes, lease, publication or live data mutation occurred.
+
+
+## 2026-11-24 19:14 UTC — original canonical host rehearsal PASS
+
+The unchanged strict-D helper passed in `/app/.git/mezan-pr2113-recover-d-vb9syvia`, launched19:11:07 UTC with923,856,896 bytes available. Receipt7,805 bytes SHA256 `0385a7ebd81bac2b5b12b32b7a4356df7b2506a771bd0518c3c7d641451d8efb`. All40 steps passed: original canonical adapter66.518s, tracked intent, frontend verification, isolated package boundaries, full reproducibility proof and final production fetch. Exact reviewed A/B/D/tree/RID retained. All432 foreign entries are identical; no runtime append. All four generated targets were absent at this fresh baseline. No lease or publication yet.
+
+Exact frozen artifact matches: build-meta591,784 bytes SHA256 `b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433`; reproducibility proof1,521 bytes SHA256 `8f582c809003c06d706e5a9513fb449638cf96731aa03f211e3e59bd72a36e58`. Frontend package1833 files and Backend1358 files passed isolated runtime/health and application/json checks. Artifact tree remains `20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6`. Original adapter log216,985 bytes SHA256 `b98c9bcda6fbf43845c021ddeb8cf6b22d915f60861d0c02e7669bc97e659dac` retained in the durable stage. Final available260,780,032 bytes.
+
+Next is original prepare, then prepublish immediately before the already authorized numbering-only Republish; require newer explicit platform success and original three-probe production verification. Live cabinet creation/deletion remains excluded.

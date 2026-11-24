@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 19:10:25 UTC",
+  "observed_at_utc": "2026-11-24 19:15:35 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "CAPACITY_RECOVERY_PASS_READY_FOR_CANONICAL_REHEARSAL",
+  "state": "CANONICAL_HOST_REHEARSAL_PASS_READY_FOR_PREPARE",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "One unchanged strict-D recovery rehearsal using helper4fe507 and envelope7f806 after fresh guard inactive, exact D, absent generated targets and comparable available space. Then independent original proof review before own lease/publication.",
+  "next_safe_action": "Original guard prepare for actor chatgpt-inventory-location-codes-20261124-pr2113, original prepublish immediately before one authorized Republish, observe newer platform success, run original three-probe verify then final inactive status and live warehouse form preview/cancel.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1475,7 +1475,7 @@
     "preservation_scope": "Lost pre-interruption snapshots cannot prove before/after byte preservation. New recovery must use a fresh current baseline."
   },
   "host_recovery": {
-    "state": "FAILED_INSTALL_OBSERVED_ENOSPC",
+    "state": "PASS_AFTER_VERIFIED_CAPACITY_RECOVERY",
     "helper": {
       "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_recover_d_rehearsal.py",
       "bytes": 23977,
@@ -1558,6 +1558,74 @@
       "receipt_bytes": 5847,
       "receipt_limitation": "Final receipt write did not persist after filesystem became full; terminal returned to shell and adapter log records failure. No successful rehearsal is claimed.",
       "no_matching_helper_adapter_build_processes_at_utc": "2026-11-24T18:15:28.209458+00:00"
+    },
+    "latest_execution": {
+      "status": "PASS",
+      "stage": "/app/.git/mezan-pr2113-recover-d-vb9syvia",
+      "started_at_utc": "2026-11-24T19:11:07.620967+00:00",
+      "observed_at_utc": "2026-11-24T19:13:28.834260+00:00",
+      "preflight_available_bytes": 923856896,
+      "final_available_bytes": 260780032,
+      "receipt": {
+        "bytes": 7805,
+        "sha256": "0385a7ebd81bac2b5b12b32b7a4356df7b2506a771bd0518c3c7d641451d8efb"
+      },
+      "helper_sha256": "4fe5070533e8f6308fc88516d1af80f8fa12f5523e7ecf8a7777317a4182b798",
+      "all_generated_targets_initially_absent": true,
+      "steps_summary": {
+        "total": 40,
+        "all_pass": true
+      },
+      "key_step_seconds": {
+        "canonical_app_adapter": 66.518,
+        "validate_intent": 2.97,
+        "verify_frontend": 1.517,
+        "verify_packages": 2.923,
+        "canonical_full_proof": 1.568,
+        "final_fetch": 0.465
+      },
+      "foreign_preservation": {
+        "paths": 432,
+        "identical_entries": 432,
+        "append_only_path": null
+      },
+      "build_meta": {
+        "bytes": 591784,
+        "sha256": "b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433"
+      },
+      "reproducibility_proof": {
+        "bytes": 1521,
+        "sha256": "8f582c809003c06d706e5a9513fb449638cf96731aa03f211e3e59bd72a36e58"
+      },
+      "package_proof": {
+        "backend": {
+          "file_count": 1358,
+          "package_tree_sha256": "91dcb73e73ea92cd7254b71182005157ebde435f9a94f0bf0b0a5d26f6fa36ea",
+          "identity": {
+            "bytes": 504124,
+            "sha256": "5eb63bc59bab946744b0904d0a57360d8eb75b0c1b222fbda806191ab371b42e"
+          },
+          "isolated_verified": true,
+          "health_verified": true,
+          "sibling_frontend_present": false,
+          "git_directory_present": false
+        },
+        "frontend": {
+          "file_count": 1833,
+          "package_tree_sha256": "ffb03ed99a4ead1e0933c50e48964f2096530d10e2b54ac7d45ae855a7095c6a",
+          "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+          "content_type_contract": "application/json",
+          "isolated_runtime_artifact_verified": true
+        }
+      },
+      "adapter_log": {
+        "name": "27-canonical-app-adapter.log",
+        "bytes": 216985,
+        "sha256": "b98c9bcda6fbf43845c021ddeb8cf6b22d915f60861d0c02e7669bc97e659dac"
+      },
+      "lease_created": false,
+      "published": false,
+      "recalculated": false
     }
   },
   "recovery_preflight": {
@@ -1859,5 +1927,73 @@
       "estimated_margin_bytes": 43417600,
       "limitation": "Modest estimated headroom; not a peak or concurrent-write guarantee. One unchanged original canonical attempt after fresh capacity check; old generated targets absent, no repeated large backup."
     }
+  },
+  "latest_canonical_rehearsal": {
+    "status": "PASS",
+    "stage": "/app/.git/mezan-pr2113-recover-d-vb9syvia",
+    "started_at_utc": "2026-11-24T19:11:07.620967+00:00",
+    "observed_at_utc": "2026-11-24T19:13:28.834260+00:00",
+    "preflight_available_bytes": 923856896,
+    "final_available_bytes": 260780032,
+    "receipt": {
+      "bytes": 7805,
+      "sha256": "0385a7ebd81bac2b5b12b32b7a4356df7b2506a771bd0518c3c7d641451d8efb"
+    },
+    "helper_sha256": "4fe5070533e8f6308fc88516d1af80f8fa12f5523e7ecf8a7777317a4182b798",
+    "all_generated_targets_initially_absent": true,
+    "steps_summary": {
+      "total": 40,
+      "all_pass": true
+    },
+    "key_step_seconds": {
+      "canonical_app_adapter": 66.518,
+      "validate_intent": 2.97,
+      "verify_frontend": 1.517,
+      "verify_packages": 2.923,
+      "canonical_full_proof": 1.568,
+      "final_fetch": 0.465
+    },
+    "foreign_preservation": {
+      "paths": 432,
+      "identical_entries": 432,
+      "append_only_path": null
+    },
+    "build_meta": {
+      "bytes": 591784,
+      "sha256": "b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433"
+    },
+    "reproducibility_proof": {
+      "bytes": 1521,
+      "sha256": "8f582c809003c06d706e5a9513fb449638cf96731aa03f211e3e59bd72a36e58"
+    },
+    "package_proof": {
+      "backend": {
+        "file_count": 1358,
+        "package_tree_sha256": "91dcb73e73ea92cd7254b71182005157ebde435f9a94f0bf0b0a5d26f6fa36ea",
+        "identity": {
+          "bytes": 504124,
+          "sha256": "5eb63bc59bab946744b0904d0a57360d8eb75b0c1b222fbda806191ab371b42e"
+        },
+        "isolated_verified": true,
+        "health_verified": true,
+        "sibling_frontend_present": false,
+        "git_directory_present": false
+      },
+      "frontend": {
+        "file_count": 1833,
+        "package_tree_sha256": "ffb03ed99a4ead1e0933c50e48964f2096530d10e2b54ac7d45ae855a7095c6a",
+        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+        "content_type_contract": "application/json",
+        "isolated_runtime_artifact_verified": true
+      }
+    },
+    "adapter_log": {
+      "name": "27-canonical-app-adapter.log",
+      "bytes": 216985,
+      "sha256": "b98c9bcda6fbf43845c021ddeb8cf6b22d915f60861d0c02e7669bc97e659dac"
+    },
+    "lease_created": false,
+    "published": false,
+    "recalculated": false
   }
 }
