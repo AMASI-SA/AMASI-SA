@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 19:34:28 UTC",
+  "observed_at_utc": "2026-11-24 19:49:01 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "PLATFORM_AND_LIVE_FORM_PASS_ORIGINAL_VERIFY_RUNNING",
+  "state": "COMPLETE_PUBLISHED_AND_VERIFIED",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -430,11 +430,11 @@
     "tracked_clean": true,
     "platform_observation": "100th publish d0a7e31 building; previous owner publication in progress"
   },
-  "production_changed_by_this_task": false,
+  "production_changed_by_this_task": true,
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": true,
   "publication_authorized": true,
-  "next_safe_action": "Wait for the currently running original verifier; no concurrent status, duplicate probes or publish. Require verifiedtrue/checks3/exactA2-D-RID and subsequent original inactive status. Live form preview/cancel already PASS; no need repeat.",
+  "next_safe_action": "Task complete. User creates the new cabinet, selects one row and their chosen column count. No automatic cabinet creation/deletion or further publication; any later old-cabinet cleanup remains a separate user-directed action.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1147,15 +1147,12 @@
     "state": "closed"
   },
   "current_host_coordination": {
-    "status": "ORIGINAL_GUARD_INACTIVE",
-    "observed_at_utc": "2026-11-24T17:28:11.452757+00:00",
-    "active": false,
-    "actor": null,
-    "app_head": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
-    "tracked_clean": true,
-    "own_host_mutation": false,
-    "own_lease_created": false,
-    "foreign_lease_not_modified": true
+    "state": "OWN_LEASE_CLOSED",
+    "actor": "chatgpt-inventory-location-codes-20261124-pr2113",
+    "own_lease_created": true,
+    "own_lease_active": false,
+    "closed_by_original_verify": true,
+    "foreign_lease_touched": false
   },
   "exact_deployment_ci_expected": {
     "automatic_workflows": [
@@ -2018,7 +2015,7 @@
     },
     "republish_clicked": true,
     "publish_changes_confirmed": true,
-    "platform_state": "Deployment finished Nov24,10:29PM",
+    "platform_state": "Deployment finished; original production verification PASS",
     "positive_outcome_observed": true,
     "prior_version": {
       "ordinal": 100,
@@ -2034,17 +2031,104 @@
       "prior_finished_display": "Nov24,08:05PM"
     },
     "production_verification": {
-      "state": "RUNNING",
-      "started_at_utc": "2026-11-24T19:30:41.880782+00:00",
+      "state": "PASS",
       "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
-      "log": "/app/.git/mezan-pr2113-publication-o4xyp2sz/verify.log",
       "original_verifier_unchanged": true,
       "invocations": 1,
-      "expected_probes": 3,
+      "started_at_utc": "2026-11-24T19:30:41.880782+00:00",
+      "completed_at_utc": "2026-11-24T19:47:41.892352+00:00",
+      "duration_seconds": 1020.012,
+      "exit_code": 0,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+      "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "deployment_git_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+      "release_id": "rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e",
+      "protocol_version": 5,
+      "url": "https://mezansalla.com",
+      "log": {
+        "path": "/app/.git/mezan-pr2113-publication-o4xyp2sz/verify.log",
+        "bytes": 43129,
+        "sha256": "a2f3167afcfaf2c72d2a9971c768159696d566b2aa9f662519ca7f46fe34e6d2"
+      },
+      "boot_started_at_observations": [
+        "2026-11-24T19:28:52.814653+00:00",
+        "2026-11-24T19:28:52.835041+00:00"
+      ],
+      "frontend_artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+      "frontend_checked_requests_per_probe": 770,
+      "total_frontend_requests": 2310,
       "public_files": 381,
-      "expected_frontend_requests_per_probe": 770,
-      "no_concurrent_guard_status": true
-    }
+      "build_meta": {
+        "canonical_and_cache_busted_pass": true,
+        "accept_values": [
+          "application/json",
+          "*/*"
+        ],
+        "content_type": "application/json",
+        "bytes": 591784,
+        "sha256": "b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433"
+      },
+      "original_guard_required_identity_predicates_satisfied": true,
+      "frontend_shell_cache": [
+        {
+          "path": "/index.html",
+          "cache_control": "no-cache, no-store, must-revalidate",
+          "content_type": "text/html; charset=utf-8",
+          "etag": "\"5e066cec485d06a7f1fa50b64b1b9bc6\"",
+          "age": null,
+          "cf_cache_status": null
+        },
+        {
+          "path": "/",
+          "cache_control": "no-cache, no-store, must-revalidate",
+          "content_type": "text/html; charset=utf-8",
+          "etag": "\"5e066cec485d06a7f1fa50b64b1b9bc6\"",
+          "age": null,
+          "cf_cache_status": null
+        },
+        {
+          "path": "/snapchat-accounts",
+          "cache_control": "no-cache, no-store, must-revalidate",
+          "content_type": "text/html; charset=utf-8",
+          "etag": null,
+          "age": null,
+          "cf_cache_status": null
+        }
+      ],
+      "frontend_service_workers": [
+        {
+          "path": "/service-worker.js",
+          "state": "retirement_payload_present",
+          "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+          "content_type": "application/javascript; charset=utf-8",
+          "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+          "age": null,
+          "cf_cache_status": null
+        },
+        {
+          "path": "/sw.js",
+          "state": "retirement_payload_present",
+          "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+          "content_type": "application/javascript; charset=utf-8",
+          "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+          "age": null,
+          "cf_cache_status": null
+        }
+      ],
+      "final_guard_status": {
+        "active": false,
+        "observed": "Immediately subsequent unchanged original status command completed successfully"
+      },
+      "independent_review": {
+        "status": "PASS",
+        "reviewer": "numbering_release_review",
+        "scope": "Exact original verifier result, identities, three probes, headers and subsequent inactive status; no additional tests or probes"
+      }
+    },
+    "lease_closed": true,
+    "lease_closed_by": "Successful unchanged original production_release_guard.py verify"
   },
   "live_form_verification": {
     "status": "PASS",
@@ -2069,5 +2153,20 @@
     "existing_legacy_slot_labels": "001–009",
     "live_cabinet_creation_or_deletion": false,
     "deliverable_tab_marked": true
+  },
+  "own_lease_active": false,
+  "completion": {
+    "status": "COMPLETE",
+    "completed_at_utc": "2026-11-24T19:47:41.892352+00:00",
+    "platform_id": "7fe1672",
+    "original_three_probe_verification": "PASS",
+    "original_final_guard_status": {
+      "active": false
+    },
+    "live_form_preview_and_cancel": "PASS",
+    "live_cabinet_creation_or_deletion": false,
+    "inventory_or_financial_writes_by_task": false,
+    "source_candidate_and_intent_unchanged_after_merge": true,
+    "reviewer": "numbering_release_review"
   }
 }
