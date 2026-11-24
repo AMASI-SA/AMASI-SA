@@ -399,3 +399,50 @@ The next source commit must be rebuilt and get its own intent/proof; A2's proof
 is not reusable. Final reviewed B CI and the official clean-clone Emergent
 rehearsal remain mandatory. No merge, publish, source-sync, financial refresh
 or automation enable by this task has occurred.
+
+## Live verification follow-up after PR #2101
+
+The preceding entries are historical checkpoints. PR #2101 was normally merged
+as `0ffa962d3cfda3eb49b5750c7bdc2f932a645d4d` and published through the original
+v5 guard. Live source is `1b928b7221b8f56a9a652aa7d251d6baff095ba3`, release ID
+`rg5-490ad5d4e64d59753972aba0328d23df8b1a15f9df245c2a2a2f4354501244df`.
+Emergent publish `4998d1e` completed; all three original guard verification
+rounds passed and the lease closed. A fresh GitHub check found the production
+branch still at that merge. User-authorized source recovery and one financial
+refresh subsequently completed. Financial evidence remains private and is not
+included in repository records. Automation has not yet been enabled.
+
+Direct live acceptance exposed two further bounded issues. The receipt UI
+rejected legitimate explicit-null unassigned group identities, preventing
+download of an otherwise valid saved receipt. All financial views also
+revalidated the same saved fee profile for each order in one report. This
+follow-up retains explicit unassigned groups in display and the complete JSON
+export, and scopes fee-profile selection to one immutable report invocation.
+Money, dates, admission policies and source records are unchanged.
+
+Integration branch: `codex/operational-recovery-verification-20261124`, based
+exactly on production D above. Reviewed source commits are
+`9a7f5eb631b345f07a53c44577775bf7aa100ffc` (receipt UI) and
+`33dd0fb3d6a1bf5e62166a044fe4baa64c357d12` (per-report profile reuse).
+They were cherry-picked without conflict into this dedicated checkout.
+Both frozen release candidates, the original WIP checkout and shared Emergent
+files remain untouched by this follow-up. No new release intent is frozen.
+
+Verification: the receipt regression reproduced two failures before its fix;
+39 affected UI tests passed afterwards, with 25 independently repeated. The
+profile change passed 184 focused tests independently, and all 36 differential
+reports across 12 views matched the deployed source byte for byte. A paired
+synthetic benchmark reduced median report time from 1519.66 ms to 1055.82 ms;
+this is not a production timing claim. These test selections overlap and must
+not be added together. See the two scoped evidence documents in this folder.
+
+Production changed: yes, by the previously approved PR #2101 release and
+subsequent expressly authorized recovery. This follow-up itself has not been
+published. Remaining: independent original-date verifier corrections,
+integrated source gates, a new governed A/B intent pair, original-guard
+rehearsal/publish/verification, receipt export and complete financial acceptance,
+and actual scheduled-cycle and performance verification. Preserve the saved
+receipt before another financial calculation. Issue #1006 reached GitHub's
+comment limit; the task PR body is the continuation fallback already recorded
+by this task. The next safe action is to push this verified checkpoint and
+open a draft continuation PR, then integrate only reviewed verifier changes.

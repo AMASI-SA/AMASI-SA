@@ -34,7 +34,9 @@ function checked(value, scope) {
     if (!Array.isArray(group[type])) throw new Error('invalid_recovery_groups');
     size += group[type].length;
     for (const row of group[type]) {
-      if (!row || !text(row.entity_type, 40) || !text(row.entity_id) || !/^[A-Z]{3}$/.test(row.currency)
+      // Unallocated source groups retain an explicit null identity. Neither
+      // display nor export may fabricate an account or discard these groups.
+      if (!row || !text(row.entity_type, 40) || (row.entity_id !== null && !text(row.entity_id)) || !/^[A-Z]{3}$/.test(row.currency)
           || !/^\d{4}-\d{2}-\d{2}$/.test(row.business_date) || !count(row.count)
           || !Object.hasOwn(directions, row.direction)
           || (type === 'obligations' ? !money(row.confirmed) || !money(row.expected) : !money(row.amount))) {
@@ -121,6 +123,9 @@ export default function BalanceRecoveryProof({ context }) {
   };
   const rows = rowsFor(proof, view), pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const names = new Map((result?.entities || []).map(row => [keyOf(row), row.label]));
+  const unassigned = [proof?.new_original_dated, proof?.new_date_unverified,
+    proof?.changed_existing?.before, proof?.changed_existing?.after].some(section =>
+    ['obligations', 'automatic_movements'].some(type => section?.[type]?.some(row => row.entity_id === null)));
   const total = value => value ? Object.values(value).reduce((sum, number) => sum + number, 0) : null;
   const duplicateCount = total(proof?.new_duplicate_keys), existingDuplicates = total(proof?.existing_duplicate_keys);
   const preservation = (field, label) => <li key={field}>{label}: {proof?.preservation?.[field]?.preserved === true
@@ -141,6 +146,7 @@ export default function BalanceRecoveryProof({ context }) {
       <p>احتفظ بالتقرير قبل الاحتساب التالي؛ يعرض هذا الملف جميع مجموعات المحاولة المقروءة، بما فيها البيانات غير المتحققة وحدود المقارنة.</p>
       {!proof.complete && <p role="alert">المقارنة غير مكتملة أو تجاوزت حدود التقرير أو تتضمن اختلافات؛ لا يمكن إعلان اكتمال الاستعادة.</p>}
       {proof.original_dates_verified === false && <p role="alert">توجد إضافات أو تغييرات لم يثبت تاريخها الأصلي؛ تظهر منفصلة عن الحركات ذات التاريخ المثبت.</p>}
+      {unassigned && <p role="alert">توجد سجلات دون جهة محددة؛ لا يمكن نسبتها إلى حساب جهة بعينها.</p>}
       <ul>{preservation('manual_movements', 'القيود اليدوية')}{preservation('automatic_movements', 'الحركات التلقائية السابقة')}
         {preservation('openings', 'الأرصدة الافتتاحية')}{preservation('requests', 'هويات العمليات السابقة')}</ul>
       <p>زيادة المعرفات المكررة: {duplicateCount === null ? 'غير متحققة' : duplicateCount}.
@@ -155,7 +161,8 @@ export default function BalanceRecoveryProof({ context }) {
       {rows.length ? <>
         <div style={{ overflowX: 'auto' }}><table><thead><tr><th>الجهة</th><th>تاريخ السجل</th><th>العملة</th><th>السجل</th><th>الاتجاه</th><th>العدد</th><th>المبلغ المثبت</th><th>المبلغ المتوقع</th></tr></thead>
           <tbody>{rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((row, index) => <tr key={index}>
-            <td>{names.get(keyOf(row)) || `${labels[row.entity_type] || 'جهة مالية'} — الاسم غير متاح`}</td>
+            <td>{row.entity_id === null ? `${labels[row.entity_type] || 'جهة مالية'} — الجهة غير محددة`
+              : names.get(keyOf(row)) || `${labels[row.entity_type] || 'جهة مالية'} — الاسم غير متاح`}</td>
             <td><bdi>{row.business_date}</bdi></td><td><bdi>{row.currency}</bdi></td><td>{row.record}</td><td>{directions[row.direction]}</td><td>{row.count}</td>
             <td><bdi>{row.amount}</bdi></td><td><bdi>{row.expected ?? '—'}</bdi></td>
           </tr>)}</tbody></table></div>
