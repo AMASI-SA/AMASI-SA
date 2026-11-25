@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "codex/operational-payment-events-current-20261124"
+      - "codex/operational-payment-prod-integration-20261125"
     paths:
       - ".github/workflows/operational-payment-event-policy.yml"
       - "backend/operational_payment_*.py"
