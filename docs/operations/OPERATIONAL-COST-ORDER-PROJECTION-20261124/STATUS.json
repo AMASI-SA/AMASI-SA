@@ -1,0 +1,144 @@
+{
+  "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
+  "recorded_at": "2026-11-24T22:07:54.565630+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/operational-cost-order-projection-20261124",
+  "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "status": "Source checkpoint corrected so the existing CI globs execute all61 new projection cases; fresh exact-source CI/candidate pending, no intent frozen or live change.",
+  "problem": {
+    "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
+    "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
+    "observed_at": "2026-11-24T21:33:39.882Z",
+    "cause": "operational_source_read_timeout",
+    "collection": "unified_orders",
+    "limit": "Direct evidence for a new supported forecast request only. Earlier three legacy failures are not retrospectively correlated; excess payload is a code-grounded hypothesis, not a measured live query plan."
+  },
+  "change": {
+    "runtime_files": 1,
+    "fields": 53,
+    "method": "Cost-local reader delegates to existing rows(fields=...) only for unified_orders; other eleven initial sources and shared reader unchanged.",
+    "cohort": "Exact owner-only query; no date/status/raw-presence filtering, sorting, deduplication or selected_ids.",
+    "evidence": "Keep raw_by_source, g47_salla_snapshot and salla_shipping_current whole plus independent identity, freshness, assignment and negative shipping evidence.",
+    "limits_unchanged": {
+      "rows_plus_overflow": 20001,
+      "per_source_seconds": 15,
+      "total_seconds": 45,
+      "concurrency": 4
+    },
+    "financial_formulas_changed": false,
+    "persistent_cache_changed": false,
+    "query_index_changed": false,
+    "source_writes": false
+  },
+  "review": {
+    "two_independent_consumer_reviews": "43 consumed root fields; conservative53 keeps existing28 refresh evidence fields plus25 cost-specific fields.",
+    "runtime_sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd",
+    "independent_static_blockers": 0,
+    "codec_limit": "A projection necessarily omits BSON/codec failures exclusive to an unused removed root field. No absolute exception parity for those fields is claimed."
+  },
+  "verification": {
+    "red": {
+      "exit_code": 1,
+      "failed": 1,
+      "seconds": 2.47,
+      "reason": "Actual project returned all526312synthetic BSON bytes; assertion that unused payload be omitted failed on unchanged runtime."
+    },
+    "focused": {
+      "exit_code": 0,
+      "passed": 61,
+      "skipped": 0,
+      "seconds": 4.23
+    },
+    "root_affected": {
+      "unique_cases": 570,
+      "first_run_passed": 563,
+      "first_run_local_mongo_connection_failures": 7,
+      "first_run_seconds": 82.77,
+      "initial_environment_issue": "Default localhost27305 had no Mongo. A later separate launcher became unavailable before follow-up tests; no product behavior ran in either failed Mongo attempt. Both JUnit records retained.",
+      "resolved_real_mongo": {
+        "exit_code": 0,
+        "passed": 7,
+        "skipped": 0,
+        "pytest_seconds": 7.45,
+        "supervised_total_seconds": 9.62,
+        "owned_replica_stopped": true,
+        "method": "One supervised command owns a checksum-verified local replica and the tests; repository fixture lifecycle, no production environment or connection."
+      },
+      "final_failed": 0,
+      "final_skipped": 0,
+      "repeat_scope": "Only the seven environment failures rerun; no optional repeat of the563passing cases."
+    },
+    "independent_existing": {
+      "exitstatus": 0,
+      "pytest_passed": 360,
+      "pytest_failed": 0,
+      "pytest_skipped": 0,
+      "deselected": [
+        "backend/tests/test_operational_balance_open_customer_cod.py::test_native_projection_is_read_only_across_repeated_runs"
+      ],
+      "full_outcome_comparisons": 217,
+      "full_financial_report_comparisons": 216,
+      "whole_outputs_equal": true,
+      "candidate_projection_reads": 216,
+      "baseline_full_reads": 216
+    },
+    "independent_real_mongo": {
+      "exitstatus": 0,
+      "pytest_passed": 2,
+      "pytest_failed": 0,
+      "pytest_skipped": 0,
+      "full_outcome_comparisons": 3,
+      "full_financial_report_comparisons": 3,
+      "whole_outputs_equal": true,
+      "candidate_projection_reads": 0,
+      "baseline_full_reads": 0
+    },
+    "actual_http": {
+      "result": "PASS",
+      "paired_cases": 12,
+      "executed_http_cases": 24,
+      "seconds": 12.919,
+      "scope": "Actual router, owner/page/native gates, bound snapshot, legacy500, forecast200partial, missing422, stale/race409, auth401/403, disconnect499; complete body/MIME, no writes, no surviving read/task/cache.",
+      "artifact": "cost-projection-http-audit.json"
+    },
+    "whitespace": "git diff --check exit0",
+    "ci_collection_correction": {
+      "old_path": "backend/tests/test_operational_open_cost_order_projection.py",
+      "new_path": "backend/tests/test_operational_balance_cost_order_projection.py",
+      "reason": "The original name was absent from every actual CI collection command. Both Operational Balance Backend and Stock collect test_operational_balance*.py; a content-identical rename makes this regression module part of both required jobs.",
+      "runtime_and_test_contents_unchanged": true,
+      "old_candidate": "Artifact14969150768 belongs only to previous source A and is retained as historical evidence; never freeze it for this new source."
+    }
+  },
+  "files": [
+    {
+      "path": "backend/operational_open_cost_exposure.py",
+      "bytes": 34244,
+      "sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_cost_order_projection.py",
+      "bytes": 12426,
+      "sha256": "63ca04aa9b40f6022f89109a628362061f588f38b2886773605b974c96a25737"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_cost_source_diagnostics.py",
+      "bytes": 8657,
+      "sha256": "f6f73c8f186cc62e4b600ad25143eb8756d36166705eac57b27bd5b14ca74f12"
+    }
+  ],
+  "ci": "Fresh exact-source CI required; verify61case JUnit execution, not only job success.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2123",
+  "merge": "not merged",
+  "intent": "Inherited base intent unchanged; no new frozen intent yet.",
+  "production_changed_by_this_candidate": false,
+  "preceding_release": {
+    "pr": 2120,
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "latest_read_checkpoint": "ed0ee0db9ef120c58ba9a5f763c6dbaf55855f3b E8, scoped host rehearsal running, no lease/publication yet.",
+    "constraint": "Preserve other owner lease/lock. Do not run its status while operation lock is owned; no shared host changes by this candidate."
+  },
+  "next_safe_action": "Preserve new source checkpoint, verify exact-head CI including61new cases and original candidate bytes. Confirm preceding owner publication/verification/inactive guard before intent freeze; then original v5 A/B, normal merge, host rehearsal and authorized publication/verify before one bounded acceptance read.",
+  "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
+  "previous_source_a": "de066be78e3209bb56ef9281ab81367b3104c0a9"
+}
