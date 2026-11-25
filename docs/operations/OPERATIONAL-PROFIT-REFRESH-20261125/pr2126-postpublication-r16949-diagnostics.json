@@ -1,0 +1,368 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-25T16:23:36.276445+00:00",
+  "scope": "Post-publication read-only observation of a saved scheduled calculation. No financial rows, balances, owner IDs, credentials or raw business records included.",
+  "release": {
+    "pr": 2126,
+    "provider_revision": "97dc193",
+    "source_A2": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "deployment_D": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "original_verify_checks": 3,
+    "own_lease_closed_observed_at_utc": "2026-11-25T15:34:11.304640+00:00",
+    "original_status_after": {
+      "active": false
+    },
+    "release_proof_commit": "b48a097594b26f58a8c67a12564ba149ff368913"
+  },
+  "public_health_observation": {
+    "observed_at_utc": "2026-11-25T16:19:34.477115+00:00",
+    "url": "https://mezansalla.com/api/health",
+    "http_status": 200,
+    "cache_busted": true,
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "backend_runtime_source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "frontend_build_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "frontend_reproducibility_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "release_control_source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "boot_started_at": "2026-11-25T15:12:44.554298+00:00",
+    "verified_identity_available": true,
+    "backend_runtime_source_verified": true,
+    "release_control_source_bound": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "raw_response_retained": false,
+    "method": "One public JSON GET through a dedicated terminal. Only explicit identity fields were printed; no source or lease mutation."
+  },
+  "runtime_binding_limits": [
+    "The original verifier before the calculation and the public health read after it identify the same source A2 and release ID.",
+    "The later health boot timestamp differs from original verification boot15:12:12.032644UTC; do not assert an identical process or worker.",
+    "There is no per-attempt process/source fingerprint embedded in the captured receipt or UI trace; association is based on matching surrounding release observations and new stage names, not a cryptographic per-attempt binding."
+  ],
+  "scheduled_attempt": {
+    "revision": 16949,
+    "previous_revision": 16948,
+    "as_of_utc": "2026-11-25T16:07:39.874796+00:00",
+    "as_of_Riyadh": "2026-11-25T19:07:39.874796+03:00",
+    "ui_confirmed_at_utc": "2026-11-25T16:20:13.472Z",
+    "displayed_finished_Riyadh": "2026-11-25 19:08",
+    "displayed_next_attempt_Riyadh": "2026-11-25 21:08",
+    "saved": true,
+    "scheduler_enabled": true,
+    "manual_refresh_run": false,
+    "source_sync_run": false,
+    "stages": [
+      {
+        "stage": "native_evidence",
+        "outcome_display": "اكتملت",
+        "duration_ms": 11566.888
+      },
+      {
+        "stage": "snapshot_raw_read",
+        "outcome_display": "اكتملت",
+        "duration_ms": 56.771
+      },
+      {
+        "stage": "snapshot_unpack",
+        "outcome_display": "اكتملت",
+        "duration_ms": 10073.149
+      },
+      {
+        "stage": "snapshot_copy_prepare",
+        "outcome_display": "اكتملت",
+        "duration_ms": 4007.847
+      },
+      {
+        "stage": "snapshot_load",
+        "outcome_display": "اكتملت",
+        "duration_ms": 14138.613
+      },
+      {
+        "stage": "source_collision",
+        "outcome_display": "اكتملت",
+        "duration_ms": 0.011
+      },
+      {
+        "stage": "orders_cursor_build",
+        "outcome_display": "اكتملت",
+        "duration_ms": 0.143
+      },
+      {
+        "stage": "orders_cursor_read",
+        "outcome_display": "اكتملت",
+        "duration_ms": 10237.293
+      },
+      {
+        "stage": "orders_rows_validate",
+        "outcome_display": "اكتملت",
+        "duration_ms": 12.426
+      },
+      {
+        "stage": "source_primary_reads",
+        "outcome_display": "اكتملت",
+        "duration_ms": 10251.761
+      },
+      {
+        "stage": "source_fee_settings",
+        "outcome_display": "اكتملت",
+        "duration_ms": 5.017
+      },
+      {
+        "stage": "profit_context_settings",
+        "outcome_display": "اكتملت",
+        "duration_ms": 35.488
+      },
+      {
+        "stage": "source_setup",
+        "outcome_display": "اكتملت",
+        "duration_ms": 88.715
+      },
+      {
+        "stage": "source_statements",
+        "outcome_display": "اكتملت",
+        "duration_ms": 218.156
+      },
+      {
+        "stage": "source_delivery_history",
+        "outcome_display": "اكتملت",
+        "duration_ms": 1502.407
+      },
+      {
+        "stage": "profit_context_orders",
+        "outcome_display": "اكتملت",
+        "duration_ms": 2144.121
+      },
+      {
+        "stage": "source_transactions",
+        "outcome_display": "اكتملت",
+        "duration_ms": 492.542
+      },
+      {
+        "stage": "source_native_links",
+        "outcome_display": "اكتملت",
+        "duration_ms": 16.973
+      },
+      {
+        "stage": "profit_context_raw",
+        "outcome_display": "اكتملت",
+        "duration_ms": 6083.909
+      },
+      {
+        "stage": "profit_context_prepare",
+        "outcome_display": "اكتملت",
+        "duration_ms": 3399.6
+      },
+      {
+        "stage": "profit_context",
+        "outcome_display": "اكتملت",
+        "duration_ms": 12119.335
+      },
+      {
+        "stage": "profit_sales",
+        "outcome_display": "اكتملت",
+        "duration_ms": 262.567
+      },
+      {
+        "stage": "profit_payroll",
+        "outcome_display": "اكتملت",
+        "duration_ms": 437.463
+      },
+      {
+        "stage": "profit_recurring",
+        "outcome_display": "اكتملت",
+        "duration_ms": 69.213
+      },
+      {
+        "stage": "profit_ads",
+        "outcome_display": "اكتملت",
+        "duration_ms": 2360.493
+      },
+      {
+        "stage": "source_bundles",
+        "outcome_display": "اكتملت",
+        "duration_ms": 13953.619
+      },
+      {
+        "stage": "profit_order_costs",
+        "outcome_display": "اكتملت",
+        "duration_ms": 4284.185
+      },
+      {
+        "stage": "profit_product_catalog",
+        "outcome_display": "اكتملت",
+        "duration_ms": 4610.63
+      },
+      {
+        "stage": "source_option_catalog",
+        "outcome_display": "اكتملت",
+        "duration_ms": 509.579
+      },
+      {
+        "stage": "profit_product_inputs",
+        "outcome_display": "اكتملت",
+        "duration_ms": 452.527
+      },
+      {
+        "stage": "source_order_indexes",
+        "outcome_display": "اكتملت",
+        "duration_ms": 573.816
+      },
+      {
+        "stage": "source_bank_catalog",
+        "outcome_display": "اكتملت",
+        "duration_ms": 20.853
+      },
+      {
+        "stage": "profit_product_authority",
+        "outcome_display": "اكتملت",
+        "duration_ms": 3191.952
+      },
+      {
+        "stage": "profit_product_supplier",
+        "outcome_display": "توقفت",
+        "duration_ms": 4631.187
+      },
+      {
+        "stage": "profit_products",
+        "outcome_display": "توقفت",
+        "duration_ms": 12887.377
+      },
+      {
+        "stage": "profit_snapshot",
+        "outcome_display": "اكتملت",
+        "duration_ms": 25167.195
+      },
+      {
+        "stage": "source_orders",
+        "outcome_display": "اكتملت",
+        "duration_ms": 13894.789
+      },
+      {
+        "stage": "source_invoices",
+        "outcome_display": "اكتملت",
+        "duration_ms": 349.817
+      },
+      {
+        "stage": "source_other_sources",
+        "outcome_display": "اكتملت",
+        "duration_ms": 20.366
+      },
+      {
+        "stage": "source_native_overlaps",
+        "outcome_display": "اكتملت",
+        "duration_ms": 31.239
+      },
+      {
+        "stage": "source_finalize",
+        "outcome_display": "اكتملت",
+        "duration_ms": 234.131
+      },
+      {
+        "stage": "source_collection",
+        "outcome_display": "اكتملت",
+        "duration_ms": 42338.779
+      },
+      {
+        "stage": "reconciliation",
+        "outcome_display": "اكتملت",
+        "duration_ms": 11689.711
+      },
+      {
+        "stage": "bank_claims",
+        "outcome_display": "اكتملت",
+        "duration_ms": 64.626
+      },
+      {
+        "stage": "party_catalogs",
+        "outcome_display": "اكتملت",
+        "duration_ms": 375.535
+      },
+      {
+        "stage": "snapshot_compare",
+        "outcome_display": "اكتملت",
+        "duration_ms": 59.93
+      },
+      {
+        "stage": "snapshot_pack",
+        "outcome_display": "اكتملت",
+        "duration_ms": 1556.816
+      },
+      {
+        "stage": "snapshot_commit",
+        "outcome_display": "اكتملت",
+        "duration_ms": 227.522
+      },
+      {
+        "stage": "aggregate",
+        "outcome_display": "اكتملت",
+        "duration_ms": 72583.527
+      }
+    ],
+    "primary_orders": {
+      "queue_ms": 0.018,
+      "budget_ms": 15000,
+      "first_row_ms": 11.248,
+      "read_elapsed_ms": 10237.273,
+      "rows_seen": 19118
+    }
+  },
+  "transcription_correction": {
+    "original_private_observation_sha256": "e4a17cacd884ed153fc82e1469edf1b862c5c39442df33dd47ac69ce217f35da",
+    "field": "stages[source_native_overlaps].duration_ms",
+    "initial_transcription": 31.215,
+    "fresh_DOM_table_value": 31.239,
+    "fresh_observed_at_utc": "2026-11-25T16:20:13.472Z",
+    "original_observation_preserved_unchanged": true,
+    "effect": "No effect on financial arithmetic or profit-budget timing inference; correction retained explicitly rather than silently rewriting previously reviewed evidence."
+  },
+  "bounded_inference": {
+    "classification": "Strong timing evidence for shared profit-budget exhaustion; stored same-attempt error code not captured.",
+    "configured_shared_profit_budget_ms": 25000,
+    "configured_per_reader_limit_ms": 20000,
+    "remaining_after_context_ms": "12880.665",
+    "context_plus_products_ms": "25006.712",
+    "catalog_inputs_authority_ms": "8255.109",
+    "remaining_before_supplier_ms": "4625.556",
+    "supplier_elapsed_before_stop_ms": "4631.187",
+    "supplier_completion_duration_known": false,
+    "specific_query_cause_established": false,
+    "performance_improvement_established": false,
+    "all_profit_sources_complete": false
+  },
+  "source_alerts": {
+    "same_displayed_attempt_minute": "19:07",
+    "displayed_result": "اكتملت محاولة الاحتساب",
+    "source_completeness_verified": false,
+    "generic_support_codes": [
+      "operational_source_failed",
+      "operational_source_unknown",
+      "provider_capture_acquisition_pending",
+      "operational_shipping_original_date_unproven",
+      "provider_original_capture_date_unproven",
+      "operational_prepaid_shipping_original_date_unproven",
+      "operational_native_evidence_incomplete"
+    ],
+    "products_specific_source_error_visible": false
+  },
+  "read_only_source_review": {
+    "reviewed_source": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "context_double_read": "Complementary projections; safe removal not established.",
+    "supplier_reads": "Existing bounded invoice memo revalidates financial evidence; safe deletion of current reads not established.",
+    "authority_candidate": "Repeated first-match scan of plan.lines for each bundle snapshot is an O(S*L) code path. A lazy first-match index may reduce scans while preserving first-match and malformed-row behavior.",
+    "authority_candidate_implemented": false,
+    "authority_candidate_live_impact_established": false,
+    "decision": "Do not claim this optimization solves the observed cancellation; counts and inner-phase timing are not in the captured trace. Preserve timeouts, evidence reads and financial policies."
+  },
+  "remaining_evidence": [
+    "Same-r16949 quality.source_errors.products and cost_of_goods completeness metadata, from an authorized production-scoped saved snapshot, without amounts.",
+    "Existing inner-supplier read/processing/cleanup evidence if retained; otherwise the current bounded trace cannot identify an individual slow query."
+  ],
+  "separate_outcomes": [
+    "Successful deployment and original lease closure",
+    "Successful scheduled calculation save",
+    "Financial receipt comparison retained privately",
+    "Source completeness and causal performance acceptance remain open"
+  ]
+}

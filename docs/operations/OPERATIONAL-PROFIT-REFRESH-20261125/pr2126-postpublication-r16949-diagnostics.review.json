@@ -1,0 +1,25 @@
+{
+  "reviewed_at_utc": "2026-11-25T16:26:53.543Z",
+  "result": "PASS_WITH_EVIDENCE_LIMITS",
+  "file": "pr2126-postpublication-r16949-diagnostics.json",
+  "bytes": 12804,
+  "sha256": "b5686e9136a0885525ff33edc9e4db76273c47154e63556aae170ae120d2bfd6",
+  "independent_reviewer": "profit_overlap_review",
+  "blockers": [],
+  "checks": {
+    "source_identity_limits_explicit": true,
+    "different_boot_not_claimed_same_process": true,
+    "per_attempt_binding_not_claimed": true,
+    "budget_arithmetic_matches_source": true,
+    "specific_query_cause_not_claimed": true,
+    "transcription_correction_explicit": true,
+    "initial_observation_sha_preserved": true,
+    "no_financial_values_owner_identifiers_or_secrets_observed": true,
+    "unimplemented_optimization_not_presented_as_fix": true
+  },
+  "limits": [
+    "Remaining budget figures are derived arithmetic, not an independent remaining-clock measurement.",
+    "Original same-attempt products error code has not been captured.",
+    "Public health identity is an adjacent observation, not a process fingerprint embedded in the saved receipt."
+  ]
+}

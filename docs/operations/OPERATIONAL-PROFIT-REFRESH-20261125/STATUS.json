@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 16:00:49 UTC",
+  "recorded_at": "2026-11-25T16:26:53.541Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E13_PUBLISHED_ORIGINAL_VERIFY_PASS_OWN_LEASE_CLOSED",
+  "status": "E14_POSTPUBLICATION_SAVED_ATTEMPT_DIAGNOSED_LEASE_CLOSED",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -18,7 +18,8 @@
       "A failing distinguishing reproduction or bounded source-phase observation.",
       "Focused regression and affected boundary verification for any runtime patch.",
       "Fresh release protocol v5 and separate receipt review if a new publication is warranted."
-    ]
+    ],
+    "current_outcome": "Publication and original own-lease closure complete; a new saved calculation and private financial comparison verified. Diagnostic observation narrows the shared-profit budget bottleneck, but source completeness and a causal performance fix are not yet established."
   },
   "observations": {
     "prior_release": {
@@ -125,29 +126,271 @@
       "publish_clicked": false
     },
     "latest_automatic_attempt": {
-      "observed_at": "2026-11-25T14:44:43.890Z",
-      "source": "Authenticated production scheduling UI after explicit status-only check",
-      "displayed_attempt_riyadh": "2026-11-25 17:05",
-      "displayed_last_saved_riyadh": "2026-11-25 17:05",
-      "displayed_next_attempt_riyadh": "2026-11-25 19:07",
-      "result": "saved",
-      "aggregate_ms": 70416.961,
-      "profit_snapshot_ms": 25163.131,
-      "primary_orders": {
-        "queue_ms": 0.014,
-        "budget_ms": 15000,
-        "first_row_ms": 10.029,
-        "read_elapsed_ms": 11714.796,
-        "rows_seen": 19112
-      },
-      "release": "Prior published PR2123; PR2126 not published",
+      "revision": 16949,
+      "previous_revision": 16948,
+      "as_of_utc": "2026-11-25T16:07:39.874796+00:00",
+      "as_of_Riyadh": "2026-11-25T19:07:39.874796+03:00",
+      "ui_confirmed_at_utc": "2026-11-25T16:20:13.472Z",
+      "displayed_finished_Riyadh": "2026-11-25 19:08",
+      "displayed_next_attempt_Riyadh": "2026-11-25 21:08",
+      "saved": true,
+      "scheduler_enabled": true,
       "manual_refresh_run": false,
       "source_sync_run": false,
-      "limits": [
-        "Nested timings overlap.",
-        "Profit snapshot completion does not prove all profit inputs complete.",
-        "Source completeness remains unverified."
-      ]
+      "stages": [
+        {
+          "stage": "native_evidence",
+          "outcome_display": "اكتملت",
+          "duration_ms": 11566.888
+        },
+        {
+          "stage": "snapshot_raw_read",
+          "outcome_display": "اكتملت",
+          "duration_ms": 56.771
+        },
+        {
+          "stage": "snapshot_unpack",
+          "outcome_display": "اكتملت",
+          "duration_ms": 10073.149
+        },
+        {
+          "stage": "snapshot_copy_prepare",
+          "outcome_display": "اكتملت",
+          "duration_ms": 4007.847
+        },
+        {
+          "stage": "snapshot_load",
+          "outcome_display": "اكتملت",
+          "duration_ms": 14138.613
+        },
+        {
+          "stage": "source_collision",
+          "outcome_display": "اكتملت",
+          "duration_ms": 0.011
+        },
+        {
+          "stage": "orders_cursor_build",
+          "outcome_display": "اكتملت",
+          "duration_ms": 0.143
+        },
+        {
+          "stage": "orders_cursor_read",
+          "outcome_display": "اكتملت",
+          "duration_ms": 10237.293
+        },
+        {
+          "stage": "orders_rows_validate",
+          "outcome_display": "اكتملت",
+          "duration_ms": 12.426
+        },
+        {
+          "stage": "source_primary_reads",
+          "outcome_display": "اكتملت",
+          "duration_ms": 10251.761
+        },
+        {
+          "stage": "source_fee_settings",
+          "outcome_display": "اكتملت",
+          "duration_ms": 5.017
+        },
+        {
+          "stage": "profit_context_settings",
+          "outcome_display": "اكتملت",
+          "duration_ms": 35.488
+        },
+        {
+          "stage": "source_setup",
+          "outcome_display": "اكتملت",
+          "duration_ms": 88.715
+        },
+        {
+          "stage": "source_statements",
+          "outcome_display": "اكتملت",
+          "duration_ms": 218.156
+        },
+        {
+          "stage": "source_delivery_history",
+          "outcome_display": "اكتملت",
+          "duration_ms": 1502.407
+        },
+        {
+          "stage": "profit_context_orders",
+          "outcome_display": "اكتملت",
+          "duration_ms": 2144.121
+        },
+        {
+          "stage": "source_transactions",
+          "outcome_display": "اكتملت",
+          "duration_ms": 492.542
+        },
+        {
+          "stage": "source_native_links",
+          "outcome_display": "اكتملت",
+          "duration_ms": 16.973
+        },
+        {
+          "stage": "profit_context_raw",
+          "outcome_display": "اكتملت",
+          "duration_ms": 6083.909
+        },
+        {
+          "stage": "profit_context_prepare",
+          "outcome_display": "اكتملت",
+          "duration_ms": 3399.6
+        },
+        {
+          "stage": "profit_context",
+          "outcome_display": "اكتملت",
+          "duration_ms": 12119.335
+        },
+        {
+          "stage": "profit_sales",
+          "outcome_display": "اكتملت",
+          "duration_ms": 262.567
+        },
+        {
+          "stage": "profit_payroll",
+          "outcome_display": "اكتملت",
+          "duration_ms": 437.463
+        },
+        {
+          "stage": "profit_recurring",
+          "outcome_display": "اكتملت",
+          "duration_ms": 69.213
+        },
+        {
+          "stage": "profit_ads",
+          "outcome_display": "اكتملت",
+          "duration_ms": 2360.493
+        },
+        {
+          "stage": "source_bundles",
+          "outcome_display": "اكتملت",
+          "duration_ms": 13953.619
+        },
+        {
+          "stage": "profit_order_costs",
+          "outcome_display": "اكتملت",
+          "duration_ms": 4284.185
+        },
+        {
+          "stage": "profit_product_catalog",
+          "outcome_display": "اكتملت",
+          "duration_ms": 4610.63
+        },
+        {
+          "stage": "source_option_catalog",
+          "outcome_display": "اكتملت",
+          "duration_ms": 509.579
+        },
+        {
+          "stage": "profit_product_inputs",
+          "outcome_display": "اكتملت",
+          "duration_ms": 452.527
+        },
+        {
+          "stage": "source_order_indexes",
+          "outcome_display": "اكتملت",
+          "duration_ms": 573.816
+        },
+        {
+          "stage": "source_bank_catalog",
+          "outcome_display": "اكتملت",
+          "duration_ms": 20.853
+        },
+        {
+          "stage": "profit_product_authority",
+          "outcome_display": "اكتملت",
+          "duration_ms": 3191.952
+        },
+        {
+          "stage": "profit_product_supplier",
+          "outcome_display": "توقفت",
+          "duration_ms": 4631.187
+        },
+        {
+          "stage": "profit_products",
+          "outcome_display": "توقفت",
+          "duration_ms": 12887.377
+        },
+        {
+          "stage": "profit_snapshot",
+          "outcome_display": "اكتملت",
+          "duration_ms": 25167.195
+        },
+        {
+          "stage": "source_orders",
+          "outcome_display": "اكتملت",
+          "duration_ms": 13894.789
+        },
+        {
+          "stage": "source_invoices",
+          "outcome_display": "اكتملت",
+          "duration_ms": 349.817
+        },
+        {
+          "stage": "source_other_sources",
+          "outcome_display": "اكتملت",
+          "duration_ms": 20.366
+        },
+        {
+          "stage": "source_native_overlaps",
+          "outcome_display": "اكتملت",
+          "duration_ms": 31.239
+        },
+        {
+          "stage": "source_finalize",
+          "outcome_display": "اكتملت",
+          "duration_ms": 234.131
+        },
+        {
+          "stage": "source_collection",
+          "outcome_display": "اكتملت",
+          "duration_ms": 42338.779
+        },
+        {
+          "stage": "reconciliation",
+          "outcome_display": "اكتملت",
+          "duration_ms": 11689.711
+        },
+        {
+          "stage": "bank_claims",
+          "outcome_display": "اكتملت",
+          "duration_ms": 64.626
+        },
+        {
+          "stage": "party_catalogs",
+          "outcome_display": "اكتملت",
+          "duration_ms": 375.535
+        },
+        {
+          "stage": "snapshot_compare",
+          "outcome_display": "اكتملت",
+          "duration_ms": 59.93
+        },
+        {
+          "stage": "snapshot_pack",
+          "outcome_display": "اكتملت",
+          "duration_ms": 1556.816
+        },
+        {
+          "stage": "snapshot_commit",
+          "outcome_display": "اكتملت",
+          "duration_ms": 227.522
+        },
+        {
+          "stage": "aggregate",
+          "outcome_display": "اكتملت",
+          "duration_ms": 72583.527
+        }
+      ],
+      "primary_orders": {
+        "queue_ms": 0.018,
+        "budget_ms": 15000,
+        "first_row_ms": 11.248,
+        "read_elapsed_ms": 10237.273,
+        "rows_seen": 19118
+      }
     },
     "publication": {
       "publish_changes_clicks": 1,
@@ -196,6 +439,56 @@
       "manual_refresh_run": false,
       "source_sync_run": false,
       "status_check_button_enabled_after": true
+    },
+    "post_publication_saved_attempt": {
+      "technical_evidence": "pr2126-postpublication-r16949-diagnostics.json",
+      "public_health": {
+        "observed_at_utc": "2026-11-25T16:19:34.477115+00:00",
+        "url": "https://mezansalla.com/api/health",
+        "http_status": 200,
+        "cache_busted": true,
+        "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+        "backend_runtime_source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "frontend_build_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "frontend_reproducibility_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "release_control_source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "boot_started_at": "2026-11-25T15:12:44.554298+00:00",
+        "verified_identity_available": true,
+        "backend_runtime_source_verified": true,
+        "release_control_source_bound": true,
+        "critical_file_hashes_match": true,
+        "frontend_build_verified": true,
+        "raw_response_retained": false,
+        "method": "One public JSON GET through a dedicated terminal. Only explicit identity fields were printed; no source or lease mutation."
+      },
+      "runtime_binding_limits": [
+        "The original verifier before the calculation and the public health read after it identify the same source A2 and release ID.",
+        "The later health boot timestamp differs from original verification boot15:12:12.032644UTC; do not assert an identical process or worker.",
+        "There is no per-attempt process/source fingerprint embedded in the captured receipt or UI trace; association is based on matching surrounding release observations and new stage names, not a cryptographic per-attempt binding."
+      ],
+      "inference": {
+        "classification": "Strong timing evidence for shared profit-budget exhaustion; stored same-attempt error code not captured.",
+        "configured_shared_profit_budget_ms": 25000,
+        "configured_per_reader_limit_ms": 20000,
+        "remaining_after_context_ms": "12880.665",
+        "context_plus_products_ms": "25006.712",
+        "catalog_inputs_authority_ms": "8255.109",
+        "remaining_before_supplier_ms": "4625.556",
+        "supplier_elapsed_before_stop_ms": "4631.187",
+        "supplier_completion_duration_known": false,
+        "specific_query_cause_established": false,
+        "performance_improvement_established": false,
+        "all_profit_sources_complete": false
+      },
+      "source_completeness_verified": false,
+      "financial_comparison_audited_privately": true,
+      "financial_values_in_git": false,
+      "manual_refresh_run": false,
+      "source_sync_run": false,
+      "new_source_patch_applied": false,
+      "own_lease_reopened": false
     }
   },
   "limits": [
@@ -672,13 +965,13 @@
     }
   },
   "production_changed_by_this_task": "PR2126 published as97dc193; original verify passed3cycles for exactA2/D/runtime identity; matching task lease closed and original status returned activefalse.",
-  "next_safe_action": "PR2126 publication and its own matching lease closure are complete; do not republish, reopen or abort this finished lease. The next operational step is to read the next saved scheduled attempt after this publication and use the newly bounded profit context/product timings to identify the actual bottleneck before proposing a performance change. The prior saved r16948 and source-completeness gaps are independent of this publication; keep financial receipt comparisons private and separate from deployment proof. Existing scheduler remains enabled. Preserve other work, all financial invariants and original release gates. No paid Emergent agent chat.",
+  "next_safe_action": "PR2126 is published, originally verified and its own matching lease closed. Post-publication r16949 saved successfully and its private receipt comparison passed. Bounded timing strongly supports shared25-second profit-budget exhaustion while supplier phase was active; the exact inner query is not established. Read saved r16949 products error/quality metadata only through an authorized production-scoped surface with revision/as_of/owner binding, then use already-retained inner-phase evidence if available before choosing a behavior-preserving performance patch. The preview-host DB has not been shown to contain the production snapshot. Do not republish/reopen/abort this completed release, increase timeouts, discard financial evidence or alter another conversation's source/process/lease. No paid Emergent agent chat. Private reports retain receipt chain and evidence limits.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486",
+  "last_remote_checkpoint": "b48a097594b26f58a8c67a12564ba149ff368913",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -770,8 +1063,8 @@
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
   "evidence_checkpoint": {
-    "previous_commit": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486",
-    "phase": "E13_PUBLISHED_ORIGINAL_VERIFY_PASS_OWN_LEASE_CLOSED"
+    "previous_commit": "b48a097594b26f58a8c67a12564ba149ff368913",
+    "phase": "E14_POSTPUBLICATION_SAVED_ATTEMPT_DIAGNOSED_LEASE_CLOSED"
   },
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
