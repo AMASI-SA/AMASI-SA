@@ -46,7 +46,7 @@ class CourierCODDecisionTests(unittest.TestCase):
                                     Decision.POST)
 
     def test_network_or_bank_pending_until_accountant_or_exact_match(self):
-        for method, bucket in (("pos", "pos_receivable"), ("bank", "bank")):
+        for method, bucket in (("pos", "courier_receivable"), ("bank", "courier_receivable")):
             with self.subTest(method=method):
                 pending = decide_courier_cod_delivery(delivered(collection_method=method))
                 self.assertEqual(pending.action, Decision.PENDING_ACCOUNTANT)
