@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install minimal financial reducer runtime dependencies
-        run: python3 -m pip install --quiet fastapi pymongo motor
+        run: python3 -m pip install --quiet fastapi pymongo motor openpyxl
       - name: Compare direct payment against actual canonical reducer
         working-directory: backend
         run: |
