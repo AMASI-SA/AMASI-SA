@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 14:59:03 UTC",
+  "recorded_at": "2026-11-25 15:02:52 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E10_ORIGINAL_APP_REHEARSAL_PASS_OWN_V5_LEASE_PREPARED",
+  "status": "E11_PREPUBLISH_PASS_ONE_PUBLISH_ACCEPTED_IN_PROGRESS",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -148,6 +148,18 @@
         "Profit snapshot completion does not prove all profit inputs complete.",
         "Source completeness remains unverified."
       ]
+    },
+    "publication": {
+      "publish_changes_clicks": 1,
+      "submitted_at": "2026-11-25T15:01:50.364Z",
+      "observed_at": "2026-11-25T15:02:26.035Z",
+      "observed_state": "Deployment Started / Publishing...",
+      "explicit_new_success": false,
+      "free_republishes": true,
+      "paid_agent_chat_used": false,
+      "prior_provider_version": "e6113be",
+      "prior_publish_ordinal": 100,
+      "verified": false
     }
   },
   "limits": [
@@ -545,10 +557,28 @@
       "active": true,
       "own_lease_exactly_matched": true,
       "publish_clicked": false
+    },
+    "original_prepublish": {
+      "initial": {
+        "started_at": "2026-11-25T15:00:31.081848+00:00",
+        "finished_at": "2026-11-25T15:00:34.703343+00:00",
+        "returncode": 0
+      },
+      "final": {
+        "started_at": "2026-11-25T15:01:27.621120+00:00",
+        "finished_at": "2026-11-25T15:01:31.242557+00:00",
+        "returncode": 0
+      },
+      "ready_to_publish": true,
+      "own_lease_matched_before": true,
+      "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+      "protocol_version": 5
     }
   },
-  "production_changed_by_this_task": false,
-  "next_safe_action": "Own v5 lease was created by this task at the recorded prepared_at and the full original prepare output exactly matched status. Confirm same own lease, run original prepublish immediately before one authorized Republish/Publish changes. Require a newer explicit Deployment Succeeded; run original verify --url https://mezansalla.com and then status to close only the matching lease. Production has not yet been published.",
+  "production_changed_by_this_task": "Publication accepted; actual runtime change not yet verified.",
+  "next_safe_action": "Do not click publish again. Wait for newer explicit Deployment Succeeded for the accepted publication. Then compare current /app lease with this task's own prepared payload and run original python -B scripts/production_release_guard.py verify --url https://mezansalla.com. It must pass all three probes and close matching lease; status must be activefalse. Preserve full original output and update evidence/report. No financial refresh or source sync was triggered.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
@@ -631,8 +661,8 @@
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
   "evidence_checkpoint": {
-    "previous_commit": "b1c8dd99b570ecc4725f0fb14176c45e5466a02d",
-    "phase": "E10_ORIGINAL_APP_REHEARSAL_PASS_OWN_V5_LEASE_PREPARED"
+    "previous_commit": "32e93c5d639e049aaa53f1499d785c576eef05e9",
+    "phase": "E11_PREPUBLISH_PASS_ONE_PUBLISH_ACCEPTED_IN_PROGRESS"
   },
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
@@ -669,8 +699,8 @@
     "intent_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
     "merge_D": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
     "prepared": true,
-    "publish_clicked": false,
-    "production_changed": false,
+    "publish_clicked": true,
+    "production_changed": "not_yet_verified",
     "intent_B_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
     "intent_B_parent": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
     "intent_B_changed_paths": [
@@ -795,7 +825,7 @@
     ],
     "B_to_D_content_diff": [],
     "production_branch_changed": true,
-    "production_runtime_changed": false,
+    "production_runtime_changed": "not_yet_verified",
     "D_CI": {
       "repository": "AMASI-SA/AMASI-SA",
       "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
@@ -957,6 +987,6 @@
     "active": true,
     "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
     "prepared_at": "2026-11-25T14:57:47.368128+00:00",
-    "prepublish_passed": false
+    "prepublish_passed": true
   }
 }
