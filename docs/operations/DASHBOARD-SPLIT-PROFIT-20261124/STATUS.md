@@ -804,3 +804,49 @@ The recovery runner preserves the original one-shot durable journal design with 
 Evidence: `checkpoints/E13-recovery-static-review.zip`, `checkpoints/E13-recovery-static-review.json` and the three direct operator files under `operators/`. The complete E12 STATUS prefix is preserved. Full foreign inventories, raw backups, bytecode, database contents, environment values and private business records remain excluded.
 
 Next: read back durable E13, stage exact reviewed bytes and launch the separate recovery once. Require actual recovery PASS before original inactive status, prepare and fresh prepublish; then one UI publication, a newer explicit platform success, the original three-round verifier and inactive closure. Finally verify Nov24 through the normal dashboard demand-refresh UI. Existing user authorization covers these actions; publication and live dashboard acceptance remain pending.
+
+
+## E14 — Explicit current-host boundary; canonical rebuild pending
+
+E13 remains the durable static review checkpoint at `89910f93f43c644f2f86409d19acc1ef87610043`, tree `324d321a04de860f819ae0c97f0657d47454d181`. This checkpoint appends a separate current-host boundary after the loss of prior temporary execution evidence. The reviewed source A, intent B, deployment D, tree and deterministic release ID are unchanged.
+
+### Previous attempts retain their actual outcomes
+
+- The original host rehearsal remains **BLOCKED**, exit 2, after its step-78 strict validator failure. Its E12 evidence is unchanged.
+- The separately reviewed bounded recovery was launched once at 17:54:30 UTC on 2026-11-25. The last observed receipt at 17:56:52 UTC was **RUNNING** with 54 recorded commands. The exact cache directory and two files were **PRESERVED**, the original strict intent validator passed, and the mapped current-app foreign comparison passed for 185030 records with 3 original records retained separately.
+- That observation does not prove the later canonical build, final preservation comparison or recovery completion. The interrupted recovery's final status is now **UNKNOWN** because its final receipt is unavailable.
+
+### Current observations and concrete rebuild requirement
+
+Root's code-server observations at 18:53–18:58 UTC found that the old control directory, both temporary stages and the original temporary backup stage were absent; both original recovery PIDs were absent. The cause of the missing paths is not established. `/app` now reports device 66345 rather than 66329, while the observed retained inodes remain consistent. This is an explicitly new boundary, not a claim of continuous old-host preservation.
+
+The production checkout remained exact D `b651eacf5ded173c4f3224d195ef874b8bcea312` on `hotfix/prod-snap-meta-final` with clean tracked files. The original guard bytes and reviewed intent bytes matched their frozen hashes; the unchanged original `status` returned exit 0, empty stderr and `{"active":false}`.
+
+All three required generated artifacts were absent: Frontend build metadata, reproducibility proof, and Backend runtime identity. The surviving `frontend/node_modules` contained exactly 4298 empty directories, with a measured 17649664-byte copy/allocation footprint. The latest measured app free space was 1065492480 bytes with 244682 available inodes. These observations explain why current read-only validators alone cannot establish readiness: a new canonical adapter build is required. Actual capacity checks must still be fresh at execution.
+
+The prior cache quarantine remains in place under `.git`. Its two file bodies, lengths, inodes and pinned mtimes match the retained records, and both old manifests remain byte-identical. The changed device is explicitly recorded. Present quarantine equality does not reconstruct the lost historical full foreign inventory or prove a final historical preservation pass.
+
+The management UI still showed **100th publish `bbaba13`**, last finished 2026-11-25 at 19:21 Riyadh. This task has made no publication attempt and has created no lease.
+
+### Static current-host checkpoint
+
+This packet binds the root observations, the exact new current-host helper and one-shot capture runner, the adapted original guard capture runner, the current execution envelope, focused checks, author review, independent review and root review. Final immutable hashes and review decisions are in `checkpoints/E14-current-host-static-review.json` and the archive manifest. The three direct operators and their execution envelope use separate `operators/host2/` paths; older operator bytes remain unchanged.
+
+The new attempt has **not run** at this checkpoint. It uses a fresh current-attempt foreign baseline and current generated-output backups; it cannot substitute them for the lost earlier baseline or backups. Small journals, receipts and retained backups are assigned to a new private directory under `.git`; owned build cache and temporary work use a separate `/tmp` area. The existing quarantine is retained in place. No old-helper rerun, cache restoration, source fast-forward, lease creation, publication or business-data operation is asserted by this static package.
+
+The durably recorded clean-clone rehearsal and exact-release CI remain valid for unchanged A/B/D. A second clone build is not being claimed or required merely because its old temporary directory disappeared. Current required artifacts still must be produced and validated by the unchanged canonical adapter and original verifiers.
+
+### Exact next sequence
+
+After root verifies the durable E14 ref and staged bytes, execute the reviewed current-host attempt once. Require original inactive status, current D/remote D and lineage, current backups and capacity, unchanged strict validation, canonical adapter, full identity/proof/package verification, and preservation for the new interval. Checkpoint the completed evidence immediately. Only then run original prepare, immediately-before-publish prepublish, one authorized UI publication, a newer explicit deployment success, original three-round verify, final inactive status, and normal Nov24 dashboard acceptance.
+
+Production publication: **no**. Current release readiness: **BLOCKED pending actual host2 result**. Original first attempt: **BLOCKED**. Interrupted bounded recovery final result: **UNKNOWN**. Historical final foreign continuity: **not proved**.
+
+### Frozen execution inputs
+
+- `pr2129_fresh_d_rehearsal.py`: 51504 bytes, SHA256 `cfa3dc0adf6858165a3562b3dad2a9679177112718a5d58c1a1ff9188b164ff8`.
+- `run-reviewed-host2.py`: 3915 bytes, SHA256 `dcaad9e5bcac0ab8a61f4db003dba26aa31f4d56c67e6f3b31610d59171bba84`.
+- `run-original-guard-host2-phase.py`: 4732 bytes, SHA256 `cdd43c497014e4148b5e5e95b620e3fe6162f4f540bbf16a8115bba238d46ca4`.
+- `execution-envelope.json`: 1592 bytes, SHA256 `a5bc2caf6faea02550877efa0c73320d1ee83366241a44fb399d4d222819f5a7`.
+
+Independent review: `APPROVED_FOR_ONE_FRESH_CURRENT_HOST_REHEARSAL`; root review: `PASS_STATIC_REVIEW_ONLY`; three focused synthetic groups passed. These are static approvals for one current-host attempt, not host completion.

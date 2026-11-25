@@ -1,0 +1,195 @@
+{
+  "artifact": {
+    "bytes": 54642,
+    "git_blob": "f330f76fa0d12265c5594178207e98e4db55e31d",
+    "name": "E14-current-host-static-review.zip",
+    "sha256": "a3a4de9713bcf72bf47f56fda927f9e244aa9d8603750d44f119d2ebb8fb8b8c"
+  },
+  "base_tree": "324d321a04de860f819ae0c97f0657d47454d181",
+  "branch": "codex/dashboard-split-profit-evidence-r2-20261125",
+  "checkpoint": "E14",
+  "current_canonical_app_status": "REQUIRED_OUTPUTS_ABSENT",
+  "current_host_boundary": {
+    "cause_of_missing_temporary_paths": "Not established",
+    "device": 66345,
+    "new_preservation_interval_only": true,
+    "prior_clean_clone_evidence_retained": "Durable exact-release clean-clone PASS remains valid; no new clone build is asserted.",
+    "prior_device": 66329,
+    "prior_quarantine_retained_in_place": true,
+    "prior_recovery_or_baseline_resumed": false
+  },
+  "evidence_parent": "89910f93f43c644f2f86409d19acc1ef87610043",
+  "files": [
+    {
+      "bytes": 6868,
+      "git_blob": "e517960a916ab5d9e3ff57bd1dd24313b17457f4",
+      "name": "host2/README.md",
+      "sha256": "3c08fa53a12c114266819a42a9a9d514027c90e486b05236c7d4bed1b314663b"
+    },
+    {
+      "bytes": 1592,
+      "git_blob": "4fca3920f8dcd928467243145a9ca2b7ba6587f6",
+      "name": "host2/execution-envelope.json",
+      "sha256": "a5bc2caf6faea02550877efa0c73320d1ee83366241a44fb399d4d222819f5a7"
+    },
+    {
+      "bytes": 2415,
+      "git_blob": "2b34a145a44e77a1ea5df550c08f4b30f5594d00",
+      "name": "host2/hash-manifest.json",
+      "sha256": "4be53145e83a8adacc8f8080c97cdb6c541aa17d4abadc8a9f08be46e900bf48"
+    },
+    {
+      "bytes": 36547,
+      "git_blob": "ac20764a2a22c512d91068604e5bde23fb501da7",
+      "name": "host2/helper-adaptation.diff",
+      "sha256": "f0f54b168fb9fd3635653de156dbf805008987b8ab1a55e6f0f514e83a8b069c"
+    },
+    {
+      "bytes": 10081,
+      "git_blob": "cbcd87686c259dcc386babb6010239d914faa98c",
+      "name": "host2/independent-review.json",
+      "sha256": "28c7db86dea0456e9077fd3a45d276dc407d1e52bf36a0ef43b9721cc13506c3"
+    },
+    {
+      "bytes": 51504,
+      "git_blob": "75b1fad0f539ac880c9b83a5ee4114cee5fab736",
+      "name": "host2/pr2129_fresh_d_rehearsal.py",
+      "sha256": "cfa3dc0adf6858165a3562b3dad2a9679177112718a5d58c1a1ff9188b164ff8"
+    },
+    {
+      "bytes": 3727,
+      "git_blob": "d9ae3ade28dc291f61312ede1adb94d099b55f1f",
+      "name": "host2/root-independent-review.json",
+      "sha256": "c0810092b1cd64d9484e192076db090e460248594a6f4397454692319c2c2049"
+    },
+    {
+      "bytes": 4732,
+      "git_blob": "87c7b6e69d23f158547741797a06f98d465f07bd",
+      "name": "host2/run-original-guard-host2-phase.py",
+      "sha256": "cdd43c497014e4148b5e5e95b620e3fe6162f4f540bbf16a8115bba238d46ca4"
+    },
+    {
+      "bytes": 1482,
+      "git_blob": "339a632da6ab405fd43618049b7d3bf0e448d6b4",
+      "name": "host2/run-original-guard-host2-phase.py.diff",
+      "sha256": "a30259ff85948c76cb622af8478eb9322f7ae2d9f068d7ca1ee686db7f54e4c0"
+    },
+    {
+      "bytes": 3915,
+      "git_blob": "76bdbf6f2cdadbf6f8aa95a342c8849c3be3da74",
+      "name": "host2/run-reviewed-host2.py",
+      "sha256": "dcaad9e5bcac0ab8a61f4db003dba26aa31f4d56c67e6f3b31610d59171bba84"
+    },
+    {
+      "bytes": 2784,
+      "git_blob": "f7eb9c0626f21505ab8314488078f92109742d35",
+      "name": "host2/run-reviewed-host2.py.diff",
+      "sha256": "428bf117da3e70dec4aa4ab6e3bd2d214837664333eb8a84afe890a443c3024c"
+    },
+    {
+      "bytes": 989,
+      "git_blob": "4751dbdb5d633b9202ee8c5e479b85dab52383d2",
+      "name": "host2/runners-static-review.json",
+      "sha256": "81b405fe4b84e13fabd3fbf06b270ca7490925920a8279ec0a0fe633f7d98534"
+    },
+    {
+      "bytes": 4504,
+      "git_blob": "b3cecf66f6e4c261b744ec9bcbe5c4a956cb8e15",
+      "name": "host2/self-review.json",
+      "sha256": "fa7788ad1b4ead1dfe7276260f6e8f5cf5b17d6a98d718236953e4470e7c7301"
+    },
+    {
+      "bytes": 830,
+      "git_blob": "9ca43c765576d097bebee05eba117f857d98841a",
+      "name": "host2/synthetic-tests.json",
+      "sha256": "3d2fc62800f9f40e6d488d6531cfcbabf648e1e5559cf7821a66aa12d7520843"
+    },
+    {
+      "bytes": 557,
+      "git_blob": "1ce4f1a1dfa7d26760e03b6b82abe9a64533be87",
+      "name": "host2/synthetic-tests.stderr",
+      "sha256": "28bd2d11bd19767a1f5d40172ddafd06e547dd68e4b500d8e48d386248fae949"
+    },
+    {
+      "bytes": 0,
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "name": "host2/synthetic-tests.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 7638,
+      "git_blob": "90a747fc24aa26c2212a8ed7a8ce7fcb27d93e83",
+      "name": "host2/test_fresh_boundary_isolated.py",
+      "sha256": "006e4139dc6cf10db46bc66fe9394b2cc83ad0bd1085122573440dbad5a458d6"
+    },
+    {
+      "bytes": 6410,
+      "git_blob": "c3a52494ed45eeb5221d56cc3953b48ba0c8bf4a",
+      "name": "observations/host2-current-observations.json",
+      "sha256": "c379d598791e5de54edea2baa3ee83b085fbd31f2b39756dc206ba677c594801"
+    }
+  ],
+  "historical_full_foreign_continuity_proved": false,
+  "host2_executed": false,
+  "identities": {
+    "deployment_sha": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+    "intent_sha": "ebaae98290f25db5580d888601d236431961d104",
+    "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+    "source_base_sha": "30c970807c05e291e2f48b35c84155b271fb5f09",
+    "source_sha": "0b39c456ea17d6e80f824f44b57563764441216c",
+    "tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8"
+  },
+  "interrupted_recovery_final_status": "UNKNOWN",
+  "interrupted_recovery_last_observed_status": "RUNNING",
+  "limitations": [
+    "Current observations and static review are not successful host2 execution evidence.",
+    "Missing prior temporary receipts and backups cannot be reconstructed or declared retained by this checkpoint.",
+    "A new baseline establishes preservation only for the new attempt; it cannot prove historical final continuity.",
+    "No production publication or business acceptance is asserted."
+  ],
+  "observed_at": "2026-11-25T19:11:58.402095+00:00",
+  "omitted": [
+    "full foreign inventories",
+    "backup file bodies",
+    "raw bytecode",
+    "database contents",
+    "environment values",
+    "customer/order/financial business records"
+  ],
+  "original_attempt_status": "BLOCKED",
+  "own_lease_created": false,
+  "own_publish_clicked": false,
+  "release_readiness": "BLOCKED",
+  "required_next_actions": [
+    "Root verifies durable E14 ref and exact staged operator bytes.",
+    "Execute the separately reviewed current-host adapter attempt once with fresh inactive guard, source/remote and preservation checks.",
+    "Require original strict validator, canonical adapter, full proof, fresh backups and current-interval preservation PASS.",
+    "Checkpoint completed host2 evidence immediately; preserve original BLOCKED and interrupted recovery UNKNOWN.",
+    "Original prepare, immediately-before-publish prepublish, one authorized UI publication and newer explicit success.",
+    "Original verify with three successful rounds, final inactive status and normal Nov24 dashboard acceptance."
+  ],
+  "result": "STATIC_REVIEWED_CURRENT_HOST_ATTEMPT_PENDING_EXECUTION",
+  "review_decisions": {
+    "author": "PASS_STATIC_AND_3_FOCUSED_SYNTHETIC_GROUPS_PENDING_INDEPENDENT_REVIEW_PERSISTENCE_HOST_GATES",
+    "focused_tests": {
+      "exit_code": 0,
+      "groups": 3,
+      "status": "PASS"
+    },
+    "independent": "APPROVED_FOR_ONE_FRESH_CURRENT_HOST_REHEARSAL",
+    "root": "PASS_STATIC_REVIEW_ONLY"
+  },
+  "roles": {
+    "author_review": "host2/self-review.json",
+    "execution_envelope": "host2/execution-envelope.json",
+    "guard_runner": "host2/run-original-guard-host2-phase.py",
+    "host2_helper": "host2/pr2129_fresh_d_rehearsal.py",
+    "host2_runner": "host2/run-reviewed-host2.py",
+    "host_observations": "observations/host2-current-observations.json",
+    "independent_review": "host2/independent-review.json",
+    "root_review": "host2/root-independent-review.json",
+    "test_result": "host2/synthetic-tests.json"
+  },
+  "schema_version": 1,
+  "scope": "Frozen static current-host operator and runner reviews, with current root observations. No host2 execution or publication proof."
+}

@@ -1,0 +1,60 @@
+{
+  "allow_runtime_metadata_append": true,
+  "deployment_sha": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+  "expected_untracked_count": 432,
+  "initial_head": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+  "intent_sha": "ebaae98290f25db5580d888601d236431961d104",
+  "live_foreign_scope": {
+    "db_descendants_policy": "live_writer_managed_no_operator_access",
+    "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "directory_identities": {
+      ".worktrees": [
+        66345,
+        131957,
+        493,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919": [
+        66345,
+        133807,
+        448,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919/mongo": [
+        66345,
+        133808,
+        493,
+        0,
+        0
+      ]
+    },
+    "log_identity": [
+      66345,
+      400929,
+      420,
+      0,
+      0
+    ],
+    "log_policy": "independent_same_inode_append_only",
+    "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+    "process": {
+      "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+      "exe": "/usr/bin/mongod",
+      "exe_identity": [
+        1048696,
+        85851,
+        493,
+        0,
+        0
+      ],
+      "pid": 313,
+      "start_ticks": 115105568
+    }
+  },
+  "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+  "source_base_sha": "30c970807c05e291e2f48b35c84155b271fb5f09",
+  "source_sha": "0b39c456ea17d6e80f824f44b57563764441216c",
+  "tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8"
+}
