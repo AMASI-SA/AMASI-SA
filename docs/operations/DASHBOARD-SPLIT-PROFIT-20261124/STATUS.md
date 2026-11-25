@@ -789,3 +789,18 @@ Read-only full Backend inventory found exactly one inherited cache directory wit
 A separate narrowly reviewed D-start preservation recovery is being prepared. It must preserve the exact cache via an exclusive same-filesystem move, retain all other foreign-state equality and existing append policies, recheck source/remote/lease/live scope/backups/capacity, then run the unchanged strict validator, canonical adapter and final proofs. Do not rerun v4 from D, reset the checkout, delete caches, waive bytecode validation, or relabel partial proof. Publication and live dashboard acceptance remain pending.
 
 Evidence: checkpoints/PR2129-HOST-BLOCKED.zip; checkpoints/PR2129-CACHE-OBSERVATIONS.zip; checkpoints/E12-host-blocked-independent-review.json; checkpoints/E12-host-blocked.json.
+
+
+## E13 — separate recovery operator frozen; actual recovery pending
+
+The original one-shot host attempt remains **BLOCKED** at step78 after the fast-forward to exact D. Its receipt, wrapper completion, logs, four backups, original foreign-before baseline and E12 evidence are retained unchanged. The canonical-app adapter has not run. No own release lease or UI publication has occurred.
+
+This checkpoint freezes a separately reviewed recovery that starts at D `b651eacf5ded173c4f3224d195ef874b8bcea312`. It requires the original failed-attempt files and foreign-before hash, unchanged source/remote/lease/live-process identities, original generated-output backups and measured current capacity. Its only foreign-state relocation is the exact three-record `backend/__pycache__` mapping: one directory and the two retained files move together through Linux same-filesystem `renameat2(RENAME_NOREPLACE)` into a private owned Git metadata directory. The original full baseline remains authoritative; all other equality and already-reviewed append rules remain unchanged. No cache deletion, content substitution, validator waiver, reset, automatic retry or automatic restore is introduced.
+
+After the separately journaled move, the unchanged strict intent validator and canonical adapter must pass, followed by the full frontend/package/runtime/proof checks, retained-backup verification and mapped foreign preservation. The recovery has not run at this checkpoint. Static reviews and eight focused synthetic fixture groups do not establish actual host readiness, adapter success or publication success.
+
+The recovery runner preserves the original one-shot durable journal design with separate state/output filenames. The original guard phase runner is also frozen for the later status, prepare, prepublish, verify and final status sequence. Its phase selection does not enforce ordering; root must inspect every original result and must never blindly repeat a phase whose child may still be running. Earlier draft labels remain in their original review records, with final approval bound to exact frozen helper and runner bytes by the root review.
+
+Evidence: `checkpoints/E13-recovery-static-review.zip`, `checkpoints/E13-recovery-static-review.json` and the three direct operator files under `operators/`. The complete E12 STATUS prefix is preserved. Full foreign inventories, raw backups, bytecode, database contents, environment values and private business records remain excluded.
+
+Next: read back durable E13, stage exact reviewed bytes and launch the separate recovery once. Require actual recovery PASS before original inactive status, prepare and fresh prepublish; then one UI publication, a newer explicit platform success, the original three-round verifier and inactive closure. Finally verify Nov24 through the normal dashboard demand-refresh UI. Existing user authorization covers these actions; publication and live dashboard acceptance remain pending.

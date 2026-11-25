@@ -1,0 +1,191 @@
+{
+  "artifact": {
+    "bytes": 70686,
+    "git_blob": "7b0729c04249b2fce41b140b3d555e81e28a3ea4",
+    "name": "E13-recovery-static-review.zip",
+    "sha256": "b0c1e2eac383268498b9fafd2d79216f2d59a1f4212e1ef3b9d921acbf7ba198"
+  },
+  "base_tree": "69dd8fcdc9213250365649adf33ee0a09f3952e5",
+  "branch": "codex/dashboard-split-profit-evidence-r2-20261125",
+  "canonical_app_status": "NOT_STARTED",
+  "checkpoint": "E13",
+  "evidence_parent": "0de0352250ae05a5375da56c1e498d18a6a32aa7",
+  "files": [
+    {
+      "bytes": 5650,
+      "git_blob": "eb6724ac39f59384c3a51d35cbf0efb8d161dcbb",
+      "name": "guard-runner/README.md",
+      "sha256": "d0d486045cad345728105c6cd3231a3f3a7524415fce6fb96665b272e347a68f"
+    },
+    {
+      "bytes": 5911,
+      "git_blob": "9801c17d1b56ee8c18130463dfa061c4c0087210",
+      "name": "guard-runner/adaptation.diff",
+      "sha256": "2748a143b716d450c4fcca3b87401a001f36d3ab7f4744a32af09209ce6dee13"
+    },
+    {
+      "bytes": 790,
+      "git_blob": "d811757a22ff196221bb57f1cc4a2e055996f596",
+      "name": "guard-runner/hash-manifest.json",
+      "sha256": "1a86ecfa8be23b3f91c7ec465433f0a0eb29dd2cf2b25d07a548a23d1c680518"
+    },
+    {
+      "bytes": 1496,
+      "git_blob": "8d4423fd42cc46c28bb016d15f47cb1d55c2b48e",
+      "name": "guard-runner/root-independent-review.json",
+      "sha256": "48f6f455468fb17c1ab1f828715d5d179e0aa73fcafcb79d3d76af6308442744"
+    },
+    {
+      "bytes": 4722,
+      "git_blob": "51c678f98f632966b8a1e8457c1bb5b1a7fdb71b",
+      "name": "guard-runner/run-original-guard-phase.py",
+      "sha256": "ea138c632c277bae31f40d274650505d3fb8670ee5a4b0ca01cd99bfb8fafd75"
+    },
+    {
+      "bytes": 4136,
+      "git_blob": "f64b8f4a4698aa8c8f71ea2476ea0a8142ac3e68",
+      "name": "guard-runner/static-review.json",
+      "sha256": "b8d339d509427bd4c08634b0b930ba8f81af13f29adfe81e9433f4ee9a75a878"
+    },
+    {
+      "bytes": 11165,
+      "git_blob": "af89bdf359eaa54bb8ef1d5eb93e25ca03042eb5",
+      "name": "recovery/README.md",
+      "sha256": "553f2dcc062d5a280117da24a3d147e243d8ae15c524b88e72472055ba77a6d2"
+    },
+    {
+      "bytes": 1955,
+      "git_blob": "1a853af35afb5cf9fc78b9f2aa5e585994f9aa6a",
+      "name": "recovery/hash-manifest.json",
+      "sha256": "44a03a97956a05a09d5b55eef25de491874adff0274472f30aa78d60118a01a2"
+    },
+    {
+      "bytes": 72185,
+      "git_blob": "f8319691b3f05459262cb5cc4fbd771d009c4461",
+      "name": "recovery/pr2129_bytecode_preservation_recovery.py",
+      "sha256": "82d89dd2f9bae77a967f299f452e25271424a53936dc2f27570a2104115b0fc0"
+    },
+    {
+      "bytes": 62343,
+      "git_blob": "caa2e72a61eff47f276c03a3beeabce6ba5e1d49",
+      "name": "recovery/recovery-adaptation.diff",
+      "sha256": "90fdf761b172c31449cbb4e0a8d6acf2ddb3f536a6fc97d5380ce99393533b48"
+    },
+    {
+      "bytes": 10613,
+      "git_blob": "71fc89453611b31b49d5c4b395adc4c581606b1e",
+      "name": "recovery/recovery-independent-review.json",
+      "sha256": "f7e875e0fedf7199f732fa3d78de5d9ace2367f4bc787f99ebd3df3b695e8c1f"
+    },
+    {
+      "bytes": 3219,
+      "git_blob": "2af42ac7a6f6e8345ae4f9e63e70b6fe4e69b922",
+      "name": "recovery/root-independent-review.json",
+      "sha256": "7492ad3fec8302c35b0b75e28b8ac4ad67303481e2e0bef1e8711d80ae542bec"
+    },
+    {
+      "bytes": 3915,
+      "git_blob": "0b8fdbe1add426bca1f68c0b194bb8b5cf025c1c",
+      "name": "recovery/run-reviewed-recovery.py",
+      "sha256": "e196cafb0bbbc42e59cf63025b16348b333e75260d7be77fac31bcdc51ad8400"
+    },
+    {
+      "bytes": 2618,
+      "git_blob": "ede6d6f934e78cfc51eb86a3350848f769ad65ad",
+      "name": "recovery/runner-adaptation.diff",
+      "sha256": "5431c29844ba0546a7fa83093350a7879c60dc594ba89680ce568475744a5fbe"
+    },
+    {
+      "bytes": 751,
+      "git_blob": "cead45f6334f9f577e5fd6dfc9af11d41de80643",
+      "name": "recovery/runner-static-review.json",
+      "sha256": "021c39bf68487878932cbdc6c4f1436e225c0a17acc710b78c557107ed167df4"
+    },
+    {
+      "bytes": 5312,
+      "git_blob": "5ad8ed09d0a31b2ad4cb8682b2bcc6fffdb2c661",
+      "name": "recovery/self-review.json",
+      "sha256": "a19600f905ee073c63665dfe9309200a8a8b234d7ad23fd086fa3743eeb58fa1"
+    },
+    {
+      "bytes": 685,
+      "git_blob": "42e0502fc926dec1104c5e5de44bc7c5828f3575",
+      "name": "recovery/synthetic-tests.json",
+      "sha256": "13b2acf02a82926ef84914bba60a78dce91ce6fa234e1dc39f2ef48a7468bf41"
+    },
+    {
+      "bytes": 1250,
+      "git_blob": "c0eb3e6a6b98643ae54069c1e566ee354e2f6354",
+      "name": "recovery/synthetic-tests.stderr",
+      "sha256": "413bf3e38173be9b7695153969ade69c8ba8368a0ab1b0e2b46fc56114f47147"
+    },
+    {
+      "bytes": 0,
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "name": "recovery/synthetic-tests.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 13750,
+      "git_blob": "424f769f2b5bf0d3670654ce6620028cd7584d68",
+      "name": "recovery/test_recovery_isolated.py",
+      "sha256": "4eec410a69b20a60ab5f676eb3defbecb315d9e200d7b626889b3b562270a6fc"
+    }
+  ],
+  "identities": {
+    "deployment_sha": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+    "intent_sha": "ebaae98290f25db5580d888601d236431961d104",
+    "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+    "source_base_sha": "30c970807c05e291e2f48b35c84155b271fb5f09",
+    "source_sha": "0b39c456ea17d6e80f824f44b57563764441216c",
+    "tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8"
+  },
+  "limitations": [
+    "Static review does not establish current host readiness or successful recovery.",
+    "The original failed attempt remains BLOCKED permanently.",
+    "No current lease claim, publication outcome or business acceptance is asserted.",
+    "Review files retain original statuses and observation times; later root approval supersedes draft labels only for exact frozen bytes."
+  ],
+  "observed_at": "2026-11-25T17:52:02+00:00",
+  "omitted": [
+    "foreign inventories",
+    "backup file bodies",
+    "raw bytecode",
+    "database contents",
+    "environment values",
+    "customer/order/financial business records"
+  ],
+  "original_attempt_evidence": "E12 0de0352250ae05a5375da56c1e498d18a6a32aa7",
+  "original_attempt_status": "BLOCKED",
+  "own_lease_created": false,
+  "own_publish_clicked": false,
+  "recovery_executed": false,
+  "release_readiness": "BLOCKED",
+  "required_next_actions": [
+    "Root verifies durable E13 ref and immutable operator bytes before staging.",
+    "Execute reviewed separate recovery once; read original completion and full receipt.",
+    "Require unchanged strict validation, canonical adapter, full proof and mapped preservation PASS.",
+    "Original inactive status, prepare, fresh prepublish, one UI publication and newer explicit success.",
+    "Original verify with three successful rounds, inactive status and normal Nov24 dashboard acceptance."
+  ],
+  "result": "STATIC_REVIEWED_RECOVERY_PENDING_ACTUAL_HOST_GATES",
+  "review_decisions": {
+    "author": "PASS_STATIC_AND_SYNTHETIC_PENDING_PERSISTENCE_AND_FRESH_HOST_GATES",
+    "focused_synthetic_test_groups": 8,
+    "guard_root": "PASS_STATIC_REVIEW_ONLY",
+    "independent": "APPROVED_FOR_ONE_BOUNDED_RECOVERY_ATTEMPT",
+    "root": "PASS_STATIC_REVIEW_ONLY"
+  },
+  "roles": {
+    "guard_root_review": "guard-runner/root-independent-review.json",
+    "guard_runner": "guard-runner/run-original-guard-phase.py",
+    "recovery_author_review": "recovery/self-review.json",
+    "recovery_helper": "recovery/pr2129_bytecode_preservation_recovery.py",
+    "recovery_independent_review": "recovery/recovery-independent-review.json",
+    "recovery_root_review": "recovery/root-independent-review.json",
+    "recovery_runner": "recovery/run-reviewed-recovery.py",
+    "recovery_test_result": "recovery/synthetic-tests.json"
+  },
+  "schema_version": 1,
+  "scope": "Frozen static recovery and guard-runner review; no host execution or publication proof."
+}
