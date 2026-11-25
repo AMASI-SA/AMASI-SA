@@ -1,0 +1,46 @@
+{
+  "observed_at_utc": "2026-11-25 12:59:50 UTC",
+  "kind": "sanitized_transcription_of_direct_terminal_observations",
+  "source_sha": "9a851854132bd71be922c4aae24b4cc20a546e41",
+  "source_tree": "436199d239a75910d94d441e9eb47408aea80080",
+  "host_source_head": "6323017fbf9ba160c536a94f408507435786412a",
+  "guard": {
+    "active": false,
+    "exit": 0
+  },
+  "supervisor": {
+    "backend": "RUNNING",
+    "frontend": "FATAL"
+  },
+  "local_api": {
+    "live": {
+      "port": 8001,
+      "status": 200,
+      "mime": "application/json"
+    },
+    "unauthenticated_me": {
+      "port": 8001,
+      "status": 401,
+      "mime": "application/json"
+    }
+  },
+  "candidate_checkout": {
+    "clone_exit": 0,
+    "fetch_exit": 0,
+    "exact_head": true,
+    "exact_tree": true,
+    "tracked_clean": true,
+    "backend_dotenv_copied": false
+  },
+  "runtime_bootstrap": {
+    "started": true,
+    "complete": false,
+    "cache_isolated": true
+  },
+  "source_data_count_probe": {
+    "outcome": "environment_error",
+    "reason": "system Python has no pymongo; use existing backend virtualenv for read-only probe"
+  },
+  "production_changed": false,
+  "real_performance_measured": false
+}

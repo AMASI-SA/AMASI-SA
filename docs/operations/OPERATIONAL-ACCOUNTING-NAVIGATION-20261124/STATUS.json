@@ -8,8 +8,8 @@
   "source_tree": "436199d239a75910d94d441e9eb47408aea80080",
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
-  "checkpoint_date": "2026-11-24",
-  "state": "draft_ci_green_blocked_on_exclusive_host_control",
+  "checkpoint_date": "2026-11-25",
+  "state": "source_prepared_isolated_runtime_bootstrap_in_progress",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -69,14 +69,14 @@
     "real_latency_measured": false,
     "known_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
     "admin_saved_session": "Read-only TinyFish attempt reached Emergent login wall; superseded as access blocker by existing native code-server terminal.",
-    "direct_host_access": "Native code-server terminal is authenticated and usable for read-only inspection, but simultaneous global keyboard input caused an actual command collision. Root stopped UI input. Independent TinyFish browser reaches the code-server password wall.",
+    "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
     "frontend_supervisor": "FATAL, exited too quickly",
     "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
     "known_failure": "Old frontend launcher uses Vite from an older worktree and serves an October supplier bundle. Repairing that dependency alone cannot prove PR2095 is running.",
     "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
-    "candidate_source_prepared": false,
-    "source_preparation_attempt": "Attempted isolated clone command was corrupted by simultaneous input; shell reported command not found. No successful clone or PREVIEW2095_DIRECTORY marker was observed. No candidate environment path is verified.",
-    "missing_runtime": "Old ready.json Node path does not exist. Existing pinned cache Node reports v22.23.2.",
+    "candidate_source_prepared": true,
+    "source_preparation_attempt": "Independent clone and remote fetch succeeded; exact HEAD and tree verified; tracked-clean; no backend .env copied.",
+    "missing_runtime": "Both previously recorded Node paths are now absent. Candidate-owned pinned toolchain bootstrap started under a separate task XDG cache; completion pending.",
     "local_backend_routing": {
       "live": {
         "status": 200,
@@ -86,18 +86,20 @@
         "status": 401,
         "mime": "application/json"
       }
-    }
+    },
+    "candidate_source_directory": "/tmp/mezan-pr2095-preview-20261125/source",
+    "existing_backend_isolation": "Inspected private launcher: loopback-only database, separate Preview session signing, preserved roles/password/attempt guards, external network blocked and automatic startup workers disabled. October backend compatibility with current accounting remains unverified. Existing backend/P01 data unchanged."
   },
   "shared_release": {
-    "guard_active_observed": true,
-    "owner": "chatgpt-operational-cost-report-20261124-pr2118",
-    "deployment_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
-    "owner_state": "PR2118 reports platform publication completed at 23:41 Riyadh and its owner started original verification at 20:42:16.797387 UTC. Latest PR observation still has verification and inactive status pending. Do not take over this release.",
+    "guard_active_observed": false,
+    "owner": null,
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "owner_state": "Historical PR2118 and PR2123 leases closed by their owners. Fresh unchanged original guard status returned active:false; /app tracked-clean.",
     "this_task_prepared": false,
     "this_task_merged": false,
     "this_task_published": false,
     "production_changed_by_this_task": false,
-    "latest_guard_probe": "Reviewed preflight status subprocess timed out after 8 seconds; not evidence of inactivity. The earlier direct active lease remains the last successful original-guard observation."
+    "latest_guard_probe": "2026-11-25 independent terminal: original status exit0 active:false, HEAD6323017fbf9ba160c536a94f408507435786412a."
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
@@ -107,7 +109,14 @@
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Obtain exclusive keyboard control of the authenticated code-server terminal, or have the owner authenticate the independent browser. First inspect owned terminal outcome and original guard state; do not blindly retry corrupted input. Complete isolated candidate preparation and private backend isolation review, then run exact candidate Preview and measure real cold/warm route-interactivity p50/p95. Shared service changes wait for the other release owner to finish verification and close its own lease.",
-  "continuity": "Issue1006 has 2500 comments and current task documents report its comment limit. Preserve this evidence branch and link the exact checkpoint from Issue2094 and PR2095. Do not overwrite unrelated ledger sections.",
-  "evidence_branch_is_deployable": false
+  "next_safe_action": "Finish candidate-owned pinned toolchain and frozen dependencies; verify genuine isolated dataset sufficiency and current accounting API using existing Preview authentication. Serve exact candidate with private diagnostic overlay only if needed, measure cold/warm route URL/interactivity/long tasks and pending reads. No source merge or Production publication is authorized by this resumption.",
+  "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
+  "evidence_branch_is_deployable": false,
+  "history": [
+    {
+      "checkpoint": "cfadf54f9a590d66ec126cf64e1b67374fc3b612",
+      "state": "draft_ci_green_blocked_on_exclusive_host_control",
+      "notes": "Historical shared native input collision and PR2118 lease blocker retained in prior immutable checkpoint."
+    }
+  ]
 }
