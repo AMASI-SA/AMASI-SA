@@ -1,14 +1,14 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25T16:32:31.506Z",
-  "phase": "E15_SAVED_PRODUCT_COST_TIMEOUT_DISPLAY_CONFIRMED_LEASE_CLOSED",
+  "recorded_at": "2026-11-25 17:02:52 UTC",
+  "phase": "E16_SHIPPING_RECOGNITION_TIMING_AND_LEDGER_BOUNDARY_DIAGNOSED",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
   "source_base_J": "6323017fbf9ba160c536a94f408507435786412a",
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
-  "previous_checkpoint": "6c2a472f11da1a06fe1e0b9bfb2bd8c0710f026e",
+  "previous_checkpoint": "eae5913fba994231e5e6a8d81e9dbb005e7bf656",
   "pr": 2126,
   "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "diff": {
@@ -445,9 +445,9 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "PR2126 publication and original own-lease closure are complete. A subsequent scheduled calculation saved and its private receipt comparison passed. The saved summary explicitly reports a source-read timeout for product cost; stage timings strongly support shared25-second profit-budget exhaustion while supplier work was active. The raw products-versus-context key and specific inner supplier query remain unobserved. Select a further behavior-preserving performance patch only with distinguishing inner-phase/cohort evidence; preserve owner/date/version checks, financial evidence, cancellation and current timeout limits. Do not reopen, republish or abort this completed release or touch other conversations' leases/work. Current private report and receipt chain document the financial result independently.",
+  "next_safe_action": "Explain the operational statement/GL distinction, batch-recognition timing, and specific pending-evidence reasons to the owner. If implementing immediate event recognition, preserve bounded execution, existing owner/date/contract/identity checks, atomicity and exactly-once payment allocation; do not enable a separate GL writer or duplicate existing fees blindly. The earlier measured product-cost timeout remains open and is not the cause assigned to missing carrier fees. Prior performance continuation: PR2126 publication and original own-lease closure are complete. A subsequent scheduled calculation saved and its private receipt comparison passed. The saved summary explicitly reports a source-read timeout for product cost; stage timings strongly support shared25-second profit-budget exhaustion while supplier work was active. The raw products-versus-context key and specific inner supplier query remain unobserved. Select a further behavior-preserving performance patch only with distinguishing inner-phase/cohort evidence; preserve owner/date/version checks, financial evidence, cancellation and current timeout limits. Do not reopen, republish or abort this completed release or touch other conversations' leases/work. Current private report and receipt chain document the financial result independently.",
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "previous_evidence_commit": "6c2a472f11da1a06fe1e0b9bfb2bd8c0710f026e",
+  "previous_evidence_commit": "eae5913fba994231e5e6a8d81e9dbb005e7bf656",
   "previous_A_CI": {
     "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
     "known_failed_runs": [
@@ -1526,5 +1526,12 @@
       "private_financial_values_included": false
     },
     "ui_timeout_reason_confirmed": true
+  },
+  "shipping_recognition_followup": {
+    "evidence_file": "shipping-recognition-readonly-diagnosis.json",
+    "read_only": true,
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "source_files_verified": 12,
+    "production_changed": false
   }
 }

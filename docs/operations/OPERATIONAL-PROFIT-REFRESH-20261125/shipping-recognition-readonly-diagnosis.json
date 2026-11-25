@@ -1,0 +1,107 @@
+{
+  "schema": "mezan_shipping_recognition_readonly_diagnosis_v1",
+  "recorded_at_utc": "2026-11-25 17:02:52 UTC",
+  "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
+  "scope": "Read-only follow-up: why delivered carrier fees and prepaid shipping payments do not appear immediately as accounting journal entries.",
+  "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "source_binding": {
+    "method": "Root SHA256 comparison of the listed local source files against the retained PR2126 A2 candidate backend manifest; all twelve matched.",
+    "checkout_limit": "The local checkout is not a clean A2 checkout. Only explicitly matched file bytes are attributed to A2.",
+    "files": [
+      "backend/operational_balance_engine.py",
+      "backend/operational_balance_store.py",
+      "backend/operational_balance_workspace.py",
+      "backend/operational_prepaid_shipping.py",
+      "backend/operational_historical_shipping_fee.py",
+      "backend/operational_balance_service.py",
+      "backend/operational_balance_automation.py",
+      "backend/salla_integration/webhook_order_sync.py",
+      "backend/accounting_shipping_native.py",
+      "backend/store_delivery_accounting.py",
+      "backend/financial_provider_apps.py",
+      "backend/accounting_ledger_v2.py"
+    ],
+    "last_public_runtime_identity_observation_utc": "2026-11-25T16:19:34.477115+00:00",
+    "fresh_runtime_identity_query_during_shipping_diagnosis": false
+  },
+  "findings": [
+    {
+      "id": "operational_recognition",
+      "finding": "Ordinary confirmed shipping fees are operational obligations. ledger_items derives a per-source row for the party statement; this is not itself a debit/credit GL journal.",
+      "references": [
+        "backend/operational_balance_engine.py::put",
+        "backend/operational_balance_workspace.py::ledger_items",
+        "backend/operational_balance_store.py::mutate"
+      ]
+    },
+    {
+      "id": "prepaid_pair",
+      "finding": "An eligible prepaid shipping event creates a confirmed obligation plus a fully allocated outgoing payment movement from the configured cash/wallet account and an audit event in one owner aggregate. Stable order-based identities prevent repeat charging on replay. The helper neither invokes an external wallet debit nor writes GL.",
+      "references": [
+        "backend/operational_prepaid_shipping.py::apply_events"
+      ]
+    },
+    {
+      "id": "recognition_timing",
+      "finding": "Verified order/shipment webhooks save source status and original transition evidence. The reviewed handler does not directly call operational refresh. Operational fee/payment recognition occurs in the following refresh/reconcile. The enabled automation schedules its next successful cycle 7200 seconds after finishing; failure scheduling differs. A separate native accounting observer exists; this timing finding is specific to the operational balance path.",
+      "references": [
+        "backend/salla_integration/webhook_order_sync.py::sync_order_from_verified_webhook",
+        "backend/operational_balance_automation.py::run_owner",
+        "backend/operational_balance_automation.py::_finish_setting",
+        "backend/operational_balance_service.py::refresh"
+      ]
+    },
+    {
+      "id": "pending_evidence",
+      "finding": "New fees or prepaid charge/payment pairs can remain pending for missing original event dates, ambiguous shipment identity/tariff, or pre-existing charge/payment allocations. Historical native postings and settlements are checked before allowing a potentially overlapping operational obligation.",
+      "references": [
+        "backend/operational_balance_engine.py::reconcile",
+        "backend/operational_prepaid_shipping.py::apply_events",
+        "backend/operational_historical_shipping_fee.py::review",
+        "backend/operational_historical_shipping_fee.py::native_conflicts"
+      ]
+    },
+    {
+      "id": "separate_gl",
+      "finding": "Native shipping GL posting does exist as a separate route, requiring an allowed V2 writer and explicit shipping-phase activation. Operational active_gate refuses new operational writes when the accounting backend/cutover is active. Connecting a second writer is not a missing one-line call and requires avoiding duplicate recognition and settlement.",
+      "references": [
+        "backend/accounting_shipping_native.py::_gate",
+        "backend/accounting_shipping_native.py::accrue_fee",
+        "backend/store_delivery_accounting.py::_store_delivery_financial_gate",
+        "backend/operational_balance_service.py::accounting_inactive",
+        "backend/financial_provider_apps.py"
+      ]
+    },
+    {
+      "id": "independent_cod",
+      "finding": "A carrier fee and proof of collecting the customer's order value are distinct source components. Basic shipping charges must not be described as absent merely because COD collection is unproved. The saved profit product-cost timeout is also a separate issue.",
+      "references": [
+        "backend/operational_balance_engine.py::reconcile"
+      ]
+    }
+  ],
+  "private_live_observation": {
+    "source_url": "https://mezansalla.com/operational-balances/financial-position?view=couriers",
+    "observed_at_utc": "2026-11-25T16:50:45.730Z",
+    "mode": "Authenticated rendered UI, read only",
+    "result": "Confirmed carrier fees and a fully paid prepaid-wallet example were visible. Pending reasons included original execution time, unique waybill matching, and previous payment/reconciliation allocations.",
+    "exclusions": "No order identifiers, customer data, financial values, raw DOM or screenshots are included in this Git evidence.",
+    "financial_write": false,
+    "source_sync": false,
+    "manual_refresh": false
+  },
+  "limitations": [
+    "Production general-ledger rows and the owner's current accounting phase flags were not queried; this is not proof that GL contains no shipping journals.",
+    "The compact recovery receipt is an additions/changes slice, not the full carrier ledger; its record counts cannot be equated with delivery counts.",
+    "Fee-counted orders, delivery-proof orders and pending review orders describe different cohorts. Pending reasons may overlap and may coexist with already confirmed amounts.",
+    "No runtime fix, accounting activation, migration, backfill, source sync, manual calculation, payment or new publication was performed in this follow-up.",
+    "Existing tests were inspected but not rerun for this read-only source diagnosis; no new test execution is claimed."
+  ],
+  "validation": {
+    "root_manifest_comparison": "PASS: 12 matched source files",
+    "independent_source_reviews": 2,
+    "production_changed_by_followup": false
+  },
+  "next_safe_action": "Explain the operational statement/GL distinction, batch-recognition timing, and specific pending-evidence reasons to the owner. If implementing immediate event recognition, preserve bounded execution, existing owner/date/contract/identity checks, atomicity and exactly-once payment allocation; do not enable a separate GL writer or duplicate existing fees blindly. The earlier measured product-cost timeout remains open and is not the cause assigned to missing carrier fees.",
+  "prior_checkpoint": "eae5913fba994231e5e6a8d81e9dbb005e7bf656"
+}
