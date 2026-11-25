@@ -169,3 +169,37 @@ PR and evidence:
 - https://github.com/AMASI-SA/AMASI-SA/pull/2130
 - https://github.com/AMASI-SA/AMASI-SA/actions/runs/45678365557
 - https://github.com/AMASI-SA/AMASI-SA/actions/runs/45678365247
+
+
+## Verified functional publication and performance handoff — 2026-11-25 23:09 Riyadh
+
+The preceding pending-publication checkpoint is superseded. Original publication
+version `04fc573` finished at 22:51 Riyadh, and the original v5 verifier exited
+0 at 2026-11-25T20:09:23.113722+00:00. It matched all identities in three consecutive
+probes, with 770 public frontend requests per probe, and automatically closed
+the matching lease. The sanitized proof subset is stored in
+`verification/initial-production-proof.json`; the complete original proof
+remains in the task's /app/.git stage. **Production changed: yes, verified.**
+
+The merchant then required avoiding extra load. Independent review identified
+and fixed two costs: empty evidence-stage authorization/lease/thread overhead,
+and repeated split-payment conflict-set construction. The combined source
+passed 63 focused tests; constituent affected suites passed 175 and 268 tests.
+The review found no new recurring job, polling or source fetch introduced by
+these optimizations. Preexisting memory pressure is not claimed resolved.
+
+The next performance release is frozen in PR #2131:
+- Branch: `codex/operational-payment-performance-20261125`.
+- Base: `17a0c8c58a71962d1733e7888eeac31d20bc40c0`.
+- Source A2: `164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa`.
+- Intent-only B2: `514bd0d15b08a48353ab4566c1b243d1279e792b`.
+- B2 tree: `4d56be96f39b4e15db172a61cb5ae96a9190d649`.
+- Release: `rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7`.
+- Candidate A2 readiness: 45690834626; final B2 readiness: 45691509189.
+
+Both original candidate and reviewed-B validators passed in clean checkouts.
+Final B2 full contract tests are still being collected. No performance-release
+merge, shared source mutation, lease preparation or publication has happened.
+Next: finish exact-B2 gates, verify fresh original shared guard/ref/foreign-file
+state, merge without squash/rebase and publish using a fresh matching v5 lease.
+Never reuse the first release's intent or manually clear an unrelated lease.

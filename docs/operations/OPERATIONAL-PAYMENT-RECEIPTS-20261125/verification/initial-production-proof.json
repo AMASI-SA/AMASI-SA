@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "checks": 3,
+  "source_git_sha": "ca426cee9e4ed4fa730dece2409f916003249f83",
+  "deployment_git_sha": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+  "release_id": "rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7",
+  "boot_started_at": "2026-11-25T19:50:36.432107+00:00",
+  "frontend_artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+  "checked_requests_per_probe": 770,
+  "guard_active": false,
+  "verified_at": "2026-11-25T20:09:23.113722+00:00",
+  "proof_sha256": "f072102b5733d6259b36c810d6817ffabc8c9103f4d76fb76fce9463fd4cd31c",
+  "platform_version": "04fc573",
+  "platform_finished_at_riyadh": "2026-11-25 22:51"
+}
