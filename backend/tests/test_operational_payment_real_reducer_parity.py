@@ -56,9 +56,17 @@ def run_actual_reconcile(snapshot, source, clock):
     # no fee calculation, history policy, or core reducer is mocked.
     bnpl_package = types.ModuleType("bnpl")
     bnpl_package.__path__ = [str(Path(__file__).resolve().parents[1] / "bnpl")]
+    # Similarly, salla_integration.__init__ registers API routes and imports
+    # customer-identity cryptography. The financial reducer only needs its
+    # genuine store_scope and other pure source modules, not the HTTP router.
+    salla_package = types.ModuleType("salla_integration")
+    salla_package.__path__ = [
+        str(Path(__file__).resolve().parents[1] / "salla_integration")
+    ]
     with patch.dict(sys.modules,{
         "operational_demand_refresh":runtime,
         "bnpl":bnpl_package,
+        "salla_integration":salla_package,
     }):
         spec=importlib.util.spec_from_file_location(
             "operational_balance_engine_isolated",
