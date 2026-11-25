@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:39:59.281Z",
+  "recorded_at": "2026-11-25T00:41:59.944Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "PR2123 original prepare exit0 after independently PASS host rehearsal. Exact ownlease prepared2026-11-25T00:37:19.949259UTC, preserved complete original bytes/stdout. Not yetpublished; originalprepublish must runimmediatelybeforeoneplatformPublishchanges.",
+  "status": "PR2123 authorized one platform Publishchanges submitted2026-11-25T00:40:36.771UTC after originalprepublishPASS at00:40:28.691072UTC. PlatformPublishing/PreparingEnvironment observed; completion/liveidentityunverified. Ownpreparedlease remains fororiginalverification.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -250,7 +250,7 @@
     "A2_to_D_only_intent": true
   },
   "intent": "Frozen original A2 candidate1531177bytes/blob57815f976f9bd6ed711024568f0acfa2d79bfcf6 into intent-only B, soleparentA2; no squash/rebase allowed.",
-  "production_changed_by_this_candidate": false,
+  "production_changed_by_this_candidate": "PUBLICATION_SUBMITTED_COMPLETION_UNVERIFIED",
   "preceding_release": {
     "pr": 2120,
     "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
@@ -301,7 +301,7 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Run unchangedoriginalprepublishandrequirematchingPASS, thenoneauthorizedfreePublishchanges inalreadyopenManageconfirmation. Preservenewerprovidercompletion. Finalverifywrapperrequiresnarrowindependentreviewandactualnewpublicationcompletionbeforeoriginalverify3andstatus; noabortmanualclearorreprepare.",
+  "next_safe_action": "Observecurrentpublicationwithoutresubmitting. Afternewerexplicitcompletion,downloadhash-pinnedfinalverifywrapperfromevidencecommit,createoneprivate/tmp/mezan-pr2123-verify-stage,copyexactpreparedlease,launchoriginalverifyonceandthenoriginalstatus. Neverprepareagainoraborthandclear.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -557,7 +557,7 @@
     ]
   },
   "publication": {
-    "state": "PREPARED_NOT_PUBLISHED",
+    "state": "SUBMITTED_PLATFORM_PUBLISHING",
     "platform_baseline": {
       "version": "7191418",
       "ordinal": 100
@@ -585,6 +585,48 @@
         "sha256": "13414f495ccb2f1266c02669ab1834a02d9790f5fa8e2c640aed4978b8286fff",
         "blob": "ded3961dc6aafcab7dddd5310c5ccb38642967c8"
       }
+    },
+    "submitted_at": "2026-11-25T00:40:36.771Z",
+    "submit_count": 1,
+    "cost_confirmation": "Free republishes",
+    "observed_after_submit": [
+      "Publishing...",
+      "Preparing Environment • 1s Show details"
+    ],
+    "prepublish": {
+      "started_at": "2026-11-25T00:40:24.870080+00:00",
+      "lease_sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d",
+      "command": [
+        "/usr/local/bin/python",
+        "-B",
+        "scripts/production_release_guard.py",
+        "prepublish"
+      ],
+      "finished_at": "2026-11-25T00:40:28.691072+00:00",
+      "exit_code": 0,
+      "stdout": {
+        "bytes": 333,
+        "sha256": "1bba5690b67e1557d5d165010cb48143ab96275afb85a319a437b3aa93dc2428"
+      },
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "result": {
+        "ready_to_publish": true,
+        "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+        "git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+        "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+        "protocol_version": 5
+      },
+      "status": "PASS",
+      "archive": {
+        "path": "PR2123-PREPUBLISH.zip",
+        "bytes": 1474,
+        "sha256": "2609edeb47dc55a0288de057560c715a7d695cd2736ee36c78cca58a8850013a",
+        "blob": "14b7f09be9b70988ce24e97908e48ccd42897e88"
+      }
     }
   },
   "postpublish_capture_final": {
@@ -592,8 +634,14 @@
     "bytes": 6675,
     "sha256": "d98db50bdc3059e8483bb9427ce53a6a95931be3279b5c34bfc3eba1cb8d1206",
     "limited_diff": "pr2123-original-verify-finalization.diff",
-    "state": "BOUND_PENDING_INDEPENDENT_LIMITED_REVIEW",
+    "state": "BOUND_INDEPENDENT_REVIEW_PASS_NOT_INVOKED",
     "required_stage_prefix": "/tmp/mezan-pr2123-verify-",
-    "invoked": false
+    "invoked": false,
+    "independent_review": {
+      "file": "pr2123-original-verify-final-independent-review.json",
+      "sha256": "f15d14185f72b9f441139592e7f68be6d91cc16021ba95b6196a6a09db77ac6c",
+      "bytes": 6164,
+      "result": "PASS"
+    }
   }
 }

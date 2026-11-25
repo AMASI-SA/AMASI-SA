@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-11-25T00:41:15.454221+00:00",
+  "reviewer": "code_review",
+  "result": "PASS_STATIC_FINAL_BINDING_NO_CODE_BLOCKER_PUBLICATION_PENDING",
+  "scope": "Narrow independent final binding review against reviewed DRAFT and downloaded original prepare evidence; no original guard or operator re-review, test rerun, import, execution, host or API access.",
+  "target": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify.py",
+    "bytes": 6675,
+    "sha256": "d98db50bdc3059e8483bb9427ce53a6a95931be3279b5c34bfc3eba1cb8d1206",
+    "git_blob": "12b33227940d1bed5a7209562d99dbacf5f1f465"
+  },
+  "references": [
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-DRAFT.py",
+      "bytes": 6628,
+      "sha256": "87b04f5be1b00ed648ab636d56661b39875cd49e6c9005b6e8c4ee4b26723b10",
+      "git_blob": "4d1d66e2ccf256df55b9b9cde9e65ae05a0b5cc4"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-DRAFT-independent-review.json",
+      "bytes": 7997,
+      "sha256": "992e39928085eedf34b836cb1d9201d0beda074a9c71bacfbb024825806fc75e",
+      "git_blob": "79b9b1ba62e76eed6241e34137cd4e36f4227d53"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-finalization.diff",
+      "bytes": 900,
+      "sha256": "5c15e8b382c9da5b7bdb6e9572a813bf642de5d538730352ab5ab7baa5d26bab",
+      "git_blob": "86dd7c88d780c49d29102f90f8be26c7768a99fe"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-finalization-review.json",
+      "bytes": 4120,
+      "sha256": "e3d479a23b76e474901d0e1d43564f4a655383bd82548904da89c7c5444a643d",
+      "git_blob": "18a5d4aac49879af27e42aa3212ef84ed4dc8546"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/PR2123-PREPARE.zip",
+      "bytes": 410774,
+      "sha256": "13414f495ccb2f1266c02669ab1834a02d9790f5fa8e2c640aed4978b8286fff",
+      "git_blob": "ded3961dc6aafcab7dddd5310c5ccb38642967c8"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-prepare/receipt.json",
+      "bytes": 2270,
+      "sha256": "83540e21f426c6d31b624f9849d55e6bb583f470e10fa28c62ba5f2d538394a5",
+      "git_blob": "0b950fdb3d48fb712defd1020544d667f23ed78a"
+    }
+  ],
+  "limited_diff": {
+    "saved_diff_exact": true,
+    "only_changes": [
+      "module docstring",
+      "LEASE_SHA256 literal",
+      "PREPARED_AT literal"
+    ],
+    "complete_text_reconstruction_exact": true,
+    "full_AST_after_only_three_normalizations_exact": true,
+    "all_functions_AST_unchanged": true,
+    "function_names": [
+      "now",
+      "save",
+      "capture"
+    ],
+    "historical_draft_and_independent_review_unchanged": true
+  },
+  "actual_lease": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-prepare/original-lease-before.json",
+    "bytes": 668216,
+    "sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d",
+    "matches_final_LEASE_SHA256": true,
+    "archive_entry_matches_extracted_raw_bytes": true,
+    "original_prepare_stdout_matches_raw_bytes": true,
+    "prepared_at": "2026-11-25T00:37:19.949259+00:00",
+    "matches_final_PREPARED_AT": true,
+    "fixed_identity": {
+      "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+      "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+      "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+      "protocol_version": 5
+    },
+    "all_fixed_identity_fields_match_final": true
+  },
+  "original_prepare_receipt": {
+    "status": "PREPARED_NOT_PUBLISHED",
+    "published": false,
+    "original_status_before_exit_code": 0,
+    "original_prepare_exit_code": 0,
+    "original_prepare_stderr_bytes": 0,
+    "started_at": "2026-11-25T00:37:18.007790+00:00",
+    "finished_at": "2026-11-25T00:37:21.078112+00:00",
+    "approved_evidence_commit": "dba035cedf2f4e5efa268b4fec906f37f06deef0"
+  },
+  "frontend_expected_from_actual_lease": {
+    "top_level_alias_equals_runtime_identity_frontend": true,
+    "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+    "public_files_count": 381,
+    "unique_request_paths_count": 384,
+    "frontend_checked_requests_count_per_observation": 770,
+    "original_verify_observations": 3,
+    "reason": "Original guard returns checked_requests from observation0. The final wrapper preserves the reviewed dynamic derivation; count is not multiplied by three."
+  },
+  "preserved_contract": {
+    "actor_A_J_D_RID_B_and_guard_pin_unchanged": true,
+    "verify_once_then_status_once_after_matching_success": true,
+    "no_prepare_abort_publish_manual_clear_or_retry": true,
+    "original_guard_owns_verification_mutex_and_lease_closure": true,
+    "no_source_or_financial_write_added": true,
+    "fresh_private_stage_required": "/tmp/mezan-pr2123-verify-*; real directory, current euid, mode0700, exact original-lease-before.json, no existing receipt.json",
+    "existing_release_preparation_stage_is_rejected_by_unchanged_prefix_check": true
+  },
+  "blockers": [],
+  "remaining_execution_conditions": [
+    "Root completes original prepublish and the authorized platform publication before invoking verification.",
+    "Use a new /tmp/mezan-pr2123-verify-* stage; do not reuse the original preparation stage. Preserve exact raw original lease there.",
+    "Invoke the finalized wrapper once without Python optimization; retain original verify and status results. This static PASS is not publication, live verification, or lease closure."
+  ],
+  "actions": {
+    "source_edits": false,
+    "target_import": false,
+    "target_execution": false,
+    "original_guard_execution": false,
+    "tests": false,
+    "host_access": false,
+    "API_calls": false,
+    "browser": false,
+    "external_writes": false,
+    "local_write": "this new review JSON only"
+  }
+}
