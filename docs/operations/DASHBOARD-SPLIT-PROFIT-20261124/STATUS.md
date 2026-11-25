@@ -877,3 +877,34 @@ The active lease belongs to the existing successor actor. Do not reuse, clear or
 
 The original first attempt remains **BLOCKED**. The interrupted bounded recovery's last observed state remains **RUNNING** and its final outcome remains **UNKNOWN**. Historical final foreign continuity remains **not proved**. The successor source review changes none of those earlier outcomes. E14 host2 remains **NOT STAGED / NOT RUN**; this task's own lease and publication remain **none**. No new rebuild, business-data write or live dashboard acceptance is claimed by E15. Private business values, customer records, full foreign inventories, backup bodies, bytecode and environment values are excluded.
 
+
+## E16 — Successor published and original verification passed; dashboard acceptance remains incomplete
+
+This section appends to the complete E15 STATUS byte prefix from evidence commit `7aed513cf0304f69299e4eb87e1eb20a9b3fafde`, tree `d767844261ea2428527863513cffe351f63fc437`. Root supplied the later observations below. This local packaging operation performed no host, browser or Git action.
+
+### Successor adoption and owner verification
+
+The existing PR2130 owner performed one publication beginning at approximately 19:39 UTC on 2026-11-25 and finishing at approximately 19:51 UTC. Emergent displayed version `04fc573` with a finish label of Nov25 10:51 PM Riyadh. This dashboard task created no lease and performed no republication.
+
+At 20:08:55 UTC, public `/api/health` reported successor source `ca426cee9e4ed4fa730dece2409f916003249f83` and release ID `rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7`. The identity-availability, critical-file-hash, frontend-build and backend-runtime-source verification flags were all true. Its reported boot timestamp was 19:51:07.124061 UTC.
+
+The owner's original three-round guard verification started at 19:52:11.526117 UTC and was observed complete by approximately 20:11 UTC with exit 0, `verified: true` and `checks: 3`. At 20:15:04.270475 UTC, root read the original `/app/.git/payment-release-2130-93cbedb6/guard-verify.json`: 43131 bytes, SHA256 `f072102b5733d6259b36c810d6817ffabc8c9103f4d76fb76fce9463fd4cd31c`. Its selected scalars identify deployment `17a0c8c58a71962d1733e7888eeac31d20bc40c0`, source `ca426cee9e4ed4fa730dece2409f916003249f83`, the same successor release ID, and frontend tree SHA256 `76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a`. The owner receipt records `guard_verify_exit_code: 0` and the identical verifier-file SHA256. The original release protocol was unchanged.
+
+The original verifier independently reported `boot_started_at` 19:50:36.432107 UTC. This and the public-health boot timestamp remain separate observations; neither is substituted for the other and no common timestamp or cause for their difference is inferred. The full original verifier and owner receipt are not exported into this public packet.
+
+After completed verification, root's original guard status returned exit 0 and `active: false`; the lease file was absent at approximately 20:15 UTC. The successor owner's lease lifecycle therefore reached an observed inactive state. This task did not reuse or clear that lease.
+
+The E15 immutable review already proved exact retention of all 11 PR2129 source/status paths and nine release protocol/control paths in this successor. Its source-continuity conclusion remains valid. The new production observations establish adoption and original protocol verification for that successor; they do not establish the user's requested dashboard result.
+
+### Live Nov24 acceptance is still incomplete
+
+After reloading the live dashboard, explicitly selecting 2026-11-24 through 2026-11-24 and using the normal demand-refresh flow, root still observed incomplete net profit. The displayed reason was a generic payment-fee hint rather than a split-payment-specific hint. Mada and card rows remained incomplete while other payment methods displayed numeric values. Saved tariffs appeared present, but that observation does not establish their correctness, matching or coverage. The exact remaining cause is under investigation. No private amounts, business counts, tariff values or customer records are included here.
+
+The requested repair is **not complete**. Continue diagnosis of the remaining generic payment-fee incompleteness against the verified successor runtime. A successful publication and original three-round verifier result must not be reported as successful Nov24 dashboard acceptance.
+
+### Earlier attempt outcomes remain unchanged
+
+The original first host attempt remains **BLOCKED**. The interrupted bounded recovery's last observation remains **RUNNING** and its final outcome remains **UNKNOWN**; historical final foreign continuity is **not proved**. E14 host2 remains **NOT STAGED / NOT RUN**, and its stale prior-D operators must not execute over the successor. No historical recovery PASS, new rebuild, own lease, republication or business-data mutation is asserted by this checkpoint.
+
+Evidence: `checkpoints/E16-observation.json` contains the compact attributed public observations and verifier fingerprint. E16 records **successor publication complete, original verification PASS, guard inactive, live dashboard acceptance INCOMPLETE**.
+

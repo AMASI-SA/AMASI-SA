@@ -1,0 +1,111 @@
+{
+  "attribution": "Root supplied the publication, public health, original verifier, lease and live-dashboard observations. This packaging agent performed local file reads and writes only; it did not access the host, browser or GitHub.",
+  "boot_timestamp_handling": "Public health and the original verifier independently reported the two boot timestamps recorded in their own sections. Neither is substituted for the other; this checkpoint does not infer a common timestamp or a cause for their difference.",
+  "checkpoint": "E16",
+  "classification": "PUBLIC_COMPACT_OBSERVATIONS",
+  "historical_outcomes_unchanged": {
+    "bounded_recovery_final": "UNKNOWN",
+    "bounded_recovery_last_seen": "RUNNING",
+    "e14_host2": "NOT_STAGED_NOT_RUN",
+    "historical_final_foreign_continuity_proved": false,
+    "original_first_attempt": "BLOCKED",
+    "stale_e14_inputs_executed": false
+  },
+  "lease_closure": {
+    "foreign_lease_reused_or_cleared_by_this_task": false,
+    "lease_file_absent_at_utc_approximate": "2026-11-25T20:15:00Z",
+    "observation_source": "Root original-guard status after completed verification and subsequent read-only lease-file check.",
+    "original_guard_status_after_verification_active": false,
+    "original_guard_status_after_verification_exit_code": 0,
+    "own_lease_created": false
+  },
+  "limits": [
+    "This public record is a compact attributed transcription, not the full original verifier or owner receipt.",
+    "No private amounts, business counts, tariff values, customer data, raw inventories, environment values or backup contents are included.",
+    "The original three-round production verification passed; the requested dashboard outcome remains incomplete and its exact remaining cause is not established.",
+    "This packaging operation performs no Git, host, browser, guard, lease, build, publication or business-data action."
+  ],
+  "live_dashboard_acceptance": {
+    "card_rows": "INCOMPLETE",
+    "mada_rows": "INCOMPLETE",
+    "net_profit": "INCOMPLETE",
+    "normal_ui_actions_observed": [
+      "reload",
+      "explicit date selection",
+      "normal demand refresh"
+    ],
+    "observation_source": "Root refreshed live dashboard after successor publication. Exact dashboard observation timestamp was not supplied in the handoff.",
+    "other_payment_methods": "NUMERIC_VALUES_PRESENT; VALUES_OMITTED",
+    "payment_fee_hint": "GENERIC_PAYMENT_FEES; NOT_SPLIT_SPECIFIC",
+    "remaining_cause": "UNDER_INVESTIGATION",
+    "requested_date_from": "2026-11-24",
+    "requested_date_to": "2026-11-24",
+    "saved_tariffs_observation": "Appear present; values omitted. This does not establish correctness, matching or coverage.",
+    "status": "INCOMPLETE",
+    "user_goal_complete": false
+  },
+  "next": "Continue diagnosis of the generic payment-fee incompleteness on the verified successor runtime. Keep source deployment completion distinct from live Nov24 business acceptance. Do not execute stale E14 inputs or claim the interrupted recovery passed.",
+  "original_owner_verification": {
+    "boot_started_at_reported_utc": "2026-11-25T19:50:36.432107Z",
+    "checks": 3,
+    "completion_observed_by_utc_approximate": "2026-11-25T20:11:00Z",
+    "deployment_git_sha": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "exit_code": 0,
+    "frontend_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+    "observation_source": "Root read the original owner verifier JSON and its receipt. Only the selected public scalars and record fingerprint are transcribed here.",
+    "original_record_bytes": 43131,
+    "original_record_path": "/app/.git/payment-release-2130-93cbedb6/guard-verify.json",
+    "original_record_sha256": "f072102b5733d6259b36c810d6817ffabc8c9103f4d76fb76fce9463fd4cd31c",
+    "original_release_protocol_unchanged": true,
+    "owner_receipt_guard_verify_exit_code": 0,
+    "owner_receipt_verify_sha256": "f072102b5733d6259b36c810d6817ffabc8c9103f4d76fb76fce9463fd4cd31c",
+    "raw_record_exported": false,
+    "release_id": "rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7",
+    "root_read_at_utc": "2026-11-25T20:15:04.270475Z",
+    "source_git_sha": "ca426cee9e4ed4fa730dece2409f916003249f83",
+    "started_at_utc": "2026-11-25T19:52:11.526117Z",
+    "verified": true
+  },
+  "parent_evidence": {
+    "checkpoint": "E15",
+    "commit": "7aed513cf0304f69299e4eb87e1eb20a9b3fafde",
+    "tree": "d767844261ea2428527863513cffe351f63fc437"
+  },
+  "public_health": {
+    "backend_runtime_source_verified": true,
+    "boot_started_at_reported_utc": "2026-11-25T19:51:07.124061Z",
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "observation_source": "Root read-only public-health observation.",
+    "observed_at_utc": "2026-11-25T20:08:55Z",
+    "release_id": "rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7",
+    "source_git_sha": "ca426cee9e4ed4fa730dece2409f916003249f83",
+    "surface": "/api/health",
+    "verified_identity_available": true
+  },
+  "publication": {
+    "emergent_ui_finished_label": "Nov 25, 10:51 PM Riyadh",
+    "emergent_ui_version": "04fc573",
+    "finished_at_utc_approximate": "2026-11-25T19:51:00Z",
+    "observation_source": "Root-observed Emergent publication UI and successor owner handoff.",
+    "own_republication_performed": false,
+    "owner_publication_count_reported": 1,
+    "started_at_utc_approximate": "2026-11-25T19:39:00Z"
+  },
+  "schema_version": 1,
+  "status": "SUCCESSOR_PUBLISHED_AND_ORIGINAL_VERIFY_PASSED; DASHBOARD_ACCEPTANCE_INCOMPLETE",
+  "successor": {
+    "actor": "operational-payment-20261125",
+    "deployment_git_sha": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "intent_git_sha": "66ac128fd6c9c25b86f1e8cdb7c5ccb929310636",
+    "pr": 2130,
+    "release_id": "rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7",
+    "repository": "AMASI-SA/AMASI-SA",
+    "retained_pr2129_source_status_paths": 11,
+    "source_git_sha": "ca426cee9e4ed4fa730dece2409f916003249f83",
+    "source_retention_evidence": "checkpoints/E15-successor-readonly-review.json",
+    "source_retention_evidence_sha256": "b98fa82d012007774f242ae30247e37d9b003194c144280c848e3a8d93de9e00",
+    "source_retention_scope": "The prior immutable review established exact source/status blob, type and mode retention plus nine unchanged controls; it does not establish live business acceptance.",
+    "unchanged_release_protocol_control_paths": 9
+  }
+}
