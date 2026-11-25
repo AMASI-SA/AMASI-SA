@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "checkpoint": "E10",
+  "task": "DASHBOARD-SPLIT-PROFIT-20261124",
+  "created_at": "2026-11-25T16:41:55.237331+00:00",
+  "evidence_parent": "cc393bdd22db40ee49a4c9fbb010ade691d1642c",
+  "J": "30c970807c05e291e2f48b35c84155b271fb5f09",
+  "A": "0b39c456ea17d6e80f824f44b57563764441216c",
+  "B": "ebaae98290f25db5580d888601d236431961d104",
+  "B_tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8",
+  "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+  "B_checks": {
+    "total": 46,
+    "success": 36,
+    "conditional_skips": 10,
+    "pending_failed_neutral": 0
+  },
+  "B_CodeQL_both_languages_and_aggregate": "SUCCESS",
+  "readiness_run": 45653522820,
+  "readiness": "SUCCESS",
+  "original_B_intent_validator": "PASS",
+  "complete_raw_generated_output_review": "PASS",
+  "sanitized_adapter_evidence_review": "PASS_CI_ONLY",
+  "root_review": "Root read the independent reports, verified both ZIP and nested archive hashes/counts, audited exact-head checks directly and verified original B loader/lineage in a clean checkout.",
+  "raw_artifacts_retained": [
+    {
+      "file": "B-node20-outputs.zip",
+      "bytes": 3891188,
+      "sha256": "8369ff8bff298783d9a6bc4f08cb2c67361cd4c15f1a313a9aad49848ee6a169",
+      "artifact_id": 15041887785
+    },
+    {
+      "file": "B-node24-outputs.zip",
+      "bytes": 3888996,
+      "sha256": "4a9ceb46bc81d541b4a49c382e17cdf404f5e2685ae592fe899325a1a9925892",
+      "artifact_id": 15040469217
+    }
+  ],
+  "normalized_cross_host_payload": {
+    "regular_files": 387,
+    "directories": 6,
+    "all_file_bytes_equal": true,
+    "sha256": "37ff53c95a7a718fcc1a02250105f8f0aeaefb848fdb759d7bea180289218777"
+  },
+  "review_archive": {
+    "file": "E10-B-review-evidence.zip",
+    "bytes": 332707,
+    "sha256": "e8448526f7c33e2e10ec2676c242531e57e043a972a9e26d0b6f0471c323d541",
+    "members": 31
+  },
+  "members": [
+    {
+      "path": "pr2129-release/B-adapter-evidence/B-adapter-review.json",
+      "bytes": 21590,
+      "sha256": "cc594b1b0662034c7a890e8274fd838eeb0ea8f3d1aa9949242c25e7145d19e0"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/README.md",
+      "bytes": 7645,
+      "sha256": "463b44c260b0ca8905bb6857aa222ebdb3bfc5eebe7e7101b5b731a74f389d34"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/artifact-15040154284.zip",
+      "bytes": 63901,
+      "sha256": "f808d748f3d2a8f482b75465471b066efd31483dd5559341d107b58b8d93b344"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/artifact-15041094113.zip",
+      "bytes": 63895,
+      "sha256": "e7928afc354c96ece621435ae5eb13746459325f3657aad6a5d215a4088caaa0"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/download-verification.json",
+      "bytes": 2009,
+      "sha256": "425c5bc86bb57fcd203a1d94f848883e42d486e236ad4d091e7fb9efd8e9969b"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/github-metadata.json",
+      "bytes": 11193,
+      "sha256": "166ebd0fc72c80c84e292d6579ab9d4dc312d1674e4381989c734f3273eab00c"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/hash-manifest.json",
+      "bytes": 3633,
+      "sha256": "6ac9acf61bf7f263d78548f443b125a434eeebcf705d8bf2fa7c3bb05838e5c9"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/job-139344583335-excerpts.json",
+      "bytes": 24770,
+      "sha256": "f7dcf00443542ec4fdc88a0070b941cc8d8dd5aa1cc5dcf09ac9c0a8bc1ce97f"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/job-139344584458-excerpts.json",
+      "bytes": 24770,
+      "sha256": "bc00027797109033623def37e066997571c29a635e4c9707579b46ed01c5b15d"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/mezan-production-release-at-B.yml",
+      "bytes": 33985,
+      "sha256": "68ec9e4760b56a40d36aacc82f4ff3842b690d28b4c80b61e5b7164671f8306c"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node20/mezan-adapter-build-v5.log",
+      "bytes": 206830,
+      "sha256": "172d8487a3848868ce2b0c1942644a543f902898cfee20e316adb5aa17c237d0"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node20/mezan-adapter-environment-v5.json",
+      "bytes": 1102,
+      "sha256": "2c3021811950214d1d97c24fc70f55525e16823347bde302d43519e8c4366e32"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node20/mezan-governed-runtime.log",
+      "bytes": 522,
+      "sha256": "10fc8c9165671d782e9918b0c966352032e7a4faa3738e28687d67ff8df369c8"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node20/mezan-package-boundary-v5.json",
+      "bytes": 1278,
+      "sha256": "304b8eab5f7fa61532e65fec0e9577e552f835ce815ea3f2fc52922ba1958efc"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node24/mezan-adapter-build-v5.log",
+      "bytes": 206829,
+      "sha256": "aa85f6ee650d96df970cbc39837671e26165d620476e9b933a755737eba957e3"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node24/mezan-adapter-environment-v5.json",
+      "bytes": 1102,
+      "sha256": "483132a91c6d3409345aee66847e58d8347365361bc106947655f321e2b2a16c"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node24/mezan-governed-runtime.log",
+      "bytes": 518,
+      "sha256": "9ba0b8640deaab8a904bb584ba3b051b4bc7c0e392bf5b37557745edf327b9bd"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/node24/mezan-package-boundary-v5.json",
+      "bytes": 1278,
+      "sha256": "304b8eab5f7fa61532e65fec0e9577e552f835ce815ea3f2fc52922ba1958efc"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/source/emergent__emergent.yml",
+      "bytes": 198,
+      "sha256": "220110678d3e60aa9949392d81253d99093abca8309b399e1c3fd7c252fc675b"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/source/frontend__package.json",
+      "bytes": 4129,
+      "sha256": "718c01031cbe680b5febe01a061515d081d8b011f6ebe0b75670ecf09b53c50c"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/source/frontend__scripts__build-entry.cjs",
+      "bytes": 4166,
+      "sha256": "bde39d8a0c6c7870f566de331b35f3c1f1978e879bda0f3825985783da59f6a8"
+    },
+    {
+      "path": "pr2129-release/B-adapter-evidence/source/scripts__emergent_deployment_adapter.py",
+      "bytes": 73931,
+      "sha256": "2e09999684b329045af3cb15290e3bee3b615b8e1d9a378e903977ba9f1a8287"
+    },
+    {
+      "path": "pr2129-release/B-generated-outputs-independent-review.json",
+      "bytes": 6865,
+      "sha256": "a74deb7f3cd72694cf1c4fa5ad2d9c1d4a51bc6b41a8fa40b92ce550ff56cbd1"
+    },
+    {
+      "path": "pr2129-release/B-original-validator.json",
+      "bytes": 489,
+      "sha256": "99775dce8c028265287a28c5707acabec142868b94c0ba8b91db5969bc9a9e15"
+    },
+    {
+      "path": "pr2129-release/B-root-final-checks.json",
+      "bytes": 163016,
+      "sha256": "4e307bb0c8ff5dd0a3bde963c36a4f5c63814dd4038921c65f4efc61075c4221"
+    },
+    {
+      "path": "pr2129-release/predecessor-metadata-20261125T163505Z.json",
+      "bytes": 900,
+      "sha256": "b2f22fb41b47d75b1e3be828f7058c8a9520d60da7a5ef496f8ca002ed5f60ec"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-b4/b4-ci-monitor.json",
+      "bytes": 44246,
+      "sha256": "0c40567c8ee98cc868a2c1fd210e2c3739349a5fec685893e10a5002f022c661"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-b4/b4-ci-snapshot-20261125162835.json",
+      "bytes": 14914,
+      "sha256": "dcdecfb642c0a5e78af5cf8d104f5ea9d3e7b43b802f7c5f46091f0e38d7f6ba"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-b4/b4-ci-snapshot-20261125163127.json",
+      "bytes": 15812,
+      "sha256": "16b3298136f5bcf48d20bbb12016722f7c561368caefc47521488c08308040e4"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-b4/b4-ci-snapshot-20261125163346.json",
+      "bytes": 18957,
+      "sha256": "5d9fb999cab91300c945caba1fe098134f70ce680d7c6155f054aa39ae62ee36"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-b4/b4-ci-snapshot-20261125163613.json",
+      "bytes": 17857,
+      "sha256": "3639d600b2d9ba13161a6bfc119df9c57d71c5e0aca5c5ca38a57622f59f8651"
+    }
+  ],
+  "current_state": "PR2129 is ready for review and mergeable clean at exact B/J. Wait for PR2128 original successful verification and inactive closure before own normal merge.",
+  "production_changed_by_this_task": false,
+  "own_host_rehearsal": false,
+  "own_lease": false,
+  "own_publish": false,
+  "remaining": [
+    "Predecessor original verification closure",
+    "Normal merge preserves A/B and has exact B tree; inspect actual D checks",
+    "Fresh current-host envelope and original inactive-guard gate",
+    "Original actual clone/app rehearsals with preservation/capacity checks",
+    "Prepare/prepublish, one publish, explicit success, original 3 probes and inactive status",
+    "Nov24 dashboard demand-refresh live net-profit acceptance"
+  ],
+  "limits": [
+    "These ZIPs are archival copies on a dedicated evidence branch, never deployment inputs or tracked generated runtime paths.",
+    "CI localhost and package proofs do not establish actual Cloud Build topology, snapshot timing, placement or live publication.",
+    "A4 historical CodeQL failures remain in E9; current B independently passed both languages and aggregate."
+  ]
+}
