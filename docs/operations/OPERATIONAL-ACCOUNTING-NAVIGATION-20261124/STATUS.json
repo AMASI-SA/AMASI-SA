@@ -236,7 +236,16 @@
       "observed_persistent_free_after_own_cleanup_mib": 413,
       "working_partition_free_observed_mib": 260815,
       "changed_foreign_files": false,
-      "cleanup": "Only task-created generated node/yarn caches were removed; own source/tooling/receipts moved. All source/evidence remains git-backed. /var/tmp runtime still requires reconstruction after host reset."
+      "cleanup": "Only task-created generated node/yarn caches were removed; own source/tooling/receipts moved. All source/evidence remains git-backed. /var/tmp runtime still requires reconstruction after host reset.",
+      "foreign_status_correlation": "Foreign public record reports its initial Git status preflight failed for disk space at15:14:59Z during our own persistent-partition bootstrap; no original verify ran then. Our own cache cleanup restored413MiB, and foreign retry began15:16:47Z. No foreign files were deleted or reset."
+    },
+    "factory_preflight": {
+      "file": "preview-integration-tools/factory_preflight.py",
+      "sha256": "ed1a277d31ff028dbc13ec6d202c4a6561883265e9d9ad4113f7faca6d159abc",
+      "expected_mounted_method_paths": 41,
+      "requires_exact_source_and_runtime_manifest": true,
+      "mode": "construct only; installed runtime guard plus denial of all network and filesystem mutation; no lifespan/requests",
+      "run": false
     }
   },
   "shared_release": {
@@ -251,7 +260,16 @@
     "latest_guard_probe": "Most recent original status command timed out after20seconds. Last completed status remains foreignactive:true at source6d4aa546259e9cad1cc379d4a464e245af6cfa91/deploymentf3d8ee39e60ed087f0a4d6debf844d128e92a758. Do not infer closure or start another verifier.",
     "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
     "latest_probe_completed": false,
-    "latest_probe_timeout_seconds": 20
+    "latest_probe_timeout_seconds": 20,
+    "foreign_public_record": {
+      "checkpoint": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486",
+      "status": "E12_PLATFORM_PUBLISHED_ORIGINAL_VERIFY_IN_PROGRESS",
+      "recorded_at_utc": "2026-11-25T15:24:07Z",
+      "platform_completed_observed_at_utc": "2026-11-25T15:13:57.582Z",
+      "original_verifier_started_at_utc": "2026-11-25T15:16:47.037626Z",
+      "closure_observed": false,
+      "action": "Do not republish, start another verifier, close or modify foreign lease."
+    }
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
@@ -259,7 +277,8 @@
     "cold_warm_route_interactivity_p50_p95": "unverified",
     "all_accounting_sections_and_twelve_tabs_real_data": "unverified",
     "backend_queue_build_mongo_timings": "unverified",
-    "production_performance_fix": "unverified"
+    "production_performance_fix": "unverified",
+    "measurement_cohort": "Eight operational views, twelve report tabs and eight listed operational specialized destinations. Additional settings/inventory/legacy links are not covered. Specialized data-readiness and inner-view commitment need separate evidence; observer shell timing alone is insufficient."
   },
   "next_safe_action": "Deploy/hash-verify final native exporter and importer/runtime packages, rerun49/7/11 focused tests with remote-compatible interpreters, and construct the actual source router factory under the existing guard with no lifespan/network/data. Resolve only concrete integration failures. Recheck original release guard before own public Preview activation. Prepare a new private hidden-TTY URI prompt only after concrete tooling preflight; never extract browser credentials. Actual capture/import/metrics remain unperformed.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
@@ -301,5 +320,5 @@
       "notes": "Initial reviewed48-test capture bundle. One final minimal denied_permissions field was added for original legacy/movements denial semantics; final49-test producer is now pinned by the reviewed importer/runtime. No capture used older bundle."
     }
   ],
-  "checkpoint_at_utc": "2026-11-25T15:32:37Z"
+  "checkpoint_at_utc": "2026-11-25T15:41:16Z"
 }
