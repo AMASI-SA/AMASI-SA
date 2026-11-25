@@ -6,8 +6,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 11725,
-      "sha256": "97355251e286049fe6a65cb66fb221b7c86513783aeb36adfb4550742241dd4d"
+      "bytes": 13459,
+      "sha256": "73527b7a2f9d7069df63b9b9a0c205695711b7a41a660b997ae6d3955117f46f"
     },
     {
       "path": "observer.css",
@@ -26,13 +26,13 @@
     },
     {
       "path": "preview-observer-plugin.mjs",
-      "bytes": 3311,
-      "sha256": "8b53511be6bbfbdb4c75b708714219ead28e93a3e05fee42e818f54675433462"
+      "bytes": 4732,
+      "sha256": "dec6ab2eea75d12b009d0e691c7054109a69e0c911137c51cf98a7292d68911a"
     },
     {
       "path": "runtime.config.mjs",
-      "bytes": 883,
-      "sha256": "0523888a3611fcbe33e60082cc8e56ed44e876684bdc09ba59448fa71fcf28e7"
+      "bytes": 1051,
+      "sha256": "49a3675f9d22919b3eb455faf975d2556119be44c55c3c94dbdaec0df0d09d42"
     }
   ]
 }

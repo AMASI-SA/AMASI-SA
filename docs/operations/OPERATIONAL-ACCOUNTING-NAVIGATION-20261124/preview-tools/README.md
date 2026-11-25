@@ -58,6 +58,25 @@ configuration remains the private runtime owner's responsibility. Measurements
 from a source-serving Vite runtime must be labelled as such, separately from
 measurements of an optimized release build.
 
+### If the Preview ingress rewrites the asset Host
+
+The diagnostic middleware rejects an unknown upstream Host with the fixed body
+`Preview host required`. If that exact response is observed on either diagnostic
+asset, temporarily set `debugAssetHost: true` in the external plugin options and
+restart only the private Vite process. It logs at most four diagnostic asset
+requests: the fixed path, GET/HEAD/other method label, parsed Host hostname, and
+allow/deny decision. It never logs other headers, query parameters, credentials,
+raw URLs, or application API requests.
+
+Inspect that local server log. Pin **only the observed, verified ingress hostname**
+with `assetRequestHosts: ['OBSERVED-HOSTNAME']`, then set `debugAssetHost: false`
+and restart the same private process. The list accepts at most four literal DNS
+hostnames, with no wildcards, URLs, ports, or production domain. This changes only
+the diagnostic asset middleware's explicit Host allowlist. The browser's exact
+`data-allowed-host` remains the configured public Preview hostname. Forwarded-host
+headers are never used to authorize a request. Do not infer or guess the ingress
+hostname, broadly allow all hosts, or weaken the browser host check.
+
 For a baseline arm, use an independently clean, immutable authorized baseline
 checkout and its own exact HEAD; set `arm: 'baseline'`. The DOM adapter was reviewed
 against the candidate only. Verify the baseline has the same relevant semantics
@@ -180,6 +199,14 @@ external URLs and no inline content. Independent static review found one issue
 (unsupported performance APIs yielding measured-looking zeros); it was corrected
 to explicit null values and re-reviewed with no remaining material finding in the
 assigned instrumentation surface. Browser verification remains outstanding.
+
+The ingress follow-up check passed locally: an explicit internal hostname was
+accepted, unknown/malformed hosts and forwarded-host-only attempts were rejected,
+unsafe hostname options were rejected, GET/HEAD restrictions were preserved,
+diagnostic output was bounded to four sanitized entries, and the browser host
+attribute remained the configured public Preview hostname. This used local
+middleware calls, not remote traffic; the real ingress hostname must be observed
+before adding it to the private runtime config.
 
 ## Current private runtime layout
 
