@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "kind": "sanitized_operational_payment_final_production_proof",
+  "original_full_proof_path": "/app/.git/payment-performance-2131-5a8d391c/guard-verify.json",
+  "proof": {
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa",
+    "source_base_git_sha": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "deployment_git_sha": "37fd7851bb76b39b74e434da19183262e4d42f26",
+    "release_id": "rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7",
+    "protocol_version": 5,
+    "boot_started_at": "2026-11-25T20:40:27.633994+00:00",
+    "boot_started_at_observations": [
+      "2026-11-25T20:40:27.633994+00:00",
+      "2026-11-25T20:40:18.156091+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+    "checked_requests_per_probe": 770,
+    "guard_active": false,
+    "verified_at": "2026-11-25T21:02:58.365578+00:00",
+    "verification_started_at": "2026-11-25T20:46:25.575959+00:00",
+    "verification_finished_at": "2026-11-25T21:02:58.245928+00:00",
+    "proof_sha256": "82e10744cbccf297aceba093a8f21355f91ba0652f00ea7e57571965d90b570a",
+    "platform_version": "cf13467",
+    "platform_finished_ui": "Nov 25, 11:41 PM Asia/Riyadh",
+    "observed_at": "2026-11-25T21:04:32.529970+00:00",
+    "tracked_source_clean": true,
+    "shared_head": "37fd7851bb76b39b74e434da19183262e4d42f26"
+  },
+  "shared_build": {
+    "stage": "/app/.git/payment-performance-2131-5a8d391c",
+    "pid": 27083,
+    "phase": "production_verified",
+    "started_at": "2026-11-25T20:27:13.035294+00:00",
+    "finished_at": "2026-11-25T20:28:23.017741+00:00",
+    "exit_code": 0,
+    "foreign_root_metadata_preserved": 59,
+    "free_mib_after": 381,
+    "guard_active": false,
+    "actor": "operational-payment-performance-20261125",
+    "prepublish_passed": true,
+    "publication_action_count": 1,
+    "publication_started_ui": "Nov 25, 11:30 PM Asia/Riyadh",
+    "publication_version": "cf13467",
+    "publication_finished_ui": "Nov 25, 11:41 PM Asia/Riyadh",
+    "verify_runner_pid": 31966,
+    "guard_verify_pid": 31985,
+    "verify_started_at": "2026-11-25T20:46:25.575959+00:00",
+    "verified_at": "2026-11-25T21:02:58.365578+00:00",
+    "verify_exit_code": 0
+  },
+  "final_ci": {
+    "backend_run": 45691509090,
+    "backend_tests": 7750,
+    "backend_subtests": 151,
+    "fastpath_cases": 15,
+    "courier_cases": 44,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "mongodb": "8.0.12",
+    "concurrent_courier_replay": "passed",
+    "fastpath_fixture": "counted database fixture, not a Mongo/production load test",
+    "demand_tests": 106,
+    "shipping_tests": 16,
+    "shipping_subtests": 18,
+    "frontend_tests": 1850,
+    "frontend_suites": 115,
+    "dashboard_tests": 268,
+    "stock_tests": 6423,
+    "stock_subtests": 97,
+    "backend_artifact": 15060125944,
+    "backend_artifact_sha256": "436f8e910f460c049e9e317fe991da14a55805088625d151bdf1b6182c90b127",
+    "frontend_artifact": 15059600838,
+    "frontend_artifact_sha256": "1e6a9168a2d752447ae96c012dc4b37dd8d2dd8b33edaddd6ee042a166448157",
+    "readiness_run": 45691509189,
+    "host_rehearsals": [
+      {
+        "host": "20.20.2",
+        "job": 139478677009,
+        "artifact": 15058428674,
+        "digest": "610126884e527329e496a324dd602ae4fb2761269c0df593412ea95736606961"
+      },
+      {
+        "host": "24.19.0",
+        "job": 139478676889,
+        "artifact": 15059296775,
+        "digest": "ace04d4b9563eb29fbf37fc05298bdbb9eaf3f120471ddfda2809462db8145a8"
+      }
+    ]
+  },
+  "health_before": {
+    "measured_at": "2026-11-25T19:44:59.038439+00:00",
+    "method": "three sequential read-only health requests; not a load test",
+    "source_git_sha": "a7c2a26dda1195beae3b6b5e3be6a9a504c5fa2a",
+    "release_id": "rg5-ddd03995594cfbe4c05415b1cfb58f972ec434a2f62ef4315512f4357a6eeb38",
+    "samples_ms": [
+      362.5,
+      369.3,
+      352.4
+    ],
+    "status": 200,
+    "ok": true
+  },
+  "health_after": {
+    "measured_at": "2026-11-25T20:47:57.117807+00:00",
+    "method": "three sequential read-only normal /api/health requests; not a load test, p95 or financial-query benchmark",
+    "platform_version": "cf13467",
+    "during_original_guard_verification": true,
+    "source_git_sha": "164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa",
+    "release_id": "rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7",
+    "samples_ms": [
+      384.6,
+      421.9,
+      382.4
+    ],
+    "status": 200,
+    "ok": true
+  },
+  "hosting_before": {
+    "observed_at": "2026-11-25 19:47:12 UTC",
+    "site": "https://mezansalla.com",
+    "context": "Emergent Monitoring snapshot while new publication still Building; 24-hour timeline",
+    "response_ms": 280,
+    "response_peak_ms": 506,
+    "error_rate": "<1%",
+    "error_rate_peak": "3%",
+    "cpu_percent": 22,
+    "cpu_peak_percent": 54,
+    "memory_percent": 79,
+    "memory_peak_percent": 100,
+    "resource_message": "utilization crossed 85% during multiple intervals in last 24 hours",
+    "prior_severe_intervals_riyadh": [
+      "21:00–21:30",
+      "21:30–22:00",
+      "22:00–22:30"
+    ],
+    "latest_interval": "still measuring"
+  },
+  "hosting_during_verification": {
+    "observed_at": "2026-11-25T20:46:45Z",
+    "site": "https://mezansalla.com",
+    "context": "Emergent Monitoring snapshot after cf13467 publication; rolling 24-hour timeline; final original guard running",
+    "response_ms": 376,
+    "response_peak_ms": 506,
+    "error_rate": "6%",
+    "error_rate_peak": "6%",
+    "cpu_percent": 40,
+    "cpu_peak_percent": 57,
+    "memory_percent": 44,
+    "memory_peak_percent": 100,
+    "latest_interval": "still measuring",
+    "last_completed_interval_riyadh": "23:00–23:30 Healthy",
+    "resource_message": "utilization crossed85% during multiple intervals in last24hours",
+    "observation_time_precision": "approximate to browser observation, not platform sample timestamp"
+  },
+  "hosting_after_verification": {
+    "observed_at": "2026-11-25T21:04:33Z",
+    "observation_time_precision": "approximate, tied to browser observation after verifier completion",
+    "site": "https://mezansalla.com",
+    "context": "Emergent Monitoring rolling24-hour view, after original verifier exited",
+    "response_ms": 318,
+    "response_peak_ms": 506,
+    "error_rate": "0%",
+    "error_rate_peak": "3%",
+    "cpu_percent": 13,
+    "cpu_peak_percent": 57,
+    "memory_percent": 63,
+    "memory_peak_percent": 100,
+    "last_completed_interval_riyadh": "2026-11-25 23:30 to 2026-11-26 00:00 Healthy",
+    "latest_interval": "still measuring",
+    "preexisting_resource_warning_visible": true
+  },
+  "runtime_log_review": {
+    "source": "Emergent Manage Overview published version cf13467 View Logs",
+    "first_sample": {
+      "rows": 100,
+      "earliest": "2026-11-25T20:41:23.408Z",
+      "latest": "2026-11-25T20:41:49.968Z",
+      "status_observations_double_count_timing_and_access": {
+        "200": 88,
+        "401": 2
+      },
+      "one_401_request": {
+        "method": "POST",
+        "route": "/api/customer-intelligence/v1/channels/instagram/webhook",
+        "duration_ms": 6.679
+      },
+      "displayed_error_logs": 0,
+      "displayed_warning_logs": 0
+    },
+    "second_sample": {
+      "rows": 100,
+      "earliest": "2026-11-25T20:49:29.280Z",
+      "latest": "2026-11-25T20:49:37.846Z",
+      "non_2xx_timing_rows": 0,
+      "server_error_rows": 0
+    },
+    "limitations": "Bounded samples do not establish the cause of the aggregate 5–6% hosting error metric or prove all runtime requests successful. Release verifier requires 200 for every request and deliberately generates no4xx."
+  },
+  "read_only_ui": {
+    "url": "https://mezansalla.com/operational-balances/daily-movements?view=entry&mode=choose",
+    "observed_fields": [
+      "صافي المبلغ الوارد إلى البنك (ريال)",
+      "مرجع العملية البنكية",
+      "طابقت وصول صافي التحويل إلى البنك"
+    ],
+    "confirmation_default": false,
+    "financial_submission": false,
+    "amount_entered": false,
+    "reference_entered": false,
+    "source_freshness_observation": "Stored financial snapshot 2026-11-25 19:07 Asia/Riyadh reports prior source refresh failure; no retry/refresh was triggered by this test"
+  },
+  "scope": {
+    "bank_confirmation": "Authorized staff attestation after bank matching; not bank API verification.",
+    "courier_cod": "Qualified delivery/collection evidence creates courier receivable; bank receipt is distinct.",
+    "integrated_change": "Service/API/UI proof guard for incoming external courier funds to a bank across movement kinds.",
+    "policy_limit": "Independent decide_bank_transfer_start and operational_payment_courier_cod_policy helpers are not production entrypoints; do not claim newly enforced universal order-start gate.",
+    "load": "No new periodic job, frontend polling or dependency. Empty evidence saves 8 metadata reads+2 renewals+1 thread handoff per admitted refresh/CAS attempt; conflict membership built once per breakdown.",
+    "limitations": "Bounded health/log observations do not attribute hosting metric changes. Independent Android app and Qoyod GL are not released by this task."
+  },
+  "cloud_build_evidence_boundary": {
+    "observed": "Emergent exposes runtime logs; retrieved cf13467 runtime samples only.",
+    "not_observed": "Full actual Cloud Build transcript, historic argv/cwd, package snapshot order or roots. Do not present those as observed facts.",
+    "verified_elsewhere": "Original shared adapter, both exact-B2 clean-clone rehearsals, and the final original three-probe production identity/byte/cache verification all passed."
+  },
+  "limitations": [
+    "No production load test or p95 estimate.",
+    "No causal inference from overlapping before/after monitoring snapshots.",
+    "Preexisting source-freshness warning and historical memory peak are not claimed resolved.",
+    "Runtime log samples are bounded; no claim that all live requests were error-free."
+  ],
+  "evidence_branch_deployable": false
+}

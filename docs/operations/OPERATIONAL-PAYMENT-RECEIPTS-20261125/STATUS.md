@@ -1,5 +1,13 @@
 # Operational payment receipts — 2026-11-25
 
+> **Current status: completed and verified.** PRs #2130 and #2131 are merged and
+> published directly to Production. Final version `cf13467` passed the original
+> three-probe verifier at **2026-11-26 00:02:58 Asia/Riyadh**, with the matching
+> lease automatically inactive. The final section and
+> `verification/final-production-proof.json` supersede historical pending states below.
+> Known preexisting source-freshness and hosting-memory observations are recorded
+> without claiming they were fixed by this release.
+
 ## Authority and release scope
 
 The merchant explicitly authorized finishing the work and publishing directly
@@ -239,3 +247,72 @@ success and automatic inactive lease; then capture normal read-only health
 response samples and hosting metrics. Do not repeat publication, change frozen
 source, use the first release's intent, create financial test entries or enable
 new background work. Preexisting memory pressure remains a separate observation.
+
+
+## Final optimized publication verified — 2026-11-26 00:02:58 Asia/Riyadh
+
+All preceding pending-publication / pending-verification checkpoints are superseded.
+The authorized performance publication finished at **2026-11-25 23:41 Riyadh**,
+Emergent version **`cf13467`**. The unchanged original v5 verifier ran once from
+`2026-11-25T20:46:25.575959+00:00` to `2026-11-25T21:02:58.245928+00:00`, exited **0**,
+and passed **three consecutive probes**. Each probe verified 770 public frontend
+requests plus health; all required exact source/release identity and governed
+frontend bytes/cache behavior. The matching lease closed automatically and a
+fresh original status reported **active=false**. Shared source remained clean at
+D2 `37fd7851bb76b39b74e434da19183262e4d42f26`.
+
+Original proof SHA-256:
+`82e10744cbccf297aceba093a8f21355f91ba0652f00ea7e57571965d90b570a`.
+Frontend artifact tree:
+`76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a`.
+It is byte-identical to the first functional release's governed frontend output;
+the performance refinement changes backend work, not frontend assets.
+The sanitized final proof and bounded observations are in
+`verification/final-production-proof.json`; the complete original proof is retained
+in `/app/.git/payment-performance-2131-5a8d391c/guard-verify.json`.
+
+### Load requirement: verified changes and limits
+
+No new periodic job, polling, dependency, startup index or frontend API request was
+added. Empty evidence reconciliation now avoids eight metadata reads, two lease
+renewals and one thread handoff per empty stage while retaining surrounding
+authorization/CAS and guarded handling for nonempty or malformed inputs. Payment
+conflict membership is built once per breakdown. Counted-work and synthetic
+benchmarks are evidence of removed work, not a production-capacity guarantee.
+
+Three normal post-publication health samples returned HTTP 200 / ok=true and exact A2
+identity in 384.6, 421.9 and 382.4 ms; the earlier three were 362.5, 369.3 and 352.4 ms.
+These small samples are not p95 or load tests. At approximately **00:04:33 Riyadh**,
+after verification, the hosting view showed **318 ms response, CPU 13%, memory 63%,
+errors 0%**; the last completed 23:30–00:00 interval was Healthy. Earlier in publication
+the view showed errors 6%, later 5%; the bounded runtime samples did not establish
+their cause. One earlier sampled Instagram webhook request returned 401; the later
+100-line sample showed no non-2xx timing rows or server-error rows. No claim is made
+that all application traffic was error-free.
+
+The monitoring view still includes preexisting memory peaks of 100% and historical
+severe intervals. Overlapping snapshots do not prove the patch caused CPU/memory
+changes or solved hosting capacity. The financial-source freshness warning observed
+with the 19:07 Riyadh stored calculation also remains a separate preexisting item;
+no source refresh, financial test posting, historical backfill or experimental
+payment-flag activation was performed.
+
+### Evidence boundaries and continuity
+
+The platform UI exposes runtime logs, not the complete actual Cloud Build transcript.
+Actual Cloud Build argv/cwd, runtime package roots and package snapshot timing are
+not independently observed. Preserved original shared adapter logs, both exact-B2
+clean-clone adapter rehearsals and successful live identity/byte probes are the
+available evidence; do not relabel a rehearsal transcript as the actual platform log.
+
+The native Android client was not released. Its old requests that omit required
+bank-arrival proof remain rejected. New decision-only policy helpers are not
+standalone live money writers, and this task does not add a universal Salla
+order-start gate or a Qoyod/general-ledger integration. The functional contract
+documented above remains the scope.
+
+**Production changed: yes, functional and performance releases both verified.**
+No release step remains pending. This documentation-only evidence branch must not be
+merged or deployed. Preserve both task stages and the original dependency backup.
+Further work on preexisting source freshness or hosting capacity must remain separate
+from this completed release and must not trigger unrequested financial backfill.
