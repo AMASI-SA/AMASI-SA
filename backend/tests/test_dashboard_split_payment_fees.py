@@ -249,3 +249,69 @@ async def test_projected_split_retains_contradictory_amounts_currency_guard():
     assert result["payment_fees_complete"] is False
     assert result["fee_review_reasons"] == direct["fee_review_reasons"]
     assert result["internal_wallet_paid_sar"] is None
+
+
+@pytest.mark.asyncio
+async def test_full_cohort_conflict_lookup_work_scales_linearly_for_split_subsets():
+    """Pricing a subset must not rehash the full owner's conflicts per tender."""
+    class CountedReference(str):
+        hash_calls = 0
+
+        def __hash__(self):
+            type(self).hash_calls += 1
+            return super().__hash__()
+
+    measured = []
+    for count in (100, 200):
+        orders = []
+        for index in range(count):
+            order = split_order()
+            raw = order["raw_by_source"]["salla_direct"]
+            order.update(order_number=f"selected-{index}", order_id=f"native-selected-{index}")
+            raw.update(reference_id=order["order_number"], id=order["order_id"])
+            for leg_index, leg in enumerate(raw["payment_methods"]):
+                leg["transaction_reference"] = f"selected-{index}-{leg_index}"
+            orders.append(order)
+        # The context belongs to the full owner cohort; these conflicts belong
+        # to other rows and must stay available without repricing those rows.
+        context = fee_context(split_fee_reference_conflicts=[
+            CountedReference(f"outside-subset-{index}") for index in range(count)])
+        before = deepcopy(context)
+        CountedReference.hash_calls = 0
+        result = await dashboard_fee_breakdown(orders, [], context)
+        measured.append(CountedReference.hash_calls)
+        assert result["payment_fees_complete"] is True
+        assert result["total_payment_fees"] == round(4.84 * count, 2)
+        assert context == before
+    # Count real reference hashing, not timing: double the population and
+    # inherited evidence while allowing only a constant number of passes.
+    assert measured[0] <= 4 * 100, measured
+    assert measured[1] <= 2 * measured[0] + 10, measured
+
+
+def test_direct_split_helpers_keep_list_context_conflicts_and_inputs_unchanged():
+    from dashboard_split_payment_fees import estimate_split_fees, internal_wallet_paid_sar
+
+    order = split_order()
+    raw = order["raw_by_source"]["salla_direct"]
+    reference = raw["payment_methods"][0]["transaction_reference"]
+    context = fee_context(split_fee_reference_conflicts=[reference])
+    before = deepcopy((order, context))
+    assert internal_wallet_paid_sar(order, context) is None
+    with pytest.raises(ValueError, match="^provider_payment_reference_conflict$"):
+        estimate_split_fees(order, raw, context)
+    assert (order, context) == before
+
+
+@pytest.mark.asyncio
+async def test_conflict_lookup_does_not_leak_between_breakdowns():
+    order = split_order()
+    context = fee_context(split_fee_reference_conflicts=[])
+    assert (await dashboard_fee_breakdown([order], [], context))["payment_fees_complete"] is True
+    reference = order["raw_by_source"]["salla_direct"]["payment_methods"][0]["transaction_reference"]
+    context["split_fee_reference_conflicts"].append(reference)
+    result = await dashboard_fee_breakdown([order], [], context)
+    assert result["payment_fees_complete"] is False
+    assert result["fee_review_reasons"] == ["provider_payment_reference_conflict"]
+    context["split_fee_reference_conflicts"].clear()
+    assert (await dashboard_fee_breakdown([order], [], context))["payment_fees_complete"] is True

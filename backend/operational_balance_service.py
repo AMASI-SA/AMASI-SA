@@ -844,9 +844,15 @@ async def refresh(db, owner, *, clock=None, ad_correction=None):
         # Match previously staged, verified capture evidence against the
         # canonical provider/refund facts that THIS refresh already computed.
         # This updates proof status only: no new obligation or money movement.
-        from operational_payment_cas_reconciliation import reconcile_staged_payment_evidence
+        from operational_payment_cas_reconciliation import INBOX, reconcile_staged_payment_evidence
         with refresh_stage("payment_evidence_link"):
-            await run_calculation(reconcile_staged_payment_evidence, result)
+            inbox = result.get(INBOX, {})
+            if isinstance(inbox, dict) and not inbox:
+                # Preserve coverage validation/reset without a worker handoff
+                # or extra authorization/lease I/O when there is no evidence.
+                reconcile_staged_payment_evidence(result)
+            else:
+                await run_calculation(reconcile_staged_payment_evidence, result)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()

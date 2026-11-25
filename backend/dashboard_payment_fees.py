@@ -597,9 +597,11 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
     """Numeric known amounts plus explicit completeness; consumers mask unknowns."""
     priced = [{**order, "payment_method": _method(order)} for order in orders]
     if context is not None:
-        context = {**context, "split_fee_reference_conflicts": sorted(set(
-            context.get("split_fee_reference_conflicts") or []) | set(
-            await split_reference_conflicts(priced, context.get("owner_id"))))}
+        # Keep full-cohort conflicts when pricing a subset, but construct their
+        # immutable membership lookup only once for this breakdown.
+        context = {**context, "split_fee_reference_conflicts": frozenset(
+            context.get("split_fee_reference_conflicts") or []) | frozenset(
+            await split_reference_conflicts(priced, context.get("owner_id")))}
     parsed = await orders_to_parsed_cooperative(priced)
     legacy, overrides, errors, term_validity, wallet_principal = [], {}, {}, {}, {}
     budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
