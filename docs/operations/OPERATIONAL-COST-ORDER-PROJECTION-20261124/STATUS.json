@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:53:21.006Z",
+  "recorded_at": "2026-11-25T01:27:18.420Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "PR2123 platform publication completed as provider version e6113be (Deployment finished Nov25,03:51AM Riyadh), observed00:51:40.989UTC. Original lease-bound verifier launchedonce00:51:59.485104UTC and actuallyrunning; matchingleaseclosureandlivecostacceptancestillpending.",
+  "status": "PR2123 published as provider version e6113be. The original verifier completed all 3 required probes with exact source/deployment identity; sequential original status returned active:false at 2026-11-25T01:05:45.042152UTC and matching lease absence was captured. The authenticated UI accepted a snapshot-bound populated forecast. Financial actuals, forecast coverage and saved profit remain incomplete; saved-profit product-source timeout persists. No cold-read or latency improvement claim.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -250,7 +250,7 @@
     "A2_to_D_only_intent": true
   },
   "intent": "Frozen original A2 candidate1531177bytes/blob57815f976f9bd6ed711024568f0acfa2d79bfcf6 into intent-only B, soleparentA2; no squash/rebase allowed.",
-  "production_changed_by_this_candidate": "PLATFORM_COMPLETED_LIVE_IDENTITY_VERIFICATION_RUNNING",
+  "production_changed_by_this_candidate": true,
   "preceding_release": {
     "pr": 2120,
     "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
@@ -301,8 +301,8 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Observe only owned verification receipt/logs; do not relaunch verify or call competing status while original verifier holds mutex. Matching original three-probe PASS followed by original status active:false and lease absence is required. Then one fresh summary and one exact-bound forecast acceptance; no financial refresh or source sync.",
-  "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
+  "next_safe_action": "No further publication or lease operation is needed. Preserve the verified release and its closed lease. Remaining work concerns saved-profit source diagnosis and incomplete financial evidence; any later calculation must produce a new dated receipt and be reviewed separately.",
+  "completion_limit": "Publication, original live identity/content verification and matching lease closure are complete. UI-bound populated forecast acceptance is supported. Complete financial recovery, saved-profit repair, raw source-error absence, cold database performance and elimination of future timeouts are not established.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
   "evidence_branch": "codex/operational-cost-order-projection-evidence-20261124",
@@ -411,7 +411,7 @@
   ],
   "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
   "production_git_changed_by_this_candidate": true,
-  "production_runtime_changed_by_this_candidate": false,
+  "production_runtime_changed_by_this_candidate": true,
   "final_host_observation": "pr2123-final-host-observation.json",
   "operator_final": {
     "status": "HOST_REHEARSAL_AND_INDEPENDENT_RECEIPT_REVIEW_PASS",
@@ -557,7 +557,7 @@
     ]
   },
   "publication": {
-    "state": "PLATFORM_COMPLETED_ORIGINAL_VERIFY_RUNNING",
+    "state": "PUBLISHED_ORIGINAL_VERIFIED_THREE_PROBES_MATCHING_LEASE_CLOSED",
     "platform_baseline": {
       "version": "7191418",
       "ordinal": 100
@@ -639,7 +639,7 @@
       "wording_limit": "UI rendered Deployment finished, not the literal Deployment Succeeded. Current and prior ordinals reflect displayed history, not a monotonic publication counter."
     },
     "verification": {
-      "state": "RUNNING_NOT_RESULT",
+      "state": "PASS",
       "stage": "/tmp/mezan-pr2123-verify-_8n3vado",
       "wrapper_pid": 40266,
       "launched_at": "2026-11-25T00:51:59.485104+00:00",
@@ -650,7 +650,43 @@
       "expected_frontend_requests_each": 770,
       "automatic_retry": false,
       "observation_at": "2026-11-25T00:52:09.694860+00:00",
-      "observed_stderr_empty": true
+      "observed_stderr_empty": true,
+      "verified": true,
+      "checks": 3,
+      "original_verify_finished_at": "2026-11-25T01:05:44.926687+00:00",
+      "original_verify_exit_code": 0,
+      "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+      "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+      "frontend_request_labels_per_probe": 770,
+      "boot_started_at_observations": [
+        "2026-11-25T00:50:50.696236+00:00"
+      ],
+      "original_status": {
+        "active": false
+      },
+      "original_status_exit_code": 0,
+      "original_status_finished_at": "2026-11-25T01:05:45.042152+00:00",
+      "lease_directory_absent": true,
+      "archive": {
+        "path": "PR2123-ORIGINAL-VERIFY-CLOSED.zip",
+        "bytes": 218423,
+        "sha256": "fc4e9d10575ce93d18585520bd957fe053a5b3b43d58249a8a555351b92a9fcf",
+        "blob": "00645c033600546f726c8f9e400fba4286c12d98"
+      },
+      "independent_review": {
+        "path": "pr2123-original-verify-closed-independent-review.json",
+        "result": "PASS",
+        "sha256": "f70e4d1248652b5fbeaf589603b2b8575bb3f64d823622c86228ddb703d26fa6",
+        "blob": "1d70e03235874b9da95e1857a9e7041fc80c17ba"
+      },
+      "limitations": [
+        "The compact original stdout returns frontend details from observation0 plus deduplicated boot values. It does not retain all raw HTTP/health responses from all three probes; success of the unchanged pinned original verifier is the evidence that all required checks ran.",
+        "Public backend health identifies governed source A2; deployment D is bound by the prepared lease and release intent. This review preserves that distinction.",
+        "Lease inactive/absence is proven at recorded completion 2026-11-25T01:05:45.042152+00:00 and archive capture, not continuously thereafter.",
+        "Publication/UI observations are root-recorded evidence. The completed original verifier independently checks public identity and frontend content.",
+        "Successful release verification does not establish financial recovery totals, report completeness, unified_orders timeout removal, or a performance improvement; the separate fresh summary/bound forecast acceptance addresses that."
+      ]
     }
   },
   "postpublish_capture_final": {
@@ -667,5 +703,17 @@
       "bytes": 6164,
       "result": "PASS"
     }
+  },
+  "live_acceptance": {
+    "result": "UI_BOUND_FORECAST_RENDERED_WITH_COST_DATA_FINANCIAL_COMPLETENESS_NOT_ESTABLISHED",
+    "observation": "pr2123-live-ui-acceptance-observation.json",
+    "independent_source_interpretation": "pr2123-ui-acceptance-interpretation-review.json",
+    "current_page_export_completed_at": "2026-11-25T01:23:10.178Z",
+    "financial_sources_complete": false,
+    "raw_api_diagnostics_verified": false,
+    "cold_read_verified": false,
+    "live_latency_improvement_measured": false,
+    "source_refresh_or_financial_recalculation": false,
+    "private_financial_evidence_location": "Private recovery report and original current-page workbook; financial values omitted from repository."
   }
 }

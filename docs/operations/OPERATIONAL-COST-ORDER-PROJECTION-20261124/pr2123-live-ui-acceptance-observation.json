@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "kind": "pr2123_postpublication_ui_acceptance_observation",
+  "result": "UI_BOUND_FORECAST_RENDERED_WITH_COST_DATA_FINANCIAL_COMPLETENESS_NOT_ESTABLISHED",
+  "release": {
+    "pr": 2123,
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "provider_version": "e6113be",
+    "original_verified_checks": 3,
+    "matching_lease_closed_at": "2026-11-25T01:05:45.042152+00:00"
+  },
+  "observation": {
+    "method": "Root browser accessibility observation of the authenticated production financial summary, followed by current-page-only workbook export of already loaded data.",
+    "url": "https://mezansalla.com/operational-balances/financial-position?view=summary",
+    "export_started_at": "2026-11-25T01:23:08.088Z",
+    "export_completed_at": "2026-11-25T01:23:10.178Z",
+    "navigation_completion_time_measured": false,
+    "summary_rendered": true,
+    "forecast_table_rendered": true,
+    "forecast_pending_paused_or_request_error_banner_observed": false,
+    "unreceived_products_known_subtotal_nonzero": true,
+    "financial_actual_forecast_profit_complete": false,
+    "saved_profit_product_cost_timeout_message_remains": true,
+    "raw_snapshot_revision_or_binding_tuple_captured": false,
+    "raw_source_diagnostic_codes_captured": false,
+    "scope_note": "A prior direct API navigation returned Not authenticated. No forecast API request followed that failed authentication attempt. The supported authenticated UI supplied this separate observation."
+  },
+  "code_grounded_inference": {
+    "accepted_binding": "The reviewed UI only replaces summary with forecast after view=forecast, forecast_pending=false and exact session_scope/revision/as_of/started_at equality. The displayed forecast table is evidence of UI contract acceptance, not an independently captured raw tuple.",
+    "cost_result": "A nonzero known unreceived-products subtotal is consistent with a valid cost preview or a valid snapshot cache result. The complete known-reader-error fallback has no currencies or groups and cannot supply that subtotal.",
+    "saved_profit": "The product-cost timeout wording is generated from engine.profit_snapshot.quality.source_errors by operational_profit_projection. It is separate from newly requested open_cost_exposure and is not recomputed by opening the report."
+  },
+  "actions": {
+    "current_page_export": 1,
+    "full_report_export": 0,
+    "financial_recalculation": 0,
+    "source_refresh_or_sync": 0,
+    "additional_publish_or_guard_operations": 0,
+    "credential_or_token_extraction": 0
+  },
+  "limits": [
+    "This is UI contract acceptance with a private original workbook, not raw API diagnostic acceptance.",
+    "No claim of a cold database read, absence of all source error codes, elimination of future timeouts, or measured performance improvement.",
+    "Saved actuals, forecast coverage and profit remain incomplete; unavailable values were not treated as zero.",
+    "Financial values, entity identifiers and private workbook bytes are retained privately and omitted from this repository evidence.",
+    "The export download interval is not report latency and the report generation display is not a database timing measurement."
+  ],
+  "independent_code_interpretation": "pr2123-ui-acceptance-interpretation-review.json"
+}

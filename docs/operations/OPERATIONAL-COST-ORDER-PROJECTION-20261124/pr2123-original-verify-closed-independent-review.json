@@ -1,0 +1,346 @@
+{
+  "schema_version": 1,
+  "kind": "pr2123_original_live_verify_and_lease_closure_independent_review",
+  "result": "PASS",
+  "reviewed_at_utc": "2026-11-25T01:11:38.088294+00:00",
+  "scope": "Read-only local review of the complete captured original verification/status outputs, actual prepared lease, approved final wrapper, original guard source and recorded platform sequence. No fresh browser/host/API action, tests, helper import/execution or release-state writes.",
+  "archive": {
+    "file": "release-preparation/PR2123-ORIGINAL-VERIFY-CLOSED.zip",
+    "bytes": 218423,
+    "sha256": "fc4e9d10575ce93d18585520bd957fe053a5b3b43d58249a8a555351b92a9fcf",
+    "git_blob_sha1": "00645c033600546f726c8f9e400fba4286c12d98",
+    "ZIP_CRC_pass": true,
+    "members_including_manifest": 11,
+    "manifest_data_members": 10,
+    "all10_sizes_SHA256_and_extracted_bytes_verified": true,
+    "safe_unique_member_names": true,
+    "manifest": {
+      "path": "pr2123-original-verify-closed/MANIFEST.json",
+      "bytes": 1699,
+      "sha256": "e986cf0029914b4139f7375a3bbad0ff953546d46e6405c73880944d2ab850e4"
+    }
+  },
+  "identities": {
+    "source_A2": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_J": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "intent_B": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "deployment_D": "6323017fbf9ba160c536a94f408507435786412a",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "branch": "hotfix/prod-snap-meta-final",
+    "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+    "protocol_version": 5,
+    "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b"
+  },
+  "prepared_lease_binding": {
+    "result": "PASS",
+    "prepared_at": "2026-11-25T00:37:19.949259+00:00",
+    "raw_bytes": 668216,
+    "raw_sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d",
+    "exact_byte_equality_with_original_prepare_stdout_and_copied_prepared_lease": true,
+    "exact_runtime_identity_equality_with_reviewed_A2_intent": true,
+    "all_mirrored_frontend_proof_critical_hash_source_summary_fields_match": true,
+    "raw_lease": {
+      "path": "pr2123-original-verify-closed/original-lease-before.json",
+      "bytes": 668216,
+      "sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d"
+    },
+    "prepared_lease_source": {
+      "path": "release-preparation/pr2123-prepare/original-lease-before.json",
+      "bytes": 668216,
+      "sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d"
+    },
+    "prepare_stdout_source": {
+      "path": "release-preparation/pr2123-prepare/original-prepare.stdout",
+      "bytes": 668216,
+      "sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d"
+    }
+  },
+  "wrapper_and_guard": {
+    "result": "PASS",
+    "wrapper": {
+      "path": "pr2123-original-verify-closed/pr2123-original-verify.py",
+      "bytes": 6675,
+      "sha256": "d98db50bdc3059e8483bb9427ce53a6a95931be3279b5c34bfc3eba1cb8d1206"
+    },
+    "wrapper_actual_bytes_equal_final_independent_review_and_local_approved_source": true,
+    "input_evidence_commit": "1bcb7eb23a3837523d01ad08746b264961d3b9a0",
+    "launch_wrapper_sha256": "d98db50bdc3059e8483bb9427ce53a6a95931be3279b5c34bfc3eba1cb8d1206",
+    "guard_original_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "guard_source_reference": "operational-cost-order-projection/scripts/production_release_guard.py",
+    "review_reference": {
+      "path": "release-preparation/pr2123-original-verify-final-independent-review.json",
+      "bytes": 6164,
+      "sha256": "f15d14185f72b9f441139592e7f68be6d91cc16021ba95b6196a6a09db77ac6c"
+    },
+    "original_sequence": [
+      "one original verify --url https://mezansalla.com",
+      "one original status after successful verified identity checks"
+    ],
+    "preserved_controls": [
+      "Refuse optimized Python and sanitize PYTHONOPTIMIZE/PYTHONHOME/PYTHONPATH for children",
+      "Require fresh caller-owned mode0700 /tmp/mezan-pr2123-verify-* stage and exclusive receipt",
+      "Exact original raw lease hash/actor/prepare time/identity and original guard hash before child",
+      "No prepare, abort, second publish, manual lease deletion or retry in wrapper"
+    ],
+    "actual_commands": [
+      [
+        "/usr/local/bin/python",
+        "-B",
+        "scripts/production_release_guard.py",
+        "verify",
+        "--url",
+        "https://mezansalla.com"
+      ],
+      [
+        "/usr/local/bin/python",
+        "-B",
+        "scripts/production_release_guard.py",
+        "status"
+      ]
+    ]
+  },
+  "execution": {
+    "receipt_status": "PASS",
+    "stage": "/tmp/mezan-pr2123-verify-_8n3vado",
+    "launcher_pid": 40266,
+    "launched_at": "2026-11-25T00:51:59.485104+00:00",
+    "original_verify_started_at": "2026-11-25T00:51:59.521899+00:00",
+    "original_verify_finished_at": "2026-11-25T01:05:44.926687+00:00",
+    "original_verify_exit_code": 0,
+    "original_status_started_at": "2026-11-25T01:05:44.927284+00:00",
+    "original_status_finished_at": "2026-11-25T01:05:45.042152+00:00",
+    "original_status_exit_code": 0,
+    "receipt_finished_at": "2026-11-25T01:05:45.042618+00:00",
+    "original_stdout_and_stderr_sizes_hashes_match_receipt": true,
+    "all_original_stderr_and_runner_streams_empty": true,
+    "new_publish": false,
+    "prepare": false,
+    "abort": false,
+    "manual_lease_clear": false,
+    "automatic_retry": false
+  },
+  "full_original_stdout": {
+    "result": "PASS",
+    "source": {
+      "path": "pr2123-original-verify-closed/original-verify.stdout",
+      "bytes": 43089,
+      "sha256": "024bd5cc0da3d8b6397e654d04fb877287e8b321f1ceacba286b03dd779d5fd0"
+    },
+    "exact_original_key_set": true,
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "git_sha_alias": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "protocol_version": 5,
+    "url": "https://mezansalla.com",
+    "backend_runtime_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 1358,
+      "manifest_sha256": "d2b5f3b78b6209c895f81447673498f117217160d8e46f507dfb5baebb3bc912",
+      "modified_count": 1,
+      "projection_tree_oid": "3fd203e7febcb4ff64a384e4ce3cc59696ea28bd",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "a76f3d7113e025042609f29a30699e15181c1456",
+      "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "source_base_root_tree_oid": "74946da23e059283f49de2b04baf9860c8ee972d",
+      "source_base_scope_tree_oid": "28f3a0916dd6143aee0a5488e0f172b62843cd4e",
+      "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "source_root_tree_oid": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "4c9d32e0dc471288a5775d8468a10f47bd6407cb79d9c8e1307a0988370a3f68"
+    },
+    "release_control_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 329,
+      "manifest_sha256": "3ae4b9b3486caf552346565143d51d382e962d29d438cab4e81d09fff1385b24",
+      "modified_count": 0,
+      "projection_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+      "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "source_base_root_tree_oid": "74946da23e059283f49de2b04baf9860c8ee972d",
+      "source_base_scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+      "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "source_root_tree_oid": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "48775721c55257d4a033810ffe51fef18b142a8ab9c63b699742e35804828620"
+    },
+    "all_fields_equal_actual_lease_and_A2_intent": true,
+    "backend_file_count": 1358,
+    "backend_modified_count": 1,
+    "control_file_count": 329,
+    "control_modified_count": 0
+  },
+  "frontend_exact_request_contract": {
+    "result": "PASS",
+    "derived_from": "Actual lease runtime_identity.frontend_build and unchanged original _verify_public_frontend ordered iteration",
+    "public_file_records": 381,
+    "distinct_request_paths": 384,
+    "expected_and_actual_request_labels_per_probe": 770,
+    "unique_request_labels": 770,
+    "exact_ordered_list_equal": true,
+    "canonical_compact_JSON_label_list_sha256": "d1d54c198e8c551878ca7d8c9fee1c0c91a2a5e07a410c6fd330c279e3399967",
+    "metadata_contract": "Canonical and cache-busted /build-meta.json with both Accept application/json and */*; original code requires HTTP success, application/json, parseable object and exact reviewed bytes.",
+    "public_file_contract": "Every reviewed public file plus / and /snapchat-accounts is checked for exact byte count and SHA256 with canonical and cache-busted requests.",
+    "shell_cache_records": [
+      {
+        "path": "/index.html",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": "\"b20389aa13a61481b560f55dd51a275d\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": "\"b20389aa13a61481b560f55dd51a275d\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/snapchat-accounts",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": null,
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      }
+    ],
+    "shell_cache_structured_fields_independently_checked": true,
+    "service_worker_records": [
+      {
+        "path": "/service-worker.js",
+        "state": "retirement_payload_present",
+        "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+        "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "application/javascript; charset=utf-8"
+      },
+      {
+        "path": "/sw.js",
+        "state": "retirement_payload_present",
+        "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+        "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "application/javascript; charset=utf-8"
+      }
+    ],
+    "service_worker_structured_MIME_cache_retirement_state_independently_checked": true,
+    "cache_rules": "Shells: text/html; no-cache, no-store, must-revalidate; no immutable or positive cache lifetime; Age absent or0 and no HIT/STALE/UPDATING. Retirement workers: allowed JavaScript MIME and same cache rules plus max-age=0.",
+    "fields_not_reproduced_in_stdout": "Metadata HTTP response bodies/status/headers, per-file bytes and X-Content-Type-Options:nosniff are checked by the unchanged original verifier but are not individually retained in compact stdout. No new fetch was made by this reviewer."
+  },
+  "boot_contract": {
+    "result": "PASS",
+    "prepared_at": "2026-11-25T00:37:19.949259+00:00",
+    "original_clock_skew_seconds": 300,
+    "boot_started_at": "2026-11-25T00:50:50.696236+00:00",
+    "boot_started_at_observations": [
+      "2026-11-25T00:50:50.696236+00:00"
+    ],
+    "timezone_aware_and_ordered": true,
+    "all_values_within_original_prepare_and_verification_time_bounds": true,
+    "observed_boot_after_single_publish_submission": true,
+    "distinct_boot_count": 1,
+    "original_rule": "One to three distinct valid boot values is permitted; this run returned one. checks=3 proves the original observation loop completed, not that three raw health responses are preserved."
+  },
+  "closure_contract": {
+    "result": "PASS",
+    "original_verify_holds_operation_mutex": true,
+    "all_three_health_and_frontend_observations_completed_before_closure": true,
+    "CAS_rule": "Original _remove_active_lease re-reads and validates exact full active lease equality under the same operation mutex before removing only the matching lease directory.",
+    "original_status": {
+      "active": false
+    },
+    "status_stdout": {
+      "path": "pr2123-original-verify-closed/original-status.stdout",
+      "bytes": 22,
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+    },
+    "lease_directory_absent_after_status": true,
+    "absence_evidence": "Wrapper final assertion after original status and captured archive manifest; not a new independent host filesystem read.",
+    "manual_clear_or_abort": false
+  },
+  "publication_sequence": {
+    "original_prepublish": {
+      "result": "PASS",
+      "exit_code": 0,
+      "finished_at": "2026-11-25T00:40:28.691072+00:00",
+      "lease_sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d"
+    },
+    "submitted_at": "2026-11-25T00:40:36.771Z",
+    "submit_count_recorded": 1,
+    "previous_provider_version": "7191418",
+    "new_provider_version": "e6113be",
+    "platform_completion_observed_at": "2026-11-25T00:51:40.989Z",
+    "platform_completion_text": "Deployment finished Nov 25, 03:51 AM",
+    "sequence_order_checked": true,
+    "provenance": "Root-recorded platform observation, publication checkpoint and archived launch. This reviewer did not independently inspect the live platform UI. Original public verification supplies the release-identity proof."
+  },
+  "retained_evidence": [
+    {
+      "path": "pr2123-original-verify-closed/original-lease-before.json",
+      "bytes": 668216,
+      "sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d"
+    },
+    {
+      "path": "pr2123-original-verify-closed/launch.json",
+      "bytes": 593,
+      "sha256": "fec20170e9af284da18972d2402a0d1bb64156ccd29e902f2785f18f9da9b88a"
+    },
+    {
+      "path": "pr2123-original-verify-closed/receipt.json",
+      "bytes": 2720,
+      "sha256": "e91437b0c407641e994e0cc71c0f875fb41ebb53c2e7a477c3b896ef50a24c0d"
+    },
+    {
+      "path": "pr2123-original-verify-closed/original-verify.stdout",
+      "bytes": 43089,
+      "sha256": "024bd5cc0da3d8b6397e654d04fb877287e8b321f1ceacba286b03dd779d5fd0"
+    },
+    {
+      "path": "pr2123-original-verify-closed/original-verify.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "pr2123-original-verify-closed/original-status.stdout",
+      "bytes": 22,
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+    },
+    {
+      "path": "pr2123-original-verify-closed/original-status.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "pr2123-original-verify-closed/runner.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "pr2123-original-verify-closed/runner.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limitations": [
+    "The compact original stdout returns frontend details from observation0 plus deduplicated boot values. It does not retain all raw HTTP/health responses from all three probes; success of the unchanged pinned original verifier is the evidence that all required checks ran.",
+    "Public backend health identifies governed source A2; deployment D is bound by the prepared lease and release intent. This review preserves that distinction.",
+    "Lease inactive/absence is proven at recorded completion 2026-11-25T01:05:45.042152+00:00 and archive capture, not continuously thereafter.",
+    "Publication/UI observations are root-recorded evidence. The completed original verifier independently checks public identity and frontend content.",
+    "Successful release verification does not establish financial recovery totals, report completeness, unified_orders timeout removal, or a performance improvement; the separate fresh summary/bound forecast acceptance addresses that."
+  ],
+  "blockers": [],
+  "additional_release_tests_required": false
+}

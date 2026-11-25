@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "kind": "pr2123_ui_acceptance_interpretation_independent_source_review",
+  "result": "PASS_WITH_EXPLICIT_LIMITS",
+  "scope": "Read-only local source review interpreting root-recorded production UI observations. No live calls, browser inspection, tests, source refresh, financial calculation, or release-state mutation by this reviewer.",
+  "observation_provenance": {
+    "ui": "Observed by root on the production financial-position summary page; not independently observed in a browser by this reviewer.",
+    "page_export": "Root reported a private current-page XLSX capture. This reviewer verified the page-only export implementation but did not inspect the workbook bytes.",
+    "private_observation_data_included": false,
+    "financial_amounts_or_customer_identifiers_included": false
+  },
+  "observed_behavior_reported_by_root": {
+    "summary_displayed": true,
+    "open_order_forecast_table_displayed": true,
+    "pending_paused_or_error_forecast_banner_observed": false,
+    "unreceived_products_nonzero_known_subtotal_displayed": true,
+    "saved_profit_product_cost_timeout_message_displayed": true,
+    "financial_completeness_still_incomplete": true
+  },
+  "source_findings": [
+    {
+      "finding": "The initial summary excludes live open-cost projection and is marked forecast_pending. The summary UI automatically requests forecast using the summary revision and period binding.",
+      "references": [
+        "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+        "frontend/src/pages/operational/financialPositionViews.js",
+        "backend/operational_financial_position_views.py",
+        "backend/operational_financial_report_read.py"
+      ]
+    },
+    {
+      "finding": "The UI accepts a forecast replacement only when its contract is valid, its view is forecast, forecast_pending is false, and its session scope, revision, as_of and started_at exactly match the summary. Displaying the forecast table in this UI supports acceptance of that bound result; the raw binding values were not captured by this reviewer.",
+      "references": [
+        "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+        "frontend/src/pages/operational/financialPositionViews.js"
+      ]
+    },
+    {
+      "finding": "A displayed forecast table alone does not rule out a source-reader failure. Recognized source errors can be returned as a bounded incomplete forecast with empty currencies and groups, diagnostic issues and forecast_pending false.",
+      "references": [
+        "backend/operational_financial_report_read.py",
+        "backend/operational_financial_position_views.py"
+      ]
+    },
+    {
+      "finding": "A nonzero known subtotal for unreceived products derives from open-cost exposure groups. The empty cost-exposure fallback used for recognized read failures cannot generate that nonzero subtotal. This supports a populated cost preview or a valid same-snapshot cached preview rather than the empty failure fallback.",
+      "references": [
+        "backend/operational_financial_position_core.py",
+        "backend/operational_forecast_projection.py",
+        "backend/operational_financial_report_read.py"
+      ]
+    },
+    {
+      "finding": "The displayed product-cost timeout sentence is produced by the saved period-bound profit snapshot, through quality.source_errors for products or context. Profit rows are built from project_profit(state, currency), independently of the newly requested open-cost exposure. It is not direct evidence that the new forecast request timed out.",
+      "references": [
+        "backend/operational_profit_projection.py",
+        "backend/operational_financial_position_core.py"
+      ]
+    },
+    {
+      "finding": "The current-page XLSX action builds and downloads a workbook from the already loaded report without requesting financial data again. The all-sections export is different and issues another financial read.",
+      "references": [
+        "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+        "frontend/src/pages/operational/financialPositionPresentation.js"
+      ]
+    },
+    {
+      "finding": "The page workbook contains formatted report dates, human-readable completeness, message text and displayed rows. It does not preserve raw revision, session scope, ISO binding dates, source collection, raw diagnostic codes or the raw forecast_pending value. readableMessages retains message text only.",
+      "references": [
+        "frontend/src/pages/operational/financialPositionPresentation.js",
+        "frontend/src/pages/operational/financialPositionDisplay.js"
+      ]
+    }
+  ],
+  "acceptance_assessment": {
+    "ui_bound_forecast_display": "SUPPORTED_BY_ROOT_OBSERVATION_AND_SOURCE_CONTRACT",
+    "populated_open_cost_preview": "SUPPORTED_BY_REPORTED_NONZERO_PRODUCT_KNOWN_SUBTOTAL",
+    "saved_profit_source_timeout": "STILL_VISIBLE_IN_PERSISTED_PERIOD_RESULT",
+    "all_financial_sources_complete": false,
+    "raw_forecast_diagnostic_absence_verified": false,
+    "cold_database_read_verified": false,
+    "live_latency_improvement_measured": false,
+    "all_future_timeouts_resolved_claim": false
+  },
+  "limitations": [
+    "The UI and exported-file existence are root-recorded observations, not independent browser observations by this reviewer.",
+    "The open-cost reader has a short same-snapshot cache. A displayed populated preview does not prove that this particular request performed a cold database read.",
+    "No raw summary or forecast response, exact snapshot binding values, complete diagnostic array, database query plan, or isolated timing was inspected here.",
+    "Financial actual, forecast and profit completeness remain distinct from transport success and release verification.",
+    "The saved-profit error requires its own source diagnosis and a separately authorized recalculation to establish a new result; opening or exporting this page does not perform that recalculation.",
+    "No monetary amount, owner identifier, session scope value, customer detail or private financial row is retained in this review."
+  ],
+  "additional_release_tests_required": false,
+  "actions_performed_by_reviewer": [
+    "Read relevant local source files",
+    "Write this sanitized interpretation review"
+  ]
+}
