@@ -25,6 +25,7 @@ _REPORT_PARTY_KEY_CACHE_LIMIT = 4096
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_workspace_source_insufficient", "operational_prepaid_source_invalid", "operational_pos_bank_confirmation_required",
+    "operational_courier_bank_confirmation_required",
     "operational_transfer_reference_required", "operational_pos_insufficient",
     "operational_workspace_owner_return_limit",
     "operational_salary_adjustment_required",
@@ -388,7 +389,15 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 or payload.get("bank_arrival_confirmed") is not True or missing_required_reference):
             message = "أكد مطابقة وصول الحوالة إلى البنك وأدخل تاريخها"
             fail("operational_pos_bank_confirmation_required", message if reference_optional else message + " ومرجعها", 422)
-        if (pos_settlement or paypal_payout) and date.fromisoformat(payload["business_date"]) < datetime.fromisoformat(
+        courier_bank_receipt = (row["kind"] == "courier" and bank and bank["kind"] == "bank"
+                                and payload["direction"] == "incoming")
+        # Delivery establishes the courier's debt. Only a separately confirmed
+        # remittance may credit our bank; cash/driver receipts keep their own rules.
+        if courier_bank_receipt and (payload.get("bank_arrival_confirmed") is not True
+                or not payload.get("business_date") or not reference):
+            fail("operational_courier_bank_confirmation_required",
+                 "طابق وصول تحصيل شركة الشحن إلى البنك وأدخل تاريخ الوصول ومرجع الحوالة", 422)
+        if (pos_settlement or paypal_payout or courier_bank_receipt) and date.fromisoformat(payload["business_date"]) < datetime.fromisoformat(
                 state["started_at"].replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Riyadh")).date():
             fail("operational_business_date_invalid", "تاريخ وصول الحوالة يسبق بداية الأرصدة التشغيلية", 422)
         if payload["kind"] == "transfer" and bank and bank["kind"] == "bank" and row["kind"] == "cash" and missing_required_reference:
@@ -693,7 +702,10 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp, *, ad_correct
                 _LOG.warning("operational_refresh_source_failure stage=source_collection outcome=failed "
                              "cause=%s source_collection=%s", detail["cause"], detail["source_collection"])
                 raise HTTPException(409, detail=detail) from None
-            fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
+            from operational_source_diagnostics import source_validation_failure_detail
+            detail = source_validation_failure_detail(exc)
+            _LOG.warning("operational_refresh_validation_failure cause=%s", detail["cause"])
+            raise HTTPException(409, detail=detail) from None
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
@@ -829,6 +841,12 @@ async def refresh(db, owner, *, clock=None, ad_correction=None):
         result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
         from operational_balance_recovery_proof import FIELD as PROOF_FIELD, build_recovery_proof
         result["engine"][PROOF_FIELD] = await run_calculation(build_recovery_proof, state, result, sources, stamp)
+        # Match previously staged, verified capture evidence against the
+        # canonical provider/refund facts that THIS refresh already computed.
+        # This updates proof status only: no new obligation or money movement.
+        from operational_payment_cas_reconciliation import reconcile_staged_payment_evidence
+        with refresh_stage("payment_evidence_link"):
+            await run_calculation(reconcile_staged_payment_evidence, result)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()

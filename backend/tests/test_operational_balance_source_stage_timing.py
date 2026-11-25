@@ -27,6 +27,7 @@ SOURCE_STAGES = (
     'orders_cursor_build', 'orders_cursor_read', 'orders_rows_validate',
     'source_primary_reads', 'source_fee_settings', 'source_setup', 'source_statements',
     'source_delivery_history', 'source_transactions', 'source_native_links',
+    'bundle_order_normalization', 'bundle_cost_authority',
     'source_bundles', 'source_option_catalog', 'source_order_indexes', 'source_orders', 'source_invoices',
     'source_other_sources', 'source_native_overlaps', 'source_finalize',
 )

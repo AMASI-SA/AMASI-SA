@@ -119,7 +119,8 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
   const [quote, setQuote] = useState(null), [quoting, setQuoting] = useState(false);
   const [recoverTarget, setRecoverTarget] = useState('');
   const ad = target?.ad_bank_funding, pos = target?.kind === 'pos_receivable';
-  const bankArrival = pos || isPayPal(target);
+  const bankArrival = pos || isPayPal(target)
+    || mode === 'in' && target?.kind === 'courier' && source?.kind === 'bank';
   const quoteKey = JSON.stringify([targetKey, form.unit, form.amount, ad?.terms]);
   const visibleQuote = quote?.key === quoteKey ? quote : null;
   const editable = context.status === 'active';
@@ -173,7 +174,7 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
   const targetSelect = <select value={targetKey} required disabled={!editable} onChange={e => {
     setTargetKey(e.target.value); if (payout && targetKey) clearSource(); setQuote(null); change({ unit: 'receipt', usd: '', fee: '', receipt: '', arrival: false, wallet: false });
   }}>{options(selectedTargets)}</select>;
-  const sourceSelect = <select value={source ? sourceKey : ''} required disabled={!editable} onChange={e => {setSourceKey(e.target.value); setMessage('');}}>{options(sources)}</select>;
+  const sourceSelect = <select value={source ? sourceKey : ''} required disabled={!editable} onChange={e => {setSourceKey(e.target.value); change({ arrival: false });}}>{options(sources)}</select>;
   const demandTarget = label => <WorkspaceResourcePicker key={`recipient-${payeeKind}`} context={context} operation={mode} role="recipient"
     kind={payout ? payeeKind : ''} selectedResource={resourceIsSource ? source : undefined} value={target} label={label} disabled={!editable}
     onSelect={item => {
@@ -185,12 +186,12 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
       && permittedOperations(context).has('custody.spend') ? ['employee_custody'] : [])];
   const demandSource = label => <>
     {field('نوع مصدر الدفع', <select value={sourceKind} required disabled={!editable} onChange={event => {
-      setSourceKind(event.target.value); setSourceKey(''); setPickedSource(null); setMessage('');
+      setSourceKind(event.target.value); setSourceKey(''); setPickedSource(null); change({ arrival: false });
     }}><option value="">اختر نوع المصدر</option>{fundingKinds.map(kind => <option key={kind} value={kind}>{resourceLabels[kind]}</option>)}</select>)}
     {sourceKind && <WorkspaceResourcePicker key={`source-${sourceKind}-${targetKey}`} context={context} operation={mode} role="source" kind={sourceKind}
       selectedResource={target} value={source} label={label} disabled={!editable}
       optionDisabled={item => payout && sourceAvailability(item) !== true}
-      onSelect={item => { setPickedSource(item); setSourceKey(item ? resourceKey(item) : ''); setMessage(''); }}/>}
+      onSelect={item => { setPickedSource(item); setSourceKey(item ? resourceKey(item) : ''); change({ arrival: false }); }}/>}
   </>;
   const payoutKinds = demand ? Object.keys(resourceLabels).filter(kind => canTarget(context,
     { kind, id: '', currency: 'SAR', access: { use: true } }, 'out')) : [...new Set(targets.map(item => item.kind))];

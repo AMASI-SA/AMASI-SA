@@ -197,6 +197,7 @@ jobs:
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_reviews']) >= 7, 'Scoped receipt-review permissions missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_review_mongo']) == 3, 'Real scoped review transactions missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_pending_commands']) >= 33, 'Authenticated pending-command recovery contracts missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_courier_bank_receipt']) >= 44, 'Courier bank receipt proof and concurrent replay contracts missing'
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
           bundle_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_bundle_cost_projection']
           assert len(bundle_cases) >= 67, 'Remaining-product bundle projection tests missing or incomplete'

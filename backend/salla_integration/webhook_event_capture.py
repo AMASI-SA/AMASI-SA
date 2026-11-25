@@ -208,8 +208,15 @@ async def capture_unknown_event(
     # to durably enqueue is propagated instead of acknowledging lost data.
     from .shipping_label_inbox import enqueue_verified_label
     await enqueue_verified_label(db, event_body)
-    from .payment_update_inbox import enqueue_verified_payment
-    payment_job = await enqueue_verified_payment(db, event_body)
+    # Only payment updates bypass the direct order-sync path. An original
+    # order.created must persist its canonical order and component snapshot
+    # first; the gated proof hook inside sync_order_from_verified_webhook
+    # then queues payment evidence (if enabled) without replaying fulfillment.
+    # Enqueuing order.created here would silently skip customer item options.
+    payment_job = None
+    if event_name == "order.payment.updated":
+        from .payment_update_inbox import enqueue_verified_payment
+        payment_job = await enqueue_verified_payment(db, event_body)
 
     order_sync: dict[str, Any] = {
         "attempted": False,
