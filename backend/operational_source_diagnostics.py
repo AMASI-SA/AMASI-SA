@@ -81,3 +81,45 @@ def source_failure_detail(cause, collection):
         "source_collection": safe_collection,
         "message": f"تعذر تحديث {source}: {reason}. احتُفظ بآخر لقطة ناجحة بتاريخها. {action}",
     }
+
+
+# These are *literal* code-only validation failures from known financial
+# source collectors. Never return raw exception text, IDs, amounts or rows.
+_VALIDATION_FAILURES = MappingProxyType({
+    "canonical_salla_refresh_required": (
+        "salla_snapshot_stale", "لقطة طلبات سلة تحتاج إلى مزامنة رسمية قبل الاحتساب",
+    ),
+    "operational_source_scope_too_large": (
+        "source_capacity_exceeded", "حجم بيانات أحد المصادر تجاوز حدود القراءة",
+    ),
+    "operational_source_owner_mismatch": (
+        "source_tenant_mismatch", "تعذر التحقق من ملكية سجلات أحد المصادر",
+    ),
+    "shipping_setup_ambiguous": (
+        "shipping_setup_ambiguous", "توجد أكثر من نسخة لإعدادات الشحن",
+    ),
+    "provider_payment_method_conflict": (
+        "payment_method_conflict", "تعارضت هوية طريقة دفع في بيانات الطلبات",
+    ),
+    "operational_delivery_cod_history_reconciliation_required": (
+        "cod_history_requires_reconciliation", "سجل تحصيل الدفع عند الاستلام يحتاج مطابقة",
+    ),
+})
+
+
+def source_validation_failure_detail(exc):
+    """Explain a known ValueError with a safe, fixed cause and suggested action.
+
+    Unknown errors remain generic: no exception string, traceback, owner,
+    order number or collection value is exposed through the API.
+    """
+    code = exc.args[0] if type(exc) is ValueError and len(exc.args) == 1 and type(exc.args[0]) is str else None
+    cause, reason = _VALIDATION_FAILURES.get(code, ("unknown", "لم تكتمل مطابقة أحد مصادر الأرصدة"))
+    return {
+        "code": "operational_source_setup_incomplete",
+        "cause": cause,
+        "message": (
+            f"تعذر تحديث الأرصدة: {reason}. آخر لقطة ناجحة محفوظة بتاريخها. "
+            "راجع المصدر المشار إليه وأعد التحديث بعد تصحيحه."
+        ),
+    }

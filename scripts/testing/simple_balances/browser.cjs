@@ -14,6 +14,9 @@ const manifest = JSON.parse(fs.readFileSync(path.join(out, 'source-manifest.json
 assert.equal(manifest.synthetic_only, true);
 for (const [file, hash] of Object.entries(manifest.sha256)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'), hash, file);
 const calls = [], errors = [], results = [], screenshots = [];
+// Browser-test-only click-to-next-route samples, captured against synthetic fixtures.
+// These values are NOT production or Preview p95 timing evidence.
+const routeExitSamplesMs = [];
 let actor = f.owner, scenario = '', access = structuredClone(f.access);
 const rows = structuredClone(f.ledger), refunds = [...Array.from({ length: 6 }, (_, index) => f.refund(index)), structuredClone(f.platformRefund)];
 const requests = new Set();
@@ -698,8 +701,13 @@ async function capture(page, name) {
         if (width === 674) await capture(page, 'short-accounting-navigation');
         const released = page.waitForResponse(response => response.request().method() === 'DELETE'
           && new URL(response.url()).pathname.endsWith('/read-demand/short-drawer-report'));
+        const exitStarted = performance.now();
         await back.click();
         await page.getByRole('heading', { name: 'خارج الأرصدة — وجهة الاختبار', exact: true }).waitFor();
+        const exitElapsedMs = Math.round((performance.now() - exitStarted) * 1000) / 1000;
+        assert(Number.isFinite(exitElapsedMs) && exitElapsedMs >= 0);
+        routeExitSamplesMs.push({ viewport: width + 'x' + height, click_to_next_visible_ms: exitElapsedMs });
+        console.log('SYNTHETIC_ROUTE_EXIT ' + JSON.stringify(routeExitSamplesMs[routeExitSamplesMs.length - 1]));
         assert.equal((await released).status(), 200);
         const count = calls.filter(call => call.path === '/api/operational-balances/workspace/report').length;
         // Longer than the steady poll cadence: leaving must stop every consumer.
@@ -715,13 +723,13 @@ async function capture(page, name) {
     assert.deepEqual(errors, []); assert.equal(results.length, 14); assert.equal(screenshots.length, 14);
     await context.close();
   } finally {
-    fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true, chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));
+    fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true, chromium_sandbox: true, results, errors, screenshots, calls, route_exit_samples_ms: routeExitSamplesMs }, null, 2));
     await browser.close(); server.close();
   }
 })().catch(error => {
   errors.push(error.message);
   fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true,
-    chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));
+    chromium_sandbox: true, results, errors, screenshots, calls, route_exit_samples_ms: routeExitSamplesMs }, null, 2));
   console.error(error); server.close(); process.exitCode = 1;
 });
 
