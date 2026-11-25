@@ -1,0 +1,100 @@
+{
+  "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
+  "recorded_at": "2026-11-25T12:46:56Z",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/operational-profit-refresh-20261125",
+  "source_base": "6323017fbf9ba160c536a94f408507435786412a",
+  "status": "WIP_READ_ONLY_DIAGNOSIS_NO_RUNTIME_PATCH",
+  "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
+  "acceptance": {
+    "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
+    "invariants": [
+      "Owner scope, source cohort and native date/version evidence remain unchanged.",
+      "No invented missing amount, silent zero, source truncation, timeout increase or financial formula change.",
+      "Preserve cancellation, task joining, lease/CAS, idempotency and historical movements.",
+      "No mutation of another conversation's branch or release lease."
+    ],
+    "evidence_required": [
+      "A failing distinguishing reproduction or bounded source-phase observation.",
+      "Focused regression and affected boundary verification for any runtime patch.",
+      "Fresh release protocol v5 and separate receipt review if a new publication is warranted."
+    ]
+  },
+  "observations": {
+    "prior_release": {
+      "pr": 2123,
+      "provider_version": "e6113be",
+      "original_verify_checks": 3,
+      "original_status": {
+        "active": false
+      },
+      "evidence_commit": "b8f03197e9e707a1253f721f15c5fd30c96b75bf",
+      "complete": true
+    },
+    "host": {
+      "observed_at": "2026-11-25T12:42:57.050237+00:00",
+      "head": "6323017fbf9ba160c536a94f408507435786412a",
+      "tracked_changes": "",
+      "guard_exit": 0,
+      "guard": {
+        "active": false
+      }
+    },
+    "scheduled_failure": {
+      "observed_at_approx": "2026-11-25T11:40:52Z",
+      "last_attempt_riyadh": "2026-11-25 12:56",
+      "consecutive_failures": 6,
+      "error_code": "operational_refresh_timeout",
+      "profit_snapshot_ms": 25166.514,
+      "reconciliation_ms": 10658.742,
+      "aggregate_ms": 76398.243
+    },
+    "later_success": {
+      "observed_at": "2026-11-25T12:41:06.695Z",
+      "saved_calculation_revision": 16947,
+      "previous_revision": 16946,
+      "as_of": "2026-11-25T11:58:31.208470+00:00",
+      "all_displayed_stages_complete": true,
+      "profit_snapshot_ms": 27295.943,
+      "aggregate_ms": 76228.106,
+      "manual_refresh_run": false,
+      "source_completeness_verified": false
+    },
+    "source_findings": {
+      "outer_request_seconds": 85,
+      "profit_shared_budget_seconds": 25,
+      "per_profit_reader_max_seconds": 20,
+      "concurrency": 4,
+      "profit_context_before_components": true,
+      "primary_order_telemetry_is_not_profit_context_telemetry": true
+    }
+  },
+  "limits": [
+    "Nested timings overlap and must not be summed.",
+    "A timed profit function returning complete can contain soft source errors.",
+    "The failed attempt cannot be attributed to a previously saved receipt.",
+    "The later automatic success does not prove removal of intermittent timeouts or complete sources.",
+    "Private original receipts and financial values are excluded from Git.",
+    "No code-level bottleneck is yet established; no runtime change or performance claim."
+  ],
+  "other_work": {
+    "pr": 2122,
+    "head": "c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7",
+    "scope": "Dashboard split-payment profit",
+    "mergeable_state": "dirty",
+    "preserved": true
+  },
+  "verification": {
+    "source_review": "Root and independent agents reviewed the exact production source.",
+    "tests_run": 0,
+    "reason": "No runtime patch exists.",
+    "private_receipt_audit": "r16946 and r16947 independently reviewed; direct chain verified. No total across missing r16944/r16945."
+  },
+  "production_changed_by_this_task": false,
+  "next_safe_action": "Read bounded saved-profit metadata through the authorized host, bind it to the downloaded receipt, and distinguish context from products before selecting a fix.",
+  "continuity": {
+    "issue": 1006,
+    "comment_limit_observed": 2500,
+    "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
+  }
+}
