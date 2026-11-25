@@ -1,0 +1,12 @@
+{
+  "observed_at": "2026-11-25T13:52:11.949585+00:00",
+  "original_candidate_validation": "PASS",
+  "source_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "source_base_sha": "6323017fbf9ba160c536a94f408507435786412a",
+  "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+  "candidate_path": "/tmp/mezan-pr2126-A2-8qvvlulq/release-intent-v5-A2.json",
+  "candidate_sha256": "0621f4b604a1470fe822f02ed62ce20bd26c4c2c3d28eac79ad5d57d0293e420",
+  "source_clean": true,
+  "main_unchanged": true,
+  "guard_active": false
+}

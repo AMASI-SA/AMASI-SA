@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 13:50:52 UTC",
-  "phase": "E3_EXACT_A2_CANDIDATE_PRESERVED_ORIGINAL_VALIDATION_PENDING",
+  "recorded_at": "2026-11-25 13:54:23 UTC",
+  "phase": "E4_ORIGINAL_CANDIDATE_VALIDATED_BACKEND_CI_PENDING",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
@@ -66,7 +66,7 @@
     }
   },
   "source_CI": {
-    "state": "17_of_19_workflows_success_two_running",
+    "state": "18_of_19_workflows_success_backend_running",
     "observed_at": "2026-11-25 13:50:52 UTC",
     "all_former_contract_failures_resolved": true,
     "frontend": {
@@ -79,15 +79,23 @@
       "artifact_sha256": "88c1aa6fdf6b463e57f4fe75fc957be7d13307c4a3cd37deb603b3d866132249"
     },
     "pending_jobs": [
-      139245384386,
-      139245205727
+      139245384386
     ],
     "contract_runs": [
       45625707655,
       45625707945,
       45625707968
     ],
-    "readiness_run": 45625707862
+    "readiness_run": 45625707862,
+    "stock": {
+      "run_id": 45625707847,
+      "artifact_id": 15029281079,
+      "passed": 6459,
+      "failed": 0,
+      "skipped": 0,
+      "new_cases_executed": 23,
+      "artifact_sha256": "0a6161ce61b460452cf50405503601704e9164ae15447d916c88e4535591bce3"
+    }
   },
   "host_observation": {
     "observed_at": "2026-11-25T13:48:16.974108+00:00",
@@ -126,9 +134,9 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "On the original clean A2 host checkout, validate the byte-identical external candidate with load_candidate_release_intent. Await all exact-A2 source CI, including new backend cases. Then create B changing only release/release-intent-v5.json with the identical blob. No lease before B/D and successful host adapter rehearsal.",
+  "next_safe_action": "Await exact-A2 Operational Balance Backend completion and inspect its required acceptance artifacts. Once all source gates pass, create B parentA2 changing only release/release-intent-v5.json to exact blob714c903b4264cc912c86df8bb2ee3caf2085fb65. Run B readiness including both real host adapter rehearsals. Do not create a lease yet.",
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "previous_evidence_commit": "b3ffe2b11124a26df67bf429419b5e27e44261f7",
+  "previous_evidence_commit": "f95c471160a052ce2cf3a58974d0076d84c2955e",
   "previous_A_CI": {
     "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
     "known_failed_runs": [
@@ -177,8 +185,21 @@
     "intent_git_blob": "714c903b4264cc912c86df8bb2ee3caf2085fb65",
     "preserved_path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/release-candidate-A2.json",
     "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
-    "original_loader_validated": false,
-    "intent_commit_B_created": false
+    "original_loader_validated": true,
+    "intent_commit_B_created": false,
+    "original_validation": {
+      "observed_at": "2026-11-25T13:52:11.949585+00:00",
+      "original_candidate_validation": "PASS",
+      "source_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "source_base_sha": "6323017fbf9ba160c536a94f408507435786412a",
+      "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+      "candidate_path": "/tmp/mezan-pr2126-A2-8qvvlulq/release-intent-v5-A2.json",
+      "candidate_sha256": "0621f4b604a1470fe822f02ed62ce20bd26c4c2c3d28eac79ad5d57d0293e420",
+      "source_clean": true,
+      "main_unchanged": true,
+      "guard_active": false
+    },
+    "original_import_warning": "Ignored backend/release_identity.json absent in the clean source-only checkout; original candidate validator completed successfully. No generated identity was used as evidence."
   },
   "production_ref": {
     "observed_at": "2026-11-25 13:50:52 UTC",
