@@ -725,3 +725,32 @@ A second independent reviewer also approved these exact frozen bytes for durable
 - This repairs the continuation document only. It does not change source, frozen intent, production, a lease, or runtime state. E7's host identity observations are historical and must not be treated as fresh host pins.
 - On resumption, original PR2126 host receipts were read through the existing Emergent terminal: original verifier exit 0, verified true, 3 probes, lease closed and original status active false at 2026-11-25T15:34:11.304640+00:00. These are observed host receipts, not new verifier execution or a claim that our dashboard fix is published.
 - Production subsequently advanced to PR2128 at `30c970807c05e291e2f48b35c84155b271fb5f09`. Old PR2122 remains preserved and must not be merged or published over that newer base. Next: integrate the exact reviewed dashboard source changes on the latest verified production base, run fresh integrated validation, build and freeze a new intent-only handoff; wait for the current publisher's original closure before using the shared host.
+
+
+## E9 — Current production source, frozen B and verified evidence
+
+Source was rebuilt on current production J4 `30c970807c05e291e2f48b35c84155b271fb5f09` without changing the ten reviewed application/test/workflow blobs. Current A is `0b39c456ea17d6e80f824f44b57563764441216c`; only its current status document differs from the prior own source. Fresh source integration, isolated backend regressions, original candidate validation and independent full source/intent review passed.
+
+The frozen intent-only B is `ebaae98290f25db5580d888601d236431961d104`, tree `d50681f64d3387eb4b6f2137658be9cb11c62bd8`, RID `rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a`. The original task branch and PR2129 successfully advanced to this existing B at 16:24:24 UTC on Nov25 after earlier GitHub incident failures; both heads were read back exactly. PR2122 is closed and superseded. Do not reuse its old frozen release.
+
+The A4 application CI jobs passed. Final A4 check state was 29 success, 6 skipped and 2 CodeQL failures at analysis/SARIF upload. The failure cause is unproven; no security gate is waived. Fresh B checks and raw governed-output review are underway. This checkpoint is evidence preservation, not merge/deploy clearance.
+
+Fresh backend selections passed: 300 payment tests, 106 inherited diagnostics tests and 451 four-platform tests plus 27 subtests. Selections overlap. The packet preserves raw XML, logs, exact commands/environment, independent audits, the original candidate ZIP, source manifest review, full CI logs/metadata and the minimal operator adaptation with six isolated test groups.
+
+See `checkpoints/E9-verification-manifest.json` and its complete `E9-verification.zip` for hashes, source bindings, qualifications and exact remaining steps. Archived reports retain their original observation times. In particular, archived B-identity.json predates the successful ref update and is superseded by the E9 readback record.
+
+Production has not changed by this task. No own lease, publish or host rehearsal has occurred. PR2128 published first and its original verification is still pending in the last reviewed proof. Preserve its lease. After all B gates/output reviews and predecessor closure, perform a normal tree-equivalent merge; require D gates, fresh envelope and actual original clone/app rehearsals before prepare/prepublish/one publication, three original probes and inactive status. Then verify Nov24 through the normal dashboard demand-refresh UI.
+
+## V4 operator proposal: new release bindings and fresh observed host identities
+
+Status: **NOT_EXECUTABLE_UNTIL_D_ENVELOPE_CI_AND_ROOT_REVIEW**.
+
+A local proposal adapts the exact E8 v3 helper to J `30c970807c05e291e2f48b35c84155b271fb5f09`, A `0b39c456ea17d6e80f824f44b57563764441216c`, B `ebaae98290f25db5580d888601d236431961d104`, common tree `d50681f64d3387eb4b6f2137658be9cb11c62bd8`, and release ID `rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a`.
+
+The proposal changes exactly five release string literals and twelve LIVE_SCOPE integer literals. Fresh root metadata from 2026-11-25T16:19:09.342860+00:00 identifies PID 310/start 197045, with the same command hash, executable path and exact protected dbpath. Executable, three directory, and sibling-log device/inode pins are updated to the supplied observations. Modes, ownership, scope paths, policies and all control flow remain unchanged.
+
+The host observation is 1,955 bytes, SHA256 `825209ecaac7f243fd5fe8b6b03d5b01dd3920d3a8ed478fb3e83b07de63a4e0`. It reports no guard call and no DB descendant reads; this reviewer did not access the host. It does not establish inactive-guard status, full host replacement, or continuous old-log prefix preservation. Root states PR2128 remains with its original publisher.
+
+Final helper: 43,577 bytes, SHA256 `900cbe56a5d40e304c8975e559d4d4f77c5f4d9b0a9b77168d349d30d83a1780`. Independent AST-span reversal of the seventeen literals reproduces golden v3 bytes; full normalized AST equality passes. The unchanged six fixture groups pass against this exact helper (exit 0, 0.2217 seconds, empty stderr). The harness differs only in its expected helper hash; helper/harness hashes remain unchanged after testing.
+
+Only fixture execution occurred: no actual main/rehearsal/adapter, host, database or Git/network invocation. D/START/count remain unset, no execution envelope exists, and no lease preparation/publication/service change occurred. Successful B/D CI, actual D, root independent review, a fresh exact envelope, predecessor publication/verification closure and inactive original guard remain prerequisites. This paragraph is a local evidence draft, not a remote update.

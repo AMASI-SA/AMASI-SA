@@ -1,0 +1,407 @@
+{
+  "schema_version": 1,
+  "task": "DASHBOARD-SPLIT-PROFIT-20261124",
+  "checkpoint": "E9",
+  "created_at": "2026-11-25T16:32:15.641598+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "evidence_parent": "2c6041d31c0d2dc1343885fecbe64b9e35dd4e4d",
+  "source_branch": "codex/dashboard-split-profit-current-20261125",
+  "PR": 2129,
+  "J": "30c970807c05e291e2f48b35c84155b271fb5f09",
+  "A": "0b39c456ea17d6e80f824f44b57563764441216c",
+  "B": "ebaae98290f25db5580d888601d236431961d104",
+  "B_tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8",
+  "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+  "intent_sha256": "8d2b1de28ae32c84bb3fb76a18a5b5a24c9dba156b1982c87af963b1fa2cac6d",
+  "source_branch_B_readback_verified": true,
+  "PR2129_B_readback_verified": true,
+  "successful_source_ref_update_at": "2026-11-25T16:24:24Z",
+  "historical_note": "Archived B-identity.json records the earlier failed ref update. The later successful CAS/readback in this checkpoint supersedes that field; no identity was rebuilt.",
+  "verification": {
+    "source_integration": "PASS",
+    "fresh_targeted_backend": "PASS",
+    "candidate_validator": "PASS",
+    "independent_candidate_manifest_review": "PASS",
+    "A4_application_CI": "PASS",
+    "A4_CodeQL": "two failures; cause unproven",
+    "A4_check_counts": {
+      "success": 29,
+      "skipped": 6,
+      "failure": 2
+    },
+    "operator_v4_bounded_review": "PASS",
+    "operator_v4_isolated_groups": 6
+  },
+  "current_work": "B checks and independent raw governed-output review are in progress. This packet does not assert that B/D are cleared.",
+  "predecessor": {
+    "PR": 2128,
+    "status": "published; original verification in progress at last reviewed proof",
+    "proof_sha": "867230167426ad70ab5461cc4e149a0d4aed31bd",
+    "own_guard_call": false
+  },
+  "production_changed_by_this_task": false,
+  "own_lease_created": false,
+  "own_publish_clicked": false,
+  "operator_executed_on_host": false,
+  "execution_envelope_created": false,
+  "user_authorization": "Push, merge and publish already authorized; no repeated consent needed.",
+  "remaining": [
+    "Complete exact B checks and independent governed-output/evidence review",
+    "Wait for predecessor original verify and inactive closure",
+    "Normal merge with D tree equal B; exact D gates",
+    "Fresh current-host execution envelope and original guard gate",
+    "Original actual clone/app adapter rehearsals and capacity/preservation checks",
+    "Prepare, prepublish, single publication, explicit success, original three probes and inactive status",
+    "Normal Nov24 dashboard demand refresh and live net-profit acceptance"
+  ],
+  "archive": {
+    "file": "E9-verification.zip",
+    "bytes": 912613,
+    "sha256": "0a3e36e04c381ecab53f2ceee9f81fe2bcb883b833292b407290f66bec9d408c",
+    "members": 67
+  },
+  "members": [
+    {
+      "path": "checkpoint-recovery/A4-identity.json",
+      "bytes": 1672,
+      "sha256": "05d1222fe0787aa42a87aa43a33425ef2226c65e195a8a68aaa2a6ea48717c1b"
+    },
+    {
+      "path": "operator-review-current/adaptation-review.json",
+      "bytes": 10279,
+      "sha256": "fb550d25aa4fff3676b767c409f069690782b26e2bbb24c68a472b79d8d02e74"
+    },
+    {
+      "path": "operator-review-current/download-manifest.json",
+      "bytes": 2811,
+      "sha256": "760933aabc2eca9acde42c29a9bc75d6c9c70258d8ed2101198b3256663bdd98"
+    },
+    {
+      "path": "operator-review-current/host-metadata-20261125T161909Z.json",
+      "bytes": 1955,
+      "sha256": "825209ecaac7f243fd5fe8b6b03d5b01dd3920d3a8ed478fb3e83b07de63a4e0"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/ISOLATED_CHECKS.log",
+      "bytes": 1030,
+      "sha256": "2469410459d04f853e502ff2c10b324dad7299c7c70f8d6f30717852236a31a4"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/ISOLATED_CHECKS.py",
+      "bytes": 11934,
+      "sha256": "d43ce86c3b85e96cbb8f2d684bc14c60f963e74f8074ae64e09c5c54844815dc"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/ISOLATED_CHECKS.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/README.md",
+      "bytes": 7576,
+      "sha256": "274424187ad1346a1066421e5f73dc6606cb2731840362714ac4bfc182c9d86c"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/STATUS_V4_APPEND.md",
+      "bytes": 2199,
+      "sha256": "1ffe25d8cf26f228e83df48a6da4089c742eac9334bd067e71916492d033dc56"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/adaptation.diff",
+      "bytes": 1925,
+      "sha256": "2fc53e129c2450166d62bed33eae8ceff1ed8c4a7a0eba765be56b7b8457b0a1"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/harness.diff",
+      "bytes": 413,
+      "sha256": "f64c5cae28d29229edfb9ae314c9ee7f51c9c187276c3a49e4995f6bfb21f007"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/hash-manifest.json",
+      "bytes": 2161,
+      "sha256": "21ec55160321798e7858086744256c65b965b69441f6be28510af8e680ebeba7"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/host-observation.json",
+      "bytes": 1955,
+      "sha256": "825209ecaac7f243fd5fe8b6b03d5b01dd3920d3a8ed478fb3e83b07de63a4e0"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/host-pin-only.diff",
+      "bytes": 1140,
+      "sha256": "4dcc253c6aad7268d873f278993745855c3d4f074e0c496a13cd43232ec47240"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/pin-changes.json",
+      "bytes": 2417,
+      "sha256": "d56ab33c58d79724fd8cce0423120358751ad5b4518161d4f44d753081b9dd20"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/pr2122_release_operator_live_scope_v4.py",
+      "bytes": 43577,
+      "sha256": "900cbe56a5d40e304c8975e559d4d4f77c5f4d9b0a9b77168d349d30d83a1780"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/static-verification.json",
+      "bytes": 4618,
+      "sha256": "c611704c25e6d977f978c7b0c54db5bf699f5783cef9d8c46ba6543370015571"
+    },
+    {
+      "path": "operator-review-current/v4-reviewed-host-pins/verification.json",
+      "bytes": 2426,
+      "sha256": "0b5c1eec6581a85d935f7b903a7bee2035f56841881724d97902658bb7604ae1"
+    },
+    {
+      "path": "pr2129-release/A4-candidate.zip",
+      "bytes": 440576,
+      "sha256": "af0cc7fddd066bbd3022c4fc710e78195bb656c7bb5fd8134028d03f919b07b3"
+    },
+    {
+      "path": "pr2129-release/A4-independent-review.json",
+      "bytes": 5126,
+      "sha256": "16d3c58687f5ff7eb280fce673b83e01d912f02fc0c4b9441e92fa52394ee869"
+    },
+    {
+      "path": "pr2129-release/B-identity.json",
+      "bytes": 472,
+      "sha256": "0defd82348ee1396cdc23bb6ad7134c4b17cc418cd39a99c5f38044aa485e7fd"
+    },
+    {
+      "path": "pr2129-release/B-tree-preparation.json",
+      "bytes": 468,
+      "sha256": "94bcf441c6c6879111ef192f3a05232cb1c8dfa5fec64b8e2ffeda08a5692a01"
+    },
+    {
+      "path": "pr2129-release/audit-a4-ci-evidence.py",
+      "bytes": 2931,
+      "sha256": "0dd5556671ba52adf0b136d204493ce02a1cae0dfb26030da79e119e63c671c9"
+    },
+    {
+      "path": "pr2129-release/audit-v4-operator.py",
+      "bytes": 6109,
+      "sha256": "658a598ad97159251ca77a6f630cdd2511393710a961e37765c3434745687078"
+    },
+    {
+      "path": "pr2129-release/candidate-validation.json",
+      "bytes": 558,
+      "sha256": "b7af3cb2a91370470b96a14aca693c979c1503d0639bec7fa15d86bd77a16710"
+    },
+    {
+      "path": "pr2129-release/root-backend-evidence-audit.json",
+      "bytes": 1214,
+      "sha256": "183eba0cf0e4622eb5ef704c6184e6f568e312cef5b5617943a1939211c1d833"
+    },
+    {
+      "path": "pr2129-release/root-ci-evidence-audit.json",
+      "bytes": 5660,
+      "sha256": "ab483111058eddc7f137fc549df9351db2ff381dfe99c94a392e84d8319346f4"
+    },
+    {
+      "path": "pr2129-release/root-operator-v4-review.json",
+      "bytes": 2961,
+      "sha256": "313d52f29837bbb04b48ad3d5307a6f883b6a8da32de781590fe7a9433c0e683"
+    },
+    {
+      "path": "profit-A4-integration-review-30c970.json",
+      "bytes": 15340,
+      "sha256": "a90a4cf09229d07bfda2a8f0c3af8a988d0b240b36f99bd3fb522c63b98d01fe"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-backend-verification-summary.json",
+      "bytes": 16303,
+      "sha256": "1f3beb5434ae2cb29fd6dab33843b86ccd4bda66db726dc891f86064549d7501"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-four-platform-result.json",
+      "bytes": 7285,
+      "sha256": "128209a7419bd43e43f93e7eb96d211e170481c27b98deed92a37cfcca02ec93"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-four-platform.log",
+      "bytes": 4544,
+      "sha256": "8b128776400557bb4e3bac5fc7f3c99cb16d5340b501b197e4169aeb9638ce21"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-four-platform.xml",
+      "bytes": 72692,
+      "sha256": "326d31689a77abc4ff3f1ae084323c87926de1b8a1298a9f59b0b3da39e7b764"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-inherited-diagnostics-result.json",
+      "bytes": 4468,
+      "sha256": "4b93c682ff25d960d2aa69c9bffa47444554d7ba7685acbaabb5e27733c98943"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-inherited-diagnostics.log",
+      "bytes": 2379,
+      "sha256": "259295345a5afb85ec2afadf8858c7b6e372e36c9872123abead4f676bd354b1"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-inherited-diagnostics.xml",
+      "bytes": 20037,
+      "sha256": "569c531cbe777b04ae383013f5315ecfd75e3fc3c1c0a1357359e88f7b13ff91"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-payment-fees-result.json",
+      "bytes": 6545,
+      "sha256": "bbcb7055f7659493e9274a0047902b854b751e7c45b4ab7cde9264c2fd5c5251"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-payment-fees.log",
+      "bytes": 4066,
+      "sha256": "92c5ac3b7b619d70c8b35c09d6fcbb11e98c2ecdd11cb939cb9bd6bb2864601d"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-payment-fees.xml",
+      "bytes": 51219,
+      "sha256": "fb8a7ee7a8669a5625938e429bec12090f0dede7f715e2a57805b7e6fd74d82f"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-source-parity-hydration.json",
+      "bytes": 3305,
+      "sha256": "152094d23730361a29e91982e0b27784fb0948cac2bb8778e60b784fa1d58a3f"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-source-parity-hydration.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "profit-backend-verification-20261125/a4-source-parity-object-preflight.json",
+      "bytes": 1564,
+      "sha256": "67b165ae758c07a103aa8f4a426bfdbba47a4c0624bee7acfacdbbe62d5d2125"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-check-runs.json",
+      "bytes": 188494,
+      "sha256": "d668b103aa71b7069fa003318b09b98c500b4cf65113db15baf85f9d2c4b5d30"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-ci-audit.json",
+      "bytes": 9422,
+      "sha256": "f6b73a8b31c16331faf1907200d17c55d75aa888fa859be6451629d934d0d5dc"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-ci-evidence-summary.json",
+      "bytes": 54211,
+      "sha256": "cd9056d72c2caaac13f9ff161e09162b658df1bb03c5e1f9eea5b21c188a8db3"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-ci-file-manifest.json",
+      "bytes": 6958,
+      "sha256": "711b56ae19a8020fdbb6b3f38bd50ebdd718f39b674788b4ede9dd14710ba86b"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-codeql-javascript-typescript-139331725050.log",
+      "bytes": 726751,
+      "sha256": "baf6d5332282e46e9358bccb0b15371405a79df927434f1a1ee75d8f6cc6c31f"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-codeql-python-139331724571.log",
+      "bytes": 736831,
+      "sha256": "c01d5be048ab55ff93a60134f7b1a0265997428e4b4de21505aa6d2210375833"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-dashboard-card-refresh-139331725787.log",
+      "bytes": 50621,
+      "sha256": "91e03468b143ae4fb1fe5d699292cc05e8bccd55c0940deb7b9dd8c200cd477c"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-four-platform-backend-139331725573.log",
+      "bytes": 411070,
+      "sha256": "f267e9eed720d0af8a17a0137e0e7b8d71695f4f78dfc50385b7748297048cf6"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-four-platform-frontend-139331725115.log",
+      "bytes": 77564,
+      "sha256": "114e09f61ab8d72eb125a4620148a0899b64aee6627aad368f8d4886f4eb2903"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-operational-backend-139331725736.log",
+      "bytes": 96761,
+      "sha256": "14d3807ffef3c04b9c1dd609192e9267828c009d56f5486b85901b8b6ca1ee4e"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-operational-browser-mobile-139331725757.log",
+      "bytes": 97304,
+      "sha256": "83615b5c46c028c0fbdfc7842492169a5bfd0dcbbb2ca9f77e99b611659e766e"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-operational-frontend-139331725380.log",
+      "bytes": 52452,
+      "sha256": "fe4f2c2b629ec664e3918d5ee7ed345938c5596cd942a17703fe2f8051c656ac"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-payment-backend-139331725367.log",
+      "bytes": 24955,
+      "sha256": "78beb46d945b9b45f6a614d001e8c632dcf76997634e96de9c9fa17dd1c2cf18"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-payment-frontend-139331724950.log",
+      "bytes": 72470,
+      "sha256": "a33f61326cfd75b8c4f4600969099cd19ec95fc12ed0c1f5582569842930ccd1"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-stock-eligibility-139331725662.log",
+      "bytes": 62657,
+      "sha256": "c6d937b50eb147976c81e182b8319accb3c215d825ab6c06c34b27eafad79e87"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-synthetic-merge.json",
+      "bytes": 2803,
+      "sha256": "618578780356bdd2c62b73f9348efce1ee8ab2c20f489b50bdcb66482b5fd8be"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/a4-workflow-run-metadata.json",
+      "bytes": 86854,
+      "sha256": "7c9148fecccf98fc994a17ad7d7b405095f511154644716b7f08aa7a26d03749"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-a4/verify-a4-ci-evidence.py",
+      "bytes": 8139,
+      "sha256": "6c6c21622c3c273baf00639ce4bee52fa02a22b332a1776e9f571450a4290cdd"
+    },
+    {
+      "path": "profit-backend-verification-20261125/dependency-install.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "profit-backend-verification-20261125/environment-preparation.json",
+      "bytes": 1712,
+      "sha256": "ce3c96d1103b926c9c073369f5e95d467af170282907a071dfb1393392bd9857"
+    },
+    {
+      "path": "profit-backend-verification-20261125/environment-verification.json",
+      "bytes": 1169,
+      "sha256": "41f74cac675406097b732d9c8920facb6ad623b1e278c68f9196f059e5a9d8de"
+    },
+    {
+      "path": "profit-backend-verification-20261125/pip-check.log",
+      "bytes": 30,
+      "sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+    },
+    {
+      "path": "profit-backend-verification-20261125/pip-freeze.log",
+      "bytes": 736,
+      "sha256": "6451bc85f6e7b808fc927dba3b03454b2d8cbba2b4bd89ab32b0b8c096d8f15d"
+    },
+    {
+      "path": "profit-backend-verification-20261125/run-a4-targeted-tests.py",
+      "bytes": 4595,
+      "sha256": "76d917dd00b4f3e92fc18861c3b7e0668c6f8510b354f37e8ee1f6a74fba78ea"
+    },
+    {
+      "path": "profit-backend-verification-20261125/venv-create.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limits": [
+    "No generated outputs are being committed into production source.",
+    "Application test selections overlap and are not a unique-test total.",
+    "A4 candidate ZIP contains declared output records, not raw JS/CSS bodies; B output review is separate.",
+    "Host metadata was read without original guard or database descendant access.",
+    "No sensitive values or live merchant financial amounts are included."
+  ]
+}
