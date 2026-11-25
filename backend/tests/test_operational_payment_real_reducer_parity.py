@@ -49,11 +49,16 @@ def run_actual_reconcile(snapshot, source, clock):
     # module, which is not installed by this tiny policy-only CI job.
     runtime=types.ModuleType("operational_demand_refresh")
     runtime.calculation_checkpoint=lambda:None
-    # This job installs the actual FastAPI/Motor/PyMongo runtime needed by
-    # operational_balance_store. Do not substitute a partial fake store:
-    # real engine imports provider history, which itself requires store.fail.
+    # Import the genuine BNPL settlement fee implementation WITHOUT running
+    # bnpl.__init__'s web-route registration, which brings in authentication,
+    # bcrypt and side-effect-only API wiring unrelated to this pure reducer.
+    # The real bnpl/settlements_service.py remains loaded via package __path__;
+    # no fee calculation, history policy, or core reducer is mocked.
+    bnpl_package = types.ModuleType("bnpl")
+    bnpl_package.__path__ = [str(Path(__file__).resolve().parents[1] / "bnpl")]
     with patch.dict(sys.modules,{
         "operational_demand_refresh":runtime,
+        "bnpl":bnpl_package,
     }):
         spec=importlib.util.spec_from_file_location(
             "operational_balance_engine_isolated",
