@@ -49,6 +49,11 @@ def run_actual_reconcile(snapshot, source, clock):
     # module, which is not installed by this tiny policy-only CI job.
     runtime=types.ModuleType("operational_demand_refresh")
     runtime.calculation_checkpoint=lambda:None
+    # Real reconciliation source adapters import refresh_stage even when no
+    # visible HTTP refresh is running. In this isolated pure test there is no
+    # request-owned timing scope, so the matching null context is sufficient.
+    from contextlib import nullcontext
+    runtime.refresh_stage=lambda name: nullcontext()
     # Import the genuine BNPL settlement fee implementation WITHOUT running
     # bnpl.__init__'s web-route registration, which brings in authentication,
     # bcrypt and side-effect-only API wiring unrelated to this pure reducer.
