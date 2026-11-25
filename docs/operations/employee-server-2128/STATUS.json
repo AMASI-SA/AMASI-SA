@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "task_id": "employee-server-2128",
+  "state": "publication_in_progress",
+  "updated_at": "2026-11-25 16:16:55 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2128,
+  "task_branch": "codex/employee-progress-server-release-20261125",
+  "proof_branch": "codex/employee-server-2128-proof-20261125",
+  "source_git_sha": "a7c2a26dda1195beae3b6b5e3be6a9a504c5fa2a",
+  "intent_commit_sha": "a5067a28a43daf6f64fb6bf845b7636a2ffcd217",
+  "source_base_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+  "deployment_git_sha": "30c970807c05e291e2f48b35c84155b271fb5f09",
+  "deployment_tree_sha": "1fa8192237a0b0b1dc2605c2e497fefbbb8c3273",
+  "release_id": "rg5-ddd03995594cfbe4c05415b1cfb58f972ec434a2f62ef4315512f4357a6eeb38",
+  "authorization": "Owner explicitly requested server deployment; published employee application is unchanged.",
+  "scope": "Remaining counts, supplier-dispatch day statistics, seven-day pages, ten-product details, tracking and compact salary history.",
+  "prepare": {
+    "exit_code": 0,
+    "actor": "employee-server-2128-20261125-4d6265292f49",
+    "prepared_at": "2026-11-25T16:09:19.704009+00:00"
+  },
+  "prepublish": {
+    "exit_code": 0,
+    "ready_to_publish": true,
+    "protocol_version": 5
+  },
+  "publication": {
+    "click_count": 1,
+    "clicked_at": "2026-11-25T16:11:11.900Z",
+    "baseline_provider_version": "97dc193",
+    "ui_started": "Deployment Started Nov 25, 07:11 PM",
+    "timezone": "Asia/Riyadh",
+    "explicit_success_observed": false
+  },
+  "verification": {
+    "started": false,
+    "verified": false,
+    "expected_checks": 3,
+    "lease_active": true
+  },
+  "ci": {
+    "reviewed_B": {
+      "successes": 19,
+      "failures": 0,
+      "pending": 0,
+      "intentional_skips": 1,
+      "codeql_run": 45635269679,
+      "readiness_run": 45635269813
+    },
+    "deployment_M": {
+      "readiness": {
+        "run": 45648708881,
+        "conclusion": "success"
+      },
+      "security": {
+        "run": 45648708872,
+        "conclusion": "success"
+      },
+      "codeql": {
+        "run": 45648708743,
+        "attempt": 2,
+        "conclusion": "failure",
+        "diagnosis": "Analysis and SARIF generation completed; JS upload reports Server Error; Python also failed during upload without an explicit diagnostic line.",
+        "github_incident": "https://www.githubstatus.com/incidents/qn8mfv6q5hlx"
+      }
+    },
+    "release_decision": "B and M trees are identical. Repository protocol permits tree-equivalent merge and does not impose a separate postmerge CodeQL-upload gate. Original guards, source, permissions and workflows remain unchanged; failed upload is recorded as failed."
+  },
+  "evidence_remote_directory": "/tmp/mezan-employee-2128.T6YZ9U",
+  "next_safe_action": "Observe current publication until explicit newer success; do not republish. Then run original verify once with default3 checks, require exact A/M/release and inactive lease, and preserve successful receipts on proof branch.",
+  "limitations": [
+    "Physical mobile-device parity and live response latency not measured.",
+    "Pre-existing empty-string archive marker mismatch in legacy detail hydration documented; canonical null/missing pagination passed."
+  ],
+  "production_changed": {
+    "git_branch": true,
+    "live_runtime": "pending_explicit_completion_and_original_verification"
+  }
+}
