@@ -111,3 +111,61 @@ does not establish the shared lease state.
 
 **Production changed by this task: no.** This is a recoverable implementation
 checkpoint, not a claim of completed publication or live automation activation.
+
+
+## Superseding release checkpoint — 2026-11-25 22:39 Asia/Riyadh
+
+This section supersedes the historical release-state statements above. This
+branch is documentation-only release evidence; do not merge or deploy it.
+
+- Reviewed source A: `ca426cee9e4ed4fa730dece2409f916003249f83`.
+- Intent-only B: `66ac128fd6c9c25b86f1e8cdb7c5ccb929310636`.
+- Deployment D: `17a0c8c58a71962d1733e7888eeac31d20bc40c0`.
+- Production base J: `b651eacf5ded173c4f3224d195ef874b8bcea312`.
+- D/B tree: `039cacf3578f645fb2a0172cb5a2e2e15112a3c5`.
+- Release: `rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7`.
+- PR #2130 is merged into `hotfix/prod-snap-meta-final`; #2124 is closed as
+  superseded with its recoverable checkpoint preserved.
+
+Final exact-B verification is complete: 20 workflows succeeded and one
+unrelated conditional TikTok workflow was skipped. Operational Balance Web
+run 45678365557 passed all four jobs. Real MongoDB 8.0.12 replica-set coverage
+passed 7,735 tests plus 151 subtests, including all 44 new receipt cases and the
+ten-request concurrent replay test (one bank effect and unchanged shipping).
+Demand-read passed 106 tests; shipping passed 16 tests plus 18 subtests.
+Frontend passed 115 suites / 1,850 tests, including the 105 changed-form tests.
+Both final-B clean-clone adapter rehearsals executed and passed in readiness
+run 45678365247 (Node 20.20.2 and 24.19.0). All three D workflows passed:
+readiness 45680815295, security 45680815085, and CodeQL 45680815170.
+
+The original shared code-server recovered through a normal Reload Window.
+Original /app advanced cleanly to D with the exact B tree. Existing foreign
+roots were preserved, and prior frontend/node_modules was moved into a
+same-filesystem identity-checked backup. No secrets were read, copied or hashed.
+Platform-managed backend/.env was externally replaced before source mutation;
+its regular-file ownership/mode contract was verified without accessing its
+contents. The original v5 adapter build passed in 94.81 seconds with pinned
+Node 22.23.2 / Yarn 1.22.22. Original frontend and package verifiers passed.
+
+The original v5 prepare and prepublish commands passed. The active lease is
+owned by actor `operational-payment-20261125` for the A/D/release identities
+above. Emergent Manage -> Republish -> Publish changes was invoked once for
+https://mezansalla.com, and the platform recorded Deployment Started at
+Nov 25, 10:39 PM Asia/Riyadh. The platform is building production. No Preview
+deployment or paid agent chat was used.
+
+**Production publication: started; completion and runtime verification pending.**
+No financial entries or historical backfill were submitted, and no experimental
+payment flags were enabled. The source contract and native-client boundary above
+remain unchanged.
+
+Next safe action: observe this publication to a new explicit success state,
+then run the original shared `production_release_guard.py verify --url
+https://mezansalla.com` with bytecode disabled. Require three successful probes
+and final inactive matching lease before declaring completion. Do not click
+Republish again, clear the lease manually, or modify the frozen A/B/D lineage.
+
+PR and evidence:
+- https://github.com/AMASI-SA/AMASI-SA/pull/2130
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/45678365557
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/45678365247
