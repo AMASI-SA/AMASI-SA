@@ -69,7 +69,7 @@ async def supplier_progress_days(db, *, user_id, employee_id):
             'date_basis': 'supplier_dispatched_at', 'days': [{'key': key} for key in keys]}
 
 
-async def supplier_progress_workspace(db, *, user_id, employee_id, day, after=''):
+async def supplier_progress_workspace(db, *, user_id, employee_id, day, after='', confirmed_counts=False):
     from preparation_supplier_dispatch import _employee_workspace
     rows, pieces = await _files(db, user_id, employee_id, day)
     remaining = sorted({pid for row in rows for pid in row['progress']['remaining_piece_ids']})
@@ -90,6 +90,11 @@ async def supplier_progress_workspace(db, *, user_id, employee_id, day, after=''
     workspace['supplier_accounts'] = list(accounts.values())
     total = sum(row['progress']['total'] for row in rows)
     received = sum(row['progress']['received'] for row in rows)
+    if confirmed_counts:
+        from preparation_progress_counts import _received_by_day
+        receipts = await _received_by_day(db, user_id, employee_id, [day])
+        received = len(receipts[day] - set(remaining))
+        total = len(remaining) + received
     return {'ok': True, 'read_only': True, **workspace, 'date_basis': 'supplier_dispatched_at',
         'next_cursor': page_ids[-1] if len(page) > 10 else None,
         'progress_active_piece_ids': remaining,
