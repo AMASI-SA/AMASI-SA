@@ -12,6 +12,10 @@ on:
   pull_request:
     paths:
       - "backend/operational_payment_event_policy.py"
+      - "backend/operational_payment_bank_transfer_policy.py"
+      - "backend/operational_payment_courier_cod_policy.py"
+      - "backend/tests/test_operational_payment_bank_transfer_policy.py"
+      - "backend/tests/test_operational_payment_courier_cod_policy.py"
       - "backend/tests/test_operational_payment_event_policy.py"
       - "backend/tests/test_operational_source_validation_diagnostics.py"
       - "backend/operational_source_diagnostics.py"
@@ -90,6 +94,8 @@ jobs:
         working-directory: backend
         run: |
           python3 -m unittest discover -s tests -p 'test_operational_payment_event_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_bank_transfer_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_courier_cod_policy.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_source_validation_diagnostics.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_reconciliation_plan.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_capture_adapter.py' -v
