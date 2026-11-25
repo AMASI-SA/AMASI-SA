@@ -1,0 +1,158 @@
+{
+  "repository": "AMASI-SA/AMASI-SA",
+  "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+  "deployment_git_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+  "intent_commit": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+  "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+  "push_workflow_count": 3,
+  "successful_push_workflow_count": 3,
+  "workflow_discovery": "GitHub GET /actions/runs?head_sha=<D>&event=push&per_page=100; PR-only convenience wrapper is unsuitable for push discovery.",
+  "workflows": [
+    {
+      "id": 45632640720,
+      "name": "Mezan Release Readiness",
+      "event": "push",
+      "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720"
+    },
+    {
+      "id": 45632640739,
+      "name": "Security Gate",
+      "event": "push",
+      "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640739"
+    },
+    {
+      "id": 45632640752,
+      "name": "CodeQL",
+      "event": "push",
+      "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640752"
+    }
+  ],
+  "readiness": {
+    "run_id": 45632640720,
+    "jobs": [
+      {
+        "id": 139269642841,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 139269643312,
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 139269643318,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 139269643607,
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 139270220824,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 139270220908,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 139271718157,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "host_rehearsals": [
+      {
+        "host_node": "20.20.2",
+        "job_id": 139270220824,
+        "result": "success",
+        "checkout_matches_d": true,
+        "package_output_source_matches_a2": true,
+        "release_id_matches": true
+      },
+      {
+        "host_node": "24.19.0",
+        "job_id": 139270220908,
+        "result": "success",
+        "checkout_matches_d": true,
+        "package_output_source_matches_a2": true,
+        "release_id_matches": true
+      }
+    ],
+    "artifacts": [
+      {
+        "id": 15032221668,
+        "name": "release-v5-generated-outputs-host-24.19.0",
+        "size_in_bytes": 3885840,
+        "digest": "sha256:fef66c8ab5fbdd67374e8a1fa8d8f5547a8d6e937953bca54a1053f78e704418",
+        "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+      },
+      {
+        "id": 15031167988,
+        "name": "release-v5-clean-clone-evidence-host-24.19.0",
+        "size_in_bytes": 63808,
+        "digest": "sha256:1c8937c9becde213e6e5a7989c19aebe1a4bb94500b9bb84cd4f48638ff2661f",
+        "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+      },
+      {
+        "id": 15030887774,
+        "name": "release-v5-generated-outputs-host-20.20.2",
+        "size_in_bytes": 3889233,
+        "digest": "sha256:0d3f0d38c2e020489c1d3df353394c9a20227bf50d9599e6528fe52f3cd30938",
+        "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+      },
+      {
+        "id": 15030777981,
+        "name": "release-v5-clean-clone-evidence-host-20.20.2",
+        "size_in_bytes": 63801,
+        "digest": "sha256:1b9efb6a651a77545a4744c9d981892831c99f08ee79f29e1e8b30d6772bd2cc",
+        "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+      }
+    ]
+  },
+  "operational_backend_stock_on_d": {
+    "automatically_triggered": false,
+    "source_ref_verified": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "balance_workflow_push_branches": [
+      "codex/operational-balance-system-20261005",
+      "codex/operational-app-20261006"
+    ],
+    "stock_workflow_events": [
+      "pull_request",
+      "workflow_dispatch"
+    ],
+    "note": "The production branch push does not trigger these workflows; exact B PR runs completed successfully before merge. This record makes no claim of a separate operational Backend/Stock execution on D."
+  },
+  "prior_proofs": {
+    "b": "/workspace/scratch/39c6dec7c37f/profit-intent-b-ci-proof.json",
+    "a2": "/workspace/scratch/39c6dec7c37f/profit-source-a2-ci-proof.json"
+  },
+  "observed_at_utc": "2026-11-25T14:28:27Z",
+  "scope": "CI and isolated clean-clone rehearsals only; no production publication observed by this agent.",
+  "monitoring_read_only": true,
+  "workflow_reruns": 0,
+  "github_writes": 0,
+  "host_actions": 0
+}

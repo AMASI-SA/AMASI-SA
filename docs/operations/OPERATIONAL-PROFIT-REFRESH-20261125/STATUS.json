@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 14:27:09 UTC",
+  "recorded_at": "2026-11-25 14:37:16 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E7_NORMAL_MERGE_D_VERIFIED_ISOLATED_HOST_REHEARSAL_READY",
+  "status": "E8_D_ALL_CI_AND_ORIGINAL_HOST_REHEARSAL_PASS",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -288,10 +288,105 @@
         "sha256": "02ad0f6a0f5f37f8fb7215c6251d54adc0e2b3f301a91cd357797dfbb07c71b8",
         "use": "Historical only; never freeze for the updated source."
       }
+    },
+    "host_isolated_D": {
+      "phase": "isolated_D",
+      "result": "PASS",
+      "started_at": "2026-11-25T14:33:46.551923+00:00",
+      "finished_at": "2026-11-25T14:35:42.152736+00:00",
+      "runner_pid": 48812,
+      "source": "/tmp/mezan-pr2126-D-ncq_d5ga/source",
+      "steps": [
+        {
+          "index": 1,
+          "cwd": "frontend",
+          "argv": [
+            "yarn",
+            "build"
+          ],
+          "returncode": 0,
+          "elapsed_seconds": 110.967,
+          "finished_at": "2026-11-25T14:35:37.695321+00:00"
+        },
+        {
+          "index": 2,
+          "cwd": ".",
+          "argv": [
+            "python",
+            "-B",
+            "scripts/verify_frontend_build.py",
+            "--expected-git-sha",
+            "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+            "--reviewed-intent-v5"
+          ],
+          "returncode": 0,
+          "elapsed_seconds": 1.584,
+          "finished_at": "2026-11-25T14:35:39.279940+00:00"
+        },
+        {
+          "index": 3,
+          "cwd": ".",
+          "argv": [
+            "python",
+            "-B",
+            "scripts/emergent_deployment_adapter.py",
+            "verify-packages"
+          ],
+          "returncode": 0,
+          "elapsed_seconds": 2.699,
+          "finished_at": "2026-11-25T14:35:41.979372+00:00"
+        }
+      ],
+      "before": {
+        "at": "2026-11-25T14:33:46.551942+00:00",
+        "main_head": "6323017fbf9ba160c536a94f408507435786412a",
+        "main_tracked_changes": "",
+        "isolated_head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+        "isolated_changes": "",
+        "app_free_bytes": 439230464,
+        "tmp_free_bytes": 266513510400,
+        "guard_active": false
+      },
+      "after": {
+        "at": "2026-11-25T14:35:41.979813+00:00",
+        "main_head": "6323017fbf9ba160c536a94f408507435786412a",
+        "main_tracked_changes": "",
+        "isolated_head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+        "isolated_changes": "",
+        "app_free_bytes": 439046144,
+        "tmp_free_bytes": 264082866176,
+        "guard_active": false
+      },
+      "package_boundary": {
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+        "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "backend": {
+          "runtime_root": "backend",
+          "file_count": 1359,
+          "package_tree_sha256": "d224a8b3027f270e881d6237e9a6683a2b6378e775b8aeb363fa8a5c638e21d9"
+        },
+        "frontend": {
+          "runtime_root": "frontend",
+          "file_count": 1834,
+          "package_tree_sha256": "b04b1c4cec13a2240a0b073b38947011277cae874ed48e442ad6cddee42443c1",
+          "isolated_runtime_artifact_verified": true,
+          "static_root": "frontend/build"
+        }
+      },
+      "log_sha256": {
+        "step-1.log": "00cf8260e10a278225dead603a942be3e152e3d4bbf1209540323ae4ead94cf9",
+        "step-2.log": "8546375e5b6b2487054d160822edb0be431ab02c5f28e4bf0c7201101aacfc6a",
+        "step-3.log": "db138fb48550f7786736edf8ccb3bb7d82ff2724ccb45104c7bbffd014809e2b"
+      },
+      "lease_created": false,
+      "publish_clicked": false,
+      "main_checkout_changed": false,
+      "no_generated_outputs_copied_to_app": true
     }
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Launch the preserved three original commands sequentially in isolated D using task-owned /tmp cache/temp, logging each result and verifying source/main state. Complete remaining D CodeQL gate. If isolated rehearsal passes, use only original adapter to materialize exact D in /app after fresh inactive guard and controlled fast-forward; do not transplant outputs. Prepare only after final rehearsal and identity pass, then prepublish immediately before one publish.",
+  "next_safe_action": "Fresh original /app guard must be inactive, /app on J tracked-clean, and origin production must still be exact D. Fast-forward /app to D only; run its own original yarn build, verify_frontend_build --reviewed-intent-v5, and adapter verify-packages with task-owned external cache/temp. Preserve all foreign processes and worktrees. Do not transplant outputs. Only after pass prepare own v5 lease, prepublish and one authorized Republish.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
@@ -373,7 +468,10 @@
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
-  "evidence_checkpoint": "7c4142dd217531c0579feaddb52f4cba40f6b738",
+  "evidence_checkpoint": {
+    "previous_commit": "904c4d5b63e8c301c72e328fc7a5ff089d631da9",
+    "phase": "E8_D_ALL_CI_AND_ORIGINAL_HOST_REHEARSAL_PASS"
+  },
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
   "candidate": {
@@ -537,75 +635,162 @@
     "production_branch_changed": true,
     "production_runtime_changed": false,
     "D_CI": {
-      "checks": [
+      "repository": "AMASI-SA/AMASI-SA",
+      "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "deployment_git_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+      "intent_commit": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+      "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+      "push_workflow_count": 3,
+      "successful_push_workflow_count": 3,
+      "workflow_discovery": "GitHub GET /actions/runs?head_sha=<D>&event=push&per_page=100; PR-only convenience wrapper is unsuitable for push discovery.",
+      "workflows": [
         {
-          "name": "Emergent manual redeploy required",
+          "id": 45632640720,
+          "name": "Mezan Release Readiness",
+          "event": "push",
+          "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139271718157"
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720"
         },
         {
-          "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+          "id": 45632640739,
+          "name": "Security Gate",
+          "event": "push",
+          "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139270220908"
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640739"
         },
         {
-          "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+          "id": 45632640752,
+          "name": "CodeQL",
+          "event": "push",
+          "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139270220824"
-        },
-        {
-          "name": "Host Node 24.19.0 engine and dispatcher contract",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269643607"
-        },
-        {
-          "name": "Backend preflight",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269643318"
-        },
-        {
-          "name": "Host Node 20.20.2 engine and dispatcher contract",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269643312"
-        },
-        {
-          "name": "Backend security contracts",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640739/job/139269643309"
-        },
-        {
-          "name": "Frontend build",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269642841"
-        },
-        {
-          "name": "CodeQL (javascript-typescript)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640752/job/139269642572"
-        },
-        {
-          "name": "Frontend dependency and CSP checks",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640739/job/139269642430"
-        },
-        {
-          "name": "CodeQL (python)",
-          "status": "in_progress",
-          "conclusion": null,
-          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640752/job/139269642138"
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640752"
         }
       ],
-      "backend_stock_push_note": "These workflows do not trigger on Production push; both passed at exact B. D content tree equals B."
+      "readiness": {
+        "run_id": 45632640720,
+        "jobs": [
+          {
+            "id": 139269642841,
+            "name": "Frontend build",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 139269643312,
+            "name": "Host Node 20.20.2 engine and dispatcher contract",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 139269643318,
+            "name": "Backend preflight",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 139269643607,
+            "name": "Host Node 24.19.0 engine and dispatcher contract",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 139270220824,
+            "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 139270220908,
+            "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 139271718157,
+            "name": "Emergent manual redeploy required",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ],
+        "host_rehearsals": [
+          {
+            "host_node": "20.20.2",
+            "job_id": 139270220824,
+            "result": "success",
+            "checkout_matches_d": true,
+            "package_output_source_matches_a2": true,
+            "release_id_matches": true
+          },
+          {
+            "host_node": "24.19.0",
+            "job_id": 139270220908,
+            "result": "success",
+            "checkout_matches_d": true,
+            "package_output_source_matches_a2": true,
+            "release_id_matches": true
+          }
+        ],
+        "artifacts": [
+          {
+            "id": 15032221668,
+            "name": "release-v5-generated-outputs-host-24.19.0",
+            "size_in_bytes": 3885840,
+            "digest": "sha256:fef66c8ab5fbdd67374e8a1fa8d8f5547a8d6e937953bca54a1053f78e704418",
+            "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+          },
+          {
+            "id": 15031167988,
+            "name": "release-v5-clean-clone-evidence-host-24.19.0",
+            "size_in_bytes": 63808,
+            "digest": "sha256:1c8937c9becde213e6e5a7989c19aebe1a4bb94500b9bb84cd4f48638ff2661f",
+            "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+          },
+          {
+            "id": 15030887774,
+            "name": "release-v5-generated-outputs-host-20.20.2",
+            "size_in_bytes": 3889233,
+            "digest": "sha256:0d3f0d38c2e020489c1d3df353394c9a20227bf50d9599e6528fe52f3cd30938",
+            "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+          },
+          {
+            "id": 15030777981,
+            "name": "release-v5-clean-clone-evidence-host-20.20.2",
+            "size_in_bytes": 63801,
+            "digest": "sha256:1b9efb6a651a77545a4744c9d981892831c99f08ee79f29e1e8b30d6772bd2cc",
+            "head_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758"
+          }
+        ]
+      },
+      "operational_backend_stock_on_d": {
+        "automatically_triggered": false,
+        "source_ref_verified": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+        "balance_workflow_push_branches": [
+          "codex/operational-balance-system-20261005",
+          "codex/operational-app-20261006"
+        ],
+        "stock_workflow_events": [
+          "pull_request",
+          "workflow_dispatch"
+        ],
+        "note": "The production branch push does not trigger these workflows; exact B PR runs completed successfully before merge. This record makes no claim of a separate operational Backend/Stock execution on D."
+      },
+      "prior_proofs": {
+        "b": "/workspace/scratch/39c6dec7c37f/profit-intent-b-ci-proof.json",
+        "a2": "/workspace/scratch/39c6dec7c37f/profit-source-a2-ci-proof.json"
+      },
+      "observed_at_utc": "2026-11-25T14:28:27Z",
+      "scope": "CI and isolated clean-clone rehearsals only; no production publication observed by this agent.",
+      "monitoring_read_only": true,
+      "workflow_reruns": 0,
+      "github_writes": 0,
+      "host_actions": 0
     }
   }
 }
