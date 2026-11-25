@@ -1,0 +1,95 @@
+{
+  "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
+  "recorded_at": "2026-11-25T13:26:02Z",
+  "phase": "E1_SOURCE_A_LOCAL_VALIDATED_CI_PENDING",
+  "repository": "AMASI-SA/AMASI-SA",
+  "source_branch": "codex/operational-profit-refresh-20261125",
+  "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
+  "source_base_J": "6323017fbf9ba160c536a94f408507435786412a",
+  "source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+  "source_A_tree": "3b6cd9961800c7655a5cb252bf783da6541048c9",
+  "previous_checkpoint": "45e047547f18fcde710adb2b062fd01c36f195c0",
+  "pr": 2126,
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
+  "diff": {
+    "changed_files": 8,
+    "ahead_by": 3,
+    "behind_by": 0,
+    "intent_changed": false,
+    "remote_blob_shas_match_local_files": true
+  },
+  "local_validation": {
+    "backend_affected": {
+      "passed": 231,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 21.39
+    },
+    "independent_adjacent": {
+      "passed": 76,
+      "skipped": 0,
+      "seconds": 5.08
+    },
+    "new_backend_cases": 23,
+    "frontend": {
+      "passed": 75,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 1.634,
+      "new_cases": 2
+    },
+    "red": {
+      "logical_context": 14,
+      "product": 9,
+      "frontend": 2
+    },
+    "independent_review": "No blocking finding; exact AST parity after stripping diagnostic additions; frontend source restored byte-for-byte after removing3whitelist lines.",
+    "vocabulary": {
+      "backend": 50,
+      "frontend": 50,
+      "added": 16,
+      "tail_limit": 64
+    }
+  },
+  "source_CI": {
+    "state": "in_progress",
+    "readiness_run_id": 45622546938,
+    "operational_run_id": 45622546716,
+    "stock_run_id": 45622546655,
+    "candidate_artifact_id": null,
+    "required_new_cases_not_yet_verified_in_CI": true
+  },
+  "host_observation": {
+    "observed_at": "2026-11-25T13:22:34.698322+00:00",
+    "original_guard_exit": 0,
+    "active": false,
+    "head": "6323017fbf9ba160c536a94f408507435786412a",
+    "tracked_changes": "",
+    "host_mutated": false
+  },
+  "release": {
+    "intent_B": null,
+    "merge_D": null,
+    "prepared": false,
+    "publish_clicked": false,
+    "production_changed": false
+  },
+  "other_work": {
+    "pr2124": "Draft payment path, not merged; adds3different diagnostic names in the same file.",
+    "pr2125": "Competing payment draft, not published separately according to its current coordination.",
+    "pr2122": "Unmerged independent dashboard change, preserved.",
+    "constraint": "Re-read production/ref and original host guard before shared mutation; no foreign lease or source changes."
+  },
+  "limits": [
+    "Diagnostic evidence only; no production latency improvement established.",
+    "Nested phases overlap. Source timeout cancellation is not equivalent to user cancellation.",
+    "Only the latest64record tail is retained. Queued readers that never start have no phase record.",
+    "Private financial receipts and reports remain outside Git."
+  ],
+  "continuity": {
+    "issue": 1006,
+    "known_comment_limit": 2500,
+    "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
+  },
+  "next_safe_action": "Complete exact-A CI, verify23newbackend+2newfrontend cases from actual CI results, retrieve candidate artifact with provenance and verify original load_candidate_release_intent on an exact cleanA checkout before creating intent-onlyB."
+}
