@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:17:25.213Z",
+  "recorded_at": "2026-11-25T00:23:30.267Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "D6323017fbf9ba160c536a94f408507435786412a merged and all11 exact-D checks PASS. Final current-host helper/envelope and single-launch supervisor independently reviewed. Approved for one host rehearsal subject to the original fresh guards; no own lease or publication yet.",
+  "status": "Actual guarded host rehearsal started once at 2026-11-25T00:18:26.200599UTC; complete PASS and worker exit receipt pending. D6323017fbf9ba160c536a94f408507435786412a exact11 CI checks passed; prior PR2120 verified and matching lease closed. No own lease or publication yet.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -301,7 +301,7 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Download immutable hash-pinned supervisor, invoke once with this exact evidence commit, retain bootstrap/worker/stage paths and inspect receipt. Original helper must freshly verify inactive guard, exact J/branch/clean state, bound live process/root/log identities,432 entries, required capacity and full clone/canonical original adapter proofs. Only complete PASS permits own prepare/prepublish and one publication.",
+  "next_safe_action": "Observe the existing owned stage and worker receipt without re-launching or competing guard commands. Full original rehearsal PASS and worker exit0 required before own prepare/prepublish and one authorized publication. Preserve backups/foreign data and exact frozen identities.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -434,10 +434,18 @@
     },
     "fresh_host_record": "pr2123-final-host-observation.json",
     "external_gates_satisfied": true,
-    "run_started": false,
+    "run_started": true,
     "lease_created": false,
     "published": false,
-    "no_automatic_retry": true
+    "no_automatic_retry": true,
+    "input_evidence_commit": "872606dcad34deb8261c7ba1b1993d976d26c892",
+    "started_at": "2026-11-25T00:18:26.200599+00:00",
+    "bootstrap": "/tmp/mezan-pr2123-bootstrap-4uy350ya",
+    "supervisor_stage": "/tmp/mezan-pr2123-supervisor-hl9hcfu8",
+    "worker_pid": 29183,
+    "rehearsal_stage": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg",
+    "run_state": "RUNNING_NOT_RESULT",
+    "latest_observation": "Original owned-clone adapter and frontend/package/full proofs PASS. Pre-update preservation checks underway. No final result yet."
   },
   "platform_baseline": {
     "provider_version": "7191418",
