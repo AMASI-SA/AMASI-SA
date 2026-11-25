@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task_id": "employee-server-2128",
   "state": "published_verification_in_progress",
-  "updated_at": "2026-11-25 16:23:54 UTC",
+  "updated_at": "2026-11-25 16:25:55 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 2128,
   "task_branch": "codex/employee-progress-server-release-20261125",
@@ -83,5 +83,15 @@
   "production_changed": {
     "git_branch": true,
     "live_runtime": "yes_provider_bbaba13_original_verification_running"
+  },
+  "evidence_files": {
+    "prepare.json": {
+      "git_blob": "c654084b54b01ea66c0b72b2abf83c2d8e837924",
+      "sha256": "05dc2466ff747703f7f1647b7a616951195f9ecf3aa4c656d0b2ba40891c81f2"
+    },
+    "prepublish.json": {
+      "git_blob": "493f728ef0b90de9b39f35e920066e3bddcdb0ac",
+      "sha256": "e9c4bc44a2fad202fed9609c1a42bab4d8817a2b51f1395d0f55eb6783b3a189"
+    }
   }
 }
