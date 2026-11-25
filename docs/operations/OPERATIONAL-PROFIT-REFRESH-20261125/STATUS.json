@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25T13:19:30.525416+00:00",
+  "recorded_at": "2026-11-25 13:50:52 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "SOURCE_READY_LOCAL_VALIDATION_PASSED_EXACT_SOURCE_CI_PENDING",
+  "status": "E3_EXACT_A2_CANDIDATE_PRESERVED_ORIGINAL_VALIDATION_PENDING",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -32,13 +32,17 @@
       "complete": true
     },
     "host": {
-      "observed_at": "2026-11-25T12:42:57.050237+00:00",
+      "observed_at": "2026-11-25T13:48:16.974108+00:00",
+      "original_guard_exit": 0,
+      "active": false,
       "head": "6323017fbf9ba160c536a94f408507435786412a",
       "tracked_changes": "",
-      "guard_exit": 0,
-      "guard": {
-        "active": false
-      }
+      "isolated_source_path": "/tmp/mezan-pr2126-A2-8qvvlulq/source",
+      "isolated_head": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "isolated_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
+      "isolated_source_clean": true,
+      "main_checkout_unchanged": true,
+      "normal_git_fetch_and_detached_worktree_only": true
     },
     "scheduled_failure": {
       "observed_at_approx": "2026-11-25T11:40:52Z",
@@ -142,7 +146,30 @@
     "independent_ast_review": "Dashboard and profit source modules match baseline AST after removing diagnostic-only wrappers/imports/map.",
     "whitespace": "git diff --check exit0",
     "warning": "Existing Pydantic validator deprecation warnings only.",
-    "ci": "Pending on source A; inherited intent is not a release for this change.",
+    "ci": {
+      "state": "17_of_19_workflows_success_two_running",
+      "observed_at": "2026-11-25 13:50:52 UTC",
+      "all_former_contract_failures_resolved": true,
+      "frontend": {
+        "run_id": 45625707762,
+        "artifact_id": 15028805297,
+        "passed": 1844,
+        "failed": 0,
+        "pending": 0,
+        "new_cases_executed": 2,
+        "artifact_sha256": "88c1aa6fdf6b463e57f4fe75fc957be7d13307c4a3cd37deb603b3d866132249"
+      },
+      "pending_jobs": [
+        139245384386,
+        139245205727
+      ],
+      "contract_runs": [
+        45625707655,
+        45625707945,
+        45625707968
+      ],
+      "readiness_run": 45625707862
+    },
     "frontend": {
       "red": {
         "failed": 2,
@@ -165,16 +192,75 @@
       "root_affected": "PYTHONPATH=backend:backend/tests python -m pytest -q backend/tests/test_operational_balance_profit_stage_diagnostics.py backend/tests/test_operational_balance_profit_product_stage_diagnostics.py backend/tests/test_operational_balance_profit_context_parallel.py backend/tests/test_operational_balance_refresh_stage_timing.py backend/tests/test_operational_balance_source_stage_timing.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_automation.py backend/tests/test_operational_balance_automation_routes.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_refresh_parallel_profit.py backend/tests/test_dashboard_demand_builders.py --tb=short",
       "product_adjacent": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_profit_product_authority_parallel.py backend/tests/test_dashboard_bundle_cost_authority.py backend/tests/test_operational_balance_profit_sources.py --tb=short",
       "frontend": "node isolated-jest27/bin/jest.js --config isolated-jest.config.cjs --runInBand --ci; actual module frontend/src/pages/operational/visibleOperationalRead.test.js; CI repository command still required."
+    },
+    "source_contract_red": {
+      "failed": 3,
+      "passed": 28,
+      "subtests_passed": 5,
+      "skipped": 0,
+      "seconds": 9.43,
+      "reason": "Existing comparators did not account for the fixed stage scaffolding; direct profiles lookup raised StopIteration."
+    },
+    "source_contract_green": {
+      "passed": 31,
+      "subtests_passed": 27,
+      "skipped": 0,
+      "seconds": 4.33,
+      "rejected_scaffolding_cases": 17,
+      "body_query_calculation_mutations_retained_and_detected": 3
+    },
+    "root_contract_integration": {
+      "passed": 54,
+      "subtests_passed": 27,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 5.34,
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 GIT_NO_LAZY_FETCH=1 python -m pytest --noconftest -q backend/tests/test_dashboard_runtime_source_contract.py backend/tests/test_dashboard_ads_costs.py backend/tests/test_operational_balance_profit_stage_diagnostics.py backend/tests/test_operational_balance_profit_product_stage_diagnostics.py --tb=short"
+    },
+    "previous_A_CI": {
+      "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+      "frontend": {
+        "run_id": 45622546716,
+        "artifact_id": 15026472831,
+        "passed": 1844,
+        "failed": 0,
+        "skipped": 0,
+        "new_cases_executed": 2,
+        "artifact_sha256": "a7516e49f67c09adcc6d34f2217a3028546be9375f9f7ffee044ff0d07e3e0fe"
+      },
+      "stock": {
+        "run_id": 45622546655,
+        "artifact_id": 15028601119,
+        "passed": 6459,
+        "failed": 0,
+        "skipped": 0,
+        "new_cases_executed": 23,
+        "artifact_sha256": "7c9eae2fc0136582d5c05acbc7f71c27c2f1ec089bd0f8c52ffcaa2c481d3f35"
+      },
+      "known_failures": {
+        "run_ids": [
+          45622546705,
+          45622546527,
+          45622546646
+        ],
+        "cause": "Exact product oracle/companion-tail comparators reject the newly added diagnostic scaffolding; fixed only in the two test contract files."
+      },
+      "old_candidate": {
+        "artifact_id": 15026387651,
+        "run_id": 45622546938,
+        "sha256": "02ad0f6a0f5f37f8fb7215c6251d54adc0e2b3f301a91cd357797dfbb07c71b8",
+        "use": "Historical only; never freeze for the updated source."
+      }
     }
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Create source A and PR against unchanged production6323017; inspect exact-source required CI and candidate artifact. Freeze only a matching v5 intent-only B. Preserve other work and require fresh inactive original guard before any host mutation/rehearsal.",
+  "next_safe_action": "On the original clean A2 host checkout, validate the byte-identical external candidate with load_candidate_release_intent. Await all exact-A2 source CI, including new backend cases. Then create B changing only release/release-intent-v5.json with the identical blob. No lease before B/D and successful host adapter rehearsal.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "45e047547f18fcde710adb2b062fd01c36f195c0",
+  "last_remote_checkpoint": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -185,7 +271,8 @@
     "financial_source_writes_added": false,
     "ordinary_calls": "No-op diagnostics outside the existing owned refresh context.",
     "soft_failure_classification": "Observe the reader before the unchanged partial-result catches; deadline-cancelled reader is not classified as user cancellation.",
-    "frontend": "The existing manual 408/409 error logger retains the same fixed16new stage labels; no warning/retry/request flow change."
+    "frontend": "The existing manual 408/409 error logger retains the same fixed16new stage labels; no warning/retry/request flow change.",
+    "source_contract_compatibility": "Extend the existing exact frozen-reducer comparator to unwrap only the5reviewed fixed observer scopes and single exact local import. Retain every query/calculation statement and every original baseline/hash. Ads observer comparator uses the same exact normalizer."
   },
   "files": [
     {
@@ -222,6 +309,16 @@
       "path": "frontend/src/pages/operational/visibleOperationalRead.test.js",
       "bytes": 32309,
       "sha256": "7a03b4c86879c5f2c52ce0e2a867bb1974a46583290cd05edc7e12f82687475d"
+    },
+    {
+      "path": "backend/tests/test_dashboard_runtime_source_contract.py",
+      "bytes": 26184,
+      "sha256": "a587f5680f0ea654fc13e84e74ef5ba1c760c96f57752a45d1c6fdf8e076293c"
+    },
+    {
+      "path": "backend/tests/test_dashboard_ads_costs.py",
+      "bytes": 22352,
+      "sha256": "0e631e67f6a4e206d369d98ea9015dd07fcd3ee77c0b3e4f31d4469253efe210"
     }
   ],
   "review": {
@@ -233,6 +330,28 @@
       "A queued reader not admitted before budget expiry has no entered-stage record.",
       "Source deadline cancellation is distinguished using source_errors, not stage outcome alone.",
       "No production improvement or source-completeness claim."
-    ]
+    ],
+    "source_contract": "Independent review found no blocker. Fixed top-level8statement shape, exact import and5scopes, no aliases/as/keywords/extra observer uses; normalizer preserves body/query/math changes so unchanged final comparisons reject them."
+  },
+  "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
+  "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
+  "evidence_checkpoint": "b3ffe2b11124a26df67bf429419b5e27e44261f7",
+  "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
+  "candidate": {
+    "source_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "source_base": "6323017fbf9ba160c536a94f408507435786412a",
+    "run_id": 45625707862,
+    "artifact_id": 15027759172,
+    "archive_bytes": 439966,
+    "archive_sha256": "d9ae376d2bbc4c1d90f27d9fc0a894c7305dd1918da90963fb9e17d0d9409902",
+    "intent_bytes": 1531177,
+    "intent_sha256": "0621f4b604a1470fe822f02ed62ce20bd26c4c2c3d28eac79ad5d57d0293e420",
+    "intent_git_blob": "714c903b4264cc912c86df8bb2ee3caf2085fb65",
+    "preserved_path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/release-candidate-A2.json",
+    "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "original_loader_validated": false,
+    "intent_commit_B_created": false
   }
 }
