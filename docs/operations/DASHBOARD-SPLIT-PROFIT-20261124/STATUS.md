@@ -908,3 +908,36 @@ The original first host attempt remains **BLOCKED**. The interrupted bounded rec
 
 Evidence: `checkpoints/E16-observation.json` contains the compact attributed public observations and verifier fingerprint. E16 records **successor publication complete, original verification PASS, guard inactive, live dashboard acceptance INCOMPLETE**.
 
+
+## E17 — Remaining cause unproved; authoritative production read access pending
+
+This handoff preserves the complete E16 STATUS prefix from evidence commit `39d0ef63b5aae06f8289963b92a91c0e84067ae5`, tree `2ac37efb4ae6c013df68a9e61ea5563902ba445d`. The observations below are attributed to root. The requested Nov24 dashboard result remains incomplete.
+
+### Read-only findings and their limits
+
+The normal provider-fees UI and authenticated read-only `GET /api/accounting-module/onboarding/fee-policies` confirmed that relevant saved Salla policies are active and cover Nov24. Visible percentage, fixed, tax and component fields are complete, and evidence is present. Values, IDs and evidence text remain private. This confirms saved-policy presence; it does not prove per-order evidence, matching, coverage or canonical calculation correctness. A generic missing-tariff cause has not been established.
+
+A representative Mada commerce diagnostic reported an external native tender, a paid state with no outstanding balance, native SAR and a present transaction reference. The read-only diagnostic and available source were insufficient to prove a canonical calculation error. Private order identifiers, values and references are omitted. Saved operational issues did not match the initially queried Nov24 subset and are not the authoritative executive source; no causal or full-date conclusion follows from them.
+
+A read-only PyMongo query scoped to the exact UI account and owner returned no matching Nov24 executive demand header. It used no application imports or writes. The queried connection's production identity was not proved, so that empty result cannot establish missing production data or explain the dashboard state.
+
+### Production read-access handoff
+
+Native DevTools access was explicitly blocked by organization policy; the window was closed and no bypass was attempted. The existing Emergent Database > View database > Mongo viewer opened through the existing account and public app name. Preview was available; Production said not configured and requested a MongoDB connection URL. The configuration modal was closed without changes and the page remained Production Database Not Set Up. No production secret was read, copied or entered, and no production configuration changed.
+
+The MongoDB Atlas connector was suggested to the user but is not installed or connected in the latest tool result. The pending step is to install and connect the existing production MongoDB through the secure approved flow, confirm production connection identity, then continue the exact cached payment-fee reason read. No browser authentication credential request or manual takeover has been issued. Existing push, merge and publish authorization persists; no new publication approval is requested.
+
+### A later owner release is in progress
+
+Fresh GitHub metadata showed PR2131 merged normally from base deployment `17a0c8c58a71962d1733e7888eeac31d20bc40c0` to deployment `37fd7851bb76b39b74e434da19183262e4d42f26`; the fresh production ref matched that merge. Its PR head is `514bd0d15b08a48353ab4566c1b243d1279e792b`, head tree `4d56be96f39b4e15db172a61cb5ae96a9190d649`. Root has not independently reviewed full PR2129 source retention in PR2131, so none is asserted here.
+
+The owner handoff updated at 20:34:32 UTC names actor `operational-payment-performance-20261125`, release ID `rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7`, and a single publication at approximately 20:30 UTC. Emergent showed a Nov25 23:30 Riyadh start and was observed building at approximately 20:33 UTC. Platform completion and the original guard verification were still pending in that handoff. This dashboard task created no lease and performed no publication.
+
+At approximately 20:39 UTC, Emergent still displayed Publishing your website to cloud with an elapsed label of 9m17s; its latest finished version remained `04fc573` from PR2130. PR2131 completion had not been observed.
+
+E16's completed verification and inactive lease closure apply to PR2130 only. They do not establish current guard inactivity or PR2131 success. Do not interfere with the later owner's release, reuse its lease or run stale E14 inputs.
+
+The original first attempt remains **BLOCKED**, interrupted recovery final outcome **UNKNOWN**, historical final foreign continuity **not proved**, and E14 host2 **NOT STAGED / NOT RUN**. Root's latest local application working-tree status was clean. No new application source, test or business-data mutation occurred in these diagnostic observations. The exact remaining cause is **not established** and the requested repair is **not complete**.
+
+Evidence: `checkpoints/E17-observation.json`. This public handoff excludes private business amounts/counts, account or order identifiers, references, tariff values, evidence text, secrets and connection strings.
+
