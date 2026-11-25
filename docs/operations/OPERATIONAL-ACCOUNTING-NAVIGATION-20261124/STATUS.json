@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-25",
-  "state": "candidate_frontend_and_observer_verified_awaiting_secure_canonical_data_connection",
+  "state": "secure_viewer_connected_native_bson_capture_and_read_runtime_in_preparation",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -118,7 +118,9 @@
       "production_browser": "Existing owner session permits protected read-only GETs; freshness confirms a real active saved state.",
       "cross_origin_candidate_to_production": "Production does not allow Preview origin; no CORS, authentication or proxy change performed.",
       "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
-      "official_admin_viewer": "Emergent database viewer reached via Manage/Database/View database. Preview connection available by app name. Production is disconnected and requires a MongoDB URL via the secure connection flow; no credential was read or entered."
+      "official_admin_viewer": "User completed secure browserAuth; Production connection succeeded and canonical state/audit collections are present. Selecting the state collection returnedHTTP500; one normal refresh also failed and old collection rows remained visible. No stale rows copied. Advanced options expose new-document only, not export; no WebMCP tools. Connection credential was never exposed to the assistant.",
+      "existing_bson_backup": "Bounded read-only search of known prior task directories found no BSON/mongodump/archive copy. Exact repository/checkpoint search also found no canonical export artifact.",
+      "native_capture": "Task-private direct read-only BSON exporter is being prepared. Hidden TTY-only credential input, raw BSON/hash/owner validation, one read-only snapshot session and current-primary head recheck. Core offline checks pass; full forecast/directory/source coverage implementation and independent review still pending. No source credential or production data has entered this helper."
     },
     "private_observer": {
       "files": "preview-tools/",
@@ -149,6 +151,31 @@
       "cache": "/tmp/mezan-pr2095-preview-20261125/cache",
       "receipt": "/tmp/mezan-pr2095-preview-20261125/toolchain.json",
       "frozen_install_completed": true
+    },
+    "existing_owner_identity_match": true,
+    "private_mongo": {
+      "ready": true,
+      "started_at_utc": "2026-11-25T14:33:58.634438Z",
+      "pid": 49277,
+      "port": 27019,
+      "bind_ip": "127.0.0.1",
+      "replica_set": "mezan_pr2095_private",
+      "members": [
+        "127.0.0.1:27019"
+      ],
+      "directory": "/tmp/mezan-pr2095-preview-20261125/mongo/data",
+      "runtime_receipt": "/tmp/mezan-pr2095-preview-20261125/mongo/runtime.json",
+      "mongodb_version": "7.0.45",
+      "cache_gb": 0.25,
+      "source_data_imported": false,
+      "snapshot_read_majority_journal_transaction_probe": "Passed on own disposable probe database only; no financial data.",
+      "old_p01_changed": false
+    },
+    "private_current_api": {
+      "prepared_in_progress": true,
+      "running": false,
+      "planned_port": 8002,
+      "principle": "Exact current read routers and demand-only worker on own verified Mongo copy; original private authentication service unchanged. Gate all routes and external egress; no full server/startup providers."
     }
   },
   "shared_release": {
@@ -170,7 +197,7 @@
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Use the official Emergent database viewer's secure Production connection flow. The connection credential must be entered by the user through browserAuth or manual takeover, never exposed to chat/tools. Once connected, inspect existing owner-scoped canonical BSON backup/export feasibility before preparing a disposable current-backend copy. Then verify normal Preview auth and measure real routes. Do not change live data, P01, CORS, authentication, or Production.",
+  "next_safe_action": "Finish/review the full native BSON source-scope exporter and private read runtime, persist exact tooling and verification, then present the user-controlled hidden source-URI prompt in the independent terminal. Browser-entered credentials must not be extracted or replayed. Only after a faithful complete export should the task-owned database be populated and current read API/worker started. Real route timings remain unmeasured.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
   "evidence_branch_is_deployable": false,
   "history": [
@@ -188,7 +215,12 @@
       "checkpoint": "49ad43d6f0082172cde8d442af5c468494913aa5",
       "state": "candidate_frontend_running_canonical_data_connection_required",
       "notes": "Initial observer package. First integration exposed Preview ingress Host rewriting; bounded diagnostic1bfea7c identified exact cluster9 host. Fixed and disabled logging in887e67e; browser integration now verified."
+    },
+    {
+      "checkpoint": "52a45791563e899573cf02816df7b7d6109ae8c1",
+      "state": "candidate_frontend_and_observer_verified_awaiting_secure_canonical_data_connection",
+      "notes": "User completed official secure connection afterward. The Viewer state-readHTTP500 is the new blocker; do not repeat login or use stale rendered rows as a snapshot."
     }
   ],
-  "checkpoint_at_utc": "2026-11-25T13:33:38Z"
+  "checkpoint_at_utc": "2026-11-25T14:52:02Z"
 }
