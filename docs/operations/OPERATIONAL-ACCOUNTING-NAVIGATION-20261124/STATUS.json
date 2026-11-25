@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-25",
-  "state": "candidate_frontend_running_canonical_data_connection_required",
+  "state": "candidate_frontend_and_observer_verified_awaiting_secure_canonical_data_connection",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -67,8 +67,9 @@
       "syntax_checks": "pass",
       "pure_sanitization_percentile_tests": "pass",
       "source_identity_origin_external_asset_checks": "pass",
-      "runtime_integration": "pending",
-      "measured_acceptance": false
+      "runtime_integration": "Browser login+panel+empty sanitized export verified; exact source/module identity, zero samples. No accounting acceptance measurement.",
+      "measured_acceptance": false,
+      "independent_review": "No blocking findings; checked host/method/fixed-path constraints, no credentials/query values in bounded diagnostics, no forwarded-host trust, strict browser origin preserved."
     }
   },
   "preview": {
@@ -102,13 +103,14 @@
     "existing_backend_isolation": "Existing October backend and P01 data untouched; loopback database, separate signing, role/password/attempt protections, external egress blocked and automatic workers disabled remain as inspected.",
     "runtime_scope": "Exact candidate frontend renders its genuine login page; source-serving Vite with NODE_ENV=production, not an optimized governed release artifact. Current backend remains the existing October private service.",
     "frontend_process": {
-      "pid_at_start": 17534,
+      "pid_at_start": 25822,
       "port": 3000,
       "pid_file": "/tmp/mezan-pr2095-preview-20261125/frontend.pid",
       "log": "/tmp/mezan-pr2095-preview-20261125/frontend.log",
       "supervisor_changed": false,
       "managed_by_supervisor": false,
-      "host_restart_survival": false
+      "host_restart_survival": false,
+      "started_at_utc": "2026-11-25T13:32:28.004502Z"
     },
     "data_feasibility": {
       "p01": "Existing private fixture dataset is not representative; preserve it.",
@@ -122,10 +124,31 @@
       "files": "preview-tools/",
       "module_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
       "prepared": true,
-      "installed_remotely": false,
-      "browser_verified": false,
+      "installed_remotely": true,
+      "browser_verified": true,
       "real_samples": 0,
-      "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group."
+      "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group.",
+      "installed_evidence_commit": "887e67e8b62bcbe9e86cd7f102451fbb19b7acc1",
+      "manifest_sha256": "97ebb7bd773af1796b97a5484d6a19ac10d83a3f0d98f749174de79dcb095432",
+      "observed_ingress_host": "salla-analytics.cluster-9.preview.emergentcf.cloud",
+      "temporary_asset_host_logging": false,
+      "empty_export_verified": {
+        "source_sha": "9a851854132bd71be922c4aae24b4cc20a546e41",
+        "observer_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
+        "samples": 0,
+        "groups": 0,
+        "longtask_supported": true,
+        "resource_supported": true
+      },
+      "runtime_integration_limit": "Login page and passive panel/export only; authenticated accounting selectors, navigation timings and data readiness remain unmeasured."
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "platform": "linux-arm64",
+      "cache": "/tmp/mezan-pr2095-preview-20261125/cache",
+      "receipt": "/tmp/mezan-pr2095-preview-20261125/toolchain.json",
+      "frozen_install_completed": true
     }
   },
   "shared_release": {
@@ -137,7 +160,7 @@
     "this_task_merged": false,
     "this_task_published": false,
     "production_changed_by_this_task": false,
-    "latest_guard_probe": "2026-11-25 independent terminal: original status exit0 active:false, HEAD6323017fbf9ba160c536a94f408507435786412a."
+    "latest_guard_probe": "Original guard active:false immediately before final task-owned frontend restart at2026-11-25T13:32:28Z; /app HEAD6323017fbf9ba160c536a94f408507435786412a unchanged."
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
@@ -147,7 +170,7 @@
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Securely connect the official Emergent database viewer to Production without exposing the connection credential. Inspect authorized canonical owner-scoped BSON export/backup feasibility, then prepare a disposable current-backend data clone preserving raw BSON state/audit/source bindings. Do not change live data, P01, CORS or authentication. Finish private observer integration on candidate frontend; real timings remain unmeasured.",
+  "next_safe_action": "Use the official Emergent database viewer's secure Production connection flow. The connection credential must be entered by the user through browserAuth or manual takeover, never exposed to chat/tools. Once connected, inspect existing owner-scoped canonical BSON backup/export feasibility before preparing a disposable current-backend copy. Then verify normal Preview auth and measure real routes. Do not change live data, P01, CORS, authentication, or Production.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
   "evidence_branch_is_deployable": false,
   "history": [
@@ -160,7 +183,12 @@
       "checkpoint": "3766cbe23fa6b97696971d62b02e4a82f877e2fc",
       "state": "source_prepared_isolated_runtime_bootstrap_in_progress",
       "notes": "Superseded runtime bootstrap milestone; independent terminal access restored."
+    },
+    {
+      "checkpoint": "49ad43d6f0082172cde8d442af5c468494913aa5",
+      "state": "candidate_frontend_running_canonical_data_connection_required",
+      "notes": "Initial observer package. First integration exposed Preview ingress Host rewriting; bounded diagnostic1bfea7c identified exact cluster9 host. Fixed and disabled logging in887e67e; browser integration now verified."
     }
   ],
-  "checkpoint_at_utc": "2026-11-25T13:25:00Z"
+  "checkpoint_at_utc": "2026-11-25T13:33:38Z"
 }
