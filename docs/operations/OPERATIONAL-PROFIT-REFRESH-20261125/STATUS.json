@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 14:00:35 UTC",
+  "recorded_at": "2026-11-25 14:16:43 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E5_SOURCE_A2_ALL_CI_PASS_INTENT_ONLY_B_PRESERVED",
+  "status": "E6_B_IDENTITY_AND_CI_REHEARSALS_PASS_BACKEND_GATE_PENDING",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -32,17 +32,13 @@
       "complete": true
     },
     "host": {
-      "observed_at": "2026-11-25T13:48:16.974108+00:00",
-      "original_guard_exit": 0,
-      "active": false,
+      "observed_at": "2026-11-25T13:22:34.698322+00:00",
       "head": "6323017fbf9ba160c536a94f408507435786412a",
       "tracked_changes": "",
-      "isolated_source_path": "/tmp/mezan-pr2126-A2-8qvvlulq/source",
-      "isolated_head": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
-      "isolated_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
-      "isolated_source_clean": true,
-      "main_checkout_unchanged": true,
-      "normal_git_fetch_and_detached_worktree_only": true
+      "guard_exit": 0,
+      "guard": {
+        "active": false
+      }
     },
     "scheduled_failure": {
       "observed_at_approx": "2026-11-25T11:40:52Z",
@@ -79,6 +75,101 @@
       "receipt_binding_matches": false,
       "production_scope_verified": false,
       "result": "Preview-host database had no uniquely matching receipt header; no packed snapshot was read. No production metadata conclusion."
+    },
+    "original_B_validation": {
+      "observed_at": "2026-11-25T14:01:33.796853+00:00",
+      "original_B_validation": "PASS",
+      "worktree": "/tmp/mezan-pr2126-B-kupylbvf/source",
+      "deployment_git_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+      "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+      "source_clean": true,
+      "main_unchanged": true,
+      "guard_active": false
+    },
+    "latest_automatic_attempt": {
+      "observed_at": "2026-11-25T14:06:04.857Z",
+      "source": "Authenticated production scheduling UI; read-only observation",
+      "url": "https://mezansalla.com/operational-balances?view=tools",
+      "displayed_attempt_riyadh": "2026-11-25 17:00",
+      "displayed_next_attempt_riyadh": "2026-11-25 17:05",
+      "displayed_last_saved_riyadh": "2026-11-25 14:58",
+      "consecutive_failures": 1,
+      "error_code": "operational_source_setup_incomplete",
+      "manual_refresh_run": false,
+      "source_sync_run": false,
+      "production_changed_by_this_task": false,
+      "stages": [
+        {
+          "stage": "native_evidence",
+          "outcome": "complete",
+          "duration_ms": 10534.702
+        },
+        {
+          "stage": "snapshot_raw_read",
+          "outcome": "complete",
+          "duration_ms": 53.201
+        },
+        {
+          "stage": "snapshot_unpack",
+          "outcome": "complete",
+          "duration_ms": 9249.005
+        },
+        {
+          "stage": "snapshot_copy_prepare",
+          "outcome": "complete",
+          "duration_ms": 3522.781
+        },
+        {
+          "stage": "snapshot_load",
+          "outcome": "complete",
+          "duration_ms": 12825.818
+        },
+        {
+          "stage": "source_collision",
+          "outcome": "complete",
+          "duration_ms": 0.012
+        },
+        {
+          "stage": "orders_cursor_build",
+          "outcome": "complete",
+          "duration_ms": 0.221
+        },
+        {
+          "stage": "orders_cursor_read",
+          "outcome": "cancelled",
+          "duration_ms": 16042.127
+        },
+        {
+          "stage": "source_primary_reads",
+          "outcome": "failed",
+          "duration_ms": 16462.198
+        },
+        {
+          "stage": "source_collection",
+          "outcome": "failed",
+          "duration_ms": 16462.835
+        },
+        {
+          "stage": "aggregate",
+          "outcome": "failed",
+          "duration_ms": 29364.043
+        }
+      ],
+      "primary_orders_read": {
+        "queue_ms": 0.015,
+        "budget_ms": 15000,
+        "first_row_ms": 9.003,
+        "read_elapsed_ms": 16042.11,
+        "rows_seen": 17538
+      },
+      "interpretation_limits": [
+        "Timings overlap and are not additive.",
+        "UI row counts are observed delivery, not complete source coverage.",
+        "This attempt failed in primary orders before the profit stage appeared; it is not the earlier saved profit partial result.",
+        "The exact driver/network/CPU contribution is not yet proven.",
+        "No new successful saved receipt was observed."
+      ]
     }
   },
   "limits": [
@@ -278,7 +369,7 @@
     }
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Validate B with original load_release_intent/verify_release_intent_git on an isolated clean host worktree while exact-B CI runs. Resolve host disk allocation safely without deleting foreign work. After B required gates including Node20/24 host rehearsals pass, normal-merge B into unchanged J and verify D. No lease until original successful host rehearsal; prepublish immediately before one publish.",
+  "next_safe_action": "Await exact-B Backend gate, recheck Production is unchangedJ and PR mergeability, then ordinary merge preserving A2/B. Verify D CI and original identity. Complete original governed host adapter rehearsal with fresh inactive guard and reviewed temporary-cache/resource plan; preserve foreign work. No lease until rehearsal passes. One prepublish/publish followed by explicit new Deployment Succeeded and original three-probe verify. Diagnose primary-order read latency separately from profit soft timeout.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
@@ -360,7 +451,7 @@
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
-  "evidence_checkpoint": "5553afcea8262d75e8a6f64ca37a76c149a4df56",
+  "evidence_checkpoint": "05c23be11221a4d02c00be974ba969a5c7091c33",
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
   "candidate": {
@@ -404,6 +495,117 @@
       "release/release-intent-v5.json"
     ],
     "intent_B_blob": "714c903b4264cc912c86df8bb2ee3caf2085fb65",
-    "B_CI": "running_or_queued"
+    "B_CI": {
+      "observed_at": "2026-11-25T14:15:02Z",
+      "total_checks": 43,
+      "success": 36,
+      "scoped_skips": 6,
+      "remaining_job": 139257131942
+    },
+    "B_CI_readiness": {
+      "repository": "AMASI-SA/AMASI-SA",
+      "deployment_git_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+      "deployment_git_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+      "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "source_git_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
+      "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+      "workflow_run_id": 45629090549,
+      "scope": "GitHub Actions isolated clean-clone adapter rehearsal; no production deployment observed by this agent.",
+      "host_rehearsals": [
+        {
+          "host_node": "20.20.2",
+          "job_id": 139258379744,
+          "result": "success",
+          "log_checkout_matches_b": true,
+          "package_output_source_matches_a2": true,
+          "package_release_id_matches": true
+        },
+        {
+          "host_node": "24.19.0",
+          "job_id": 139258379700,
+          "result": "success",
+          "log_checkout_matches_b": true,
+          "package_output_source_matches_a2": true,
+          "package_release_id_matches": true
+        }
+      ],
+      "jobs": [
+        {
+          "id": 139257133175,
+          "name": "Frontend build",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 139257133353,
+          "name": "Backend preflight",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 139257133544,
+          "name": "Host Node 20.20.2 engine and dispatcher contract",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 139257133842,
+          "name": "Host Node 24.19.0 engine and dispatcher contract",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 139258379700,
+          "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 139258379744,
+          "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 139259676569,
+          "name": "Emergent manual redeploy required",
+          "status": "completed",
+          "conclusion": "skipped"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 15031040262,
+          "name": "release-v5-generated-outputs-host-24.19.0",
+          "size_in_bytes": 3886247,
+          "digest": "sha256:4bac912a25998f41aef7f48978cd5b1f0e0497775438df4c0098801c8eb57a7f",
+          "head_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
+        },
+        {
+          "id": 15029738632,
+          "name": "release-v5-clean-clone-evidence-host-20.20.2",
+          "size_in_bytes": 63802,
+          "digest": "sha256:0268667686ea914801bc558028d77f5fc3955cb4ced06e2f71c9d373e484523d",
+          "head_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
+        },
+        {
+          "id": 15029728514,
+          "name": "release-v5-clean-clone-evidence-host-24.19.0",
+          "size_in_bytes": 63807,
+          "digest": "sha256:420bdcd49d094d4effbb152bf72793f0851578d5e9749c30dcad54766f1c82bc",
+          "head_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
+        },
+        {
+          "id": 15029424178,
+          "name": "release-v5-generated-outputs-host-20.20.2",
+          "size_in_bytes": 3887531,
+          "digest": "sha256:f644716597304d8bc79d30ca898f33e12132bcd6eab1765f619ccba3e2b4b714",
+          "head_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
+        }
+      ],
+      "artifacts_downloaded_by_monitor": false,
+      "monitoring_read_only": true,
+      "reruns": 0
+    }
   }
 }

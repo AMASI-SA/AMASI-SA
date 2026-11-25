@@ -1,0 +1,84 @@
+{
+  "observed_at": "2026-11-25T14:06:04.857Z",
+  "source": "Authenticated production scheduling UI; read-only observation",
+  "url": "https://mezansalla.com/operational-balances?view=tools",
+  "displayed_attempt_riyadh": "2026-11-25 17:00",
+  "displayed_next_attempt_riyadh": "2026-11-25 17:05",
+  "displayed_last_saved_riyadh": "2026-11-25 14:58",
+  "consecutive_failures": 1,
+  "error_code": "operational_source_setup_incomplete",
+  "manual_refresh_run": false,
+  "source_sync_run": false,
+  "production_changed_by_this_task": false,
+  "stages": [
+    {
+      "stage": "native_evidence",
+      "outcome": "complete",
+      "duration_ms": 10534.702
+    },
+    {
+      "stage": "snapshot_raw_read",
+      "outcome": "complete",
+      "duration_ms": 53.201
+    },
+    {
+      "stage": "snapshot_unpack",
+      "outcome": "complete",
+      "duration_ms": 9249.005
+    },
+    {
+      "stage": "snapshot_copy_prepare",
+      "outcome": "complete",
+      "duration_ms": 3522.781
+    },
+    {
+      "stage": "snapshot_load",
+      "outcome": "complete",
+      "duration_ms": 12825.818
+    },
+    {
+      "stage": "source_collision",
+      "outcome": "complete",
+      "duration_ms": 0.012
+    },
+    {
+      "stage": "orders_cursor_build",
+      "outcome": "complete",
+      "duration_ms": 0.221
+    },
+    {
+      "stage": "orders_cursor_read",
+      "outcome": "cancelled",
+      "duration_ms": 16042.127
+    },
+    {
+      "stage": "source_primary_reads",
+      "outcome": "failed",
+      "duration_ms": 16462.198
+    },
+    {
+      "stage": "source_collection",
+      "outcome": "failed",
+      "duration_ms": 16462.835
+    },
+    {
+      "stage": "aggregate",
+      "outcome": "failed",
+      "duration_ms": 29364.043
+    }
+  ],
+  "primary_orders_read": {
+    "queue_ms": 0.015,
+    "budget_ms": 15000,
+    "first_row_ms": 9.003,
+    "read_elapsed_ms": 16042.11,
+    "rows_seen": 17538
+  },
+  "interpretation_limits": [
+    "Timings overlap and are not additive.",
+    "UI row counts are observed delivery, not complete source coverage.",
+    "This attempt failed in primary orders before the profit stage appeared; it is not the earlier saved profit partial result.",
+    "The exact driver/network/CPU contribution is not yet proven.",
+    "No new successful saved receipt was observed."
+  ]
+}

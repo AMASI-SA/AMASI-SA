@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-11-25T14:01:33.796853+00:00",
+  "original_B_validation": "PASS",
+  "worktree": "/tmp/mezan-pr2126-B-kupylbvf/source",
+  "deployment_git_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+  "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+  "source_clean": true,
+  "main_unchanged": true,
+  "guard_active": false
+}
