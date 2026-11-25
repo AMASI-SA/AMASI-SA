@@ -1,0 +1,313 @@
+{
+  "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
+  "recorded_at": "2026-11-25T13:38:15.080811+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/operational-profit-refresh-20261125",
+  "source_base": "6323017fbf9ba160c536a94f408507435786412a",
+  "status": "SOURCE_A2_CONTRACT_COMPATIBILITY_VALIDATED_FRESH_CI_PENDING",
+  "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
+  "acceptance": {
+    "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
+    "invariants": [
+      "Owner scope, source cohort and native date/version evidence remain unchanged.",
+      "No invented missing amount, silent zero, source truncation, timeout increase or financial formula change.",
+      "Preserve cancellation, task joining, lease/CAS, idempotency and historical movements.",
+      "No mutation of another conversation's branch or release lease."
+    ],
+    "evidence_required": [
+      "A failing distinguishing reproduction or bounded source-phase observation.",
+      "Focused regression and affected boundary verification for any runtime patch.",
+      "Fresh release protocol v5 and separate receipt review if a new publication is warranted."
+    ]
+  },
+  "observations": {
+    "prior_release": {
+      "pr": 2123,
+      "provider_version": "e6113be",
+      "original_verify_checks": 3,
+      "original_status": {
+        "active": false
+      },
+      "evidence_commit": "b8f03197e9e707a1253f721f15c5fd30c96b75bf",
+      "complete": true
+    },
+    "host": {
+      "observed_at": "2026-11-25T13:22:34.698322+00:00",
+      "head": "6323017fbf9ba160c536a94f408507435786412a",
+      "tracked_changes": "",
+      "guard_exit": 0,
+      "guard": {
+        "active": false
+      }
+    },
+    "scheduled_failure": {
+      "observed_at_approx": "2026-11-25T11:40:52Z",
+      "last_attempt_riyadh": "2026-11-25 12:56",
+      "consecutive_failures": 6,
+      "error_code": "operational_refresh_timeout",
+      "profit_snapshot_ms": 25166.514,
+      "reconciliation_ms": 10658.742,
+      "aggregate_ms": 76398.243
+    },
+    "later_success": {
+      "observed_at": "2026-11-25T12:41:06.695Z",
+      "saved_calculation_revision": 16947,
+      "previous_revision": 16946,
+      "as_of": "2026-11-25T11:58:31.208470+00:00",
+      "all_displayed_stages_complete": true,
+      "profit_snapshot_ms": 27295.943,
+      "aggregate_ms": 76228.106,
+      "manual_refresh_run": false,
+      "source_completeness_verified": false
+    },
+    "source_findings": {
+      "outer_request_seconds": 85,
+      "profit_shared_budget_seconds": 25,
+      "per_profit_reader_max_seconds": 20,
+      "concurrency": 4,
+      "profit_context_before_components": true,
+      "primary_order_telemetry_is_not_profit_context_telemetry": true
+    },
+    "host_metadata_attempt": {
+      "observed_at": "2026-11-25T12:53:11.176617+00:00",
+      "receipt_revision": 16947,
+      "matching_headers": 0,
+      "receipt_binding_matches": false,
+      "production_scope_verified": false,
+      "result": "Preview-host database had no uniquely matching receipt header; no packed snapshot was read. No production metadata conclusion."
+    }
+  },
+  "limits": [
+    "Nested timings overlap and must not be summed.",
+    "A timed profit function returning complete can contain soft source errors.",
+    "The failed attempt cannot be attributed to a previously saved receipt.",
+    "The later automatic success does not prove removal of intermittent timeouts or complete sources.",
+    "Private original receipts and financial values are excluded from Git.",
+    "No actual production inner-phase bottleneck is yet established. This diagnostics patch is not a performance fix.",
+    "Trace retains at most64 latest completed/unwound phases; it does not retain every CAS retry.",
+    "Logical timings exclude semaphore wait before reader entry and include scheduling and cleanup; they are not exclusive Mongo query timings.",
+    "The raw context phase can complete without a database read for an empty order cohort."
+  ],
+  "other_work": {
+    "pr": 2122,
+    "head": "c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7",
+    "scope": "Dashboard split-payment profit",
+    "mergeable_state": "dirty",
+    "preserved": true
+  },
+  "verification": {
+    "root_red": {
+      "exit_code": 1,
+      "failed": 14,
+      "seconds": 3.92,
+      "reason": "Only new timing assertions fail on unchanged operational_profit_sources and demand whitelist; prior output/error/cleanup assertions passed."
+    },
+    "root_focused": {
+      "exit_code": 0,
+      "passed": 14,
+      "skipped": 0,
+      "seconds": 1.72
+    },
+    "root_affected": {
+      "exit_code": 0,
+      "passed": 231,
+      "skipped": 0,
+      "failed": 0,
+      "seconds": 21.39,
+      "modules": [
+        "test_operational_balance_profit_stage_diagnostics",
+        "test_operational_balance_profit_product_stage_diagnostics",
+        "test_operational_balance_profit_context_parallel",
+        "test_operational_balance_refresh_stage_timing",
+        "test_operational_balance_source_stage_timing",
+        "test_operational_balance_demand_refresh",
+        "test_operational_balance_automation",
+        "test_operational_balance_automation_routes",
+        "test_operational_read_runtime",
+        "test_operational_refresh_parallel_profit",
+        "test_dashboard_demand_builders"
+      ]
+    },
+    "product_agent": {
+      "red_failed": 9,
+      "green_passed": 9,
+      "adjacent_passed": 76,
+      "skipped": 0,
+      "adjacent_modules": [
+        "test_operational_balance_profit_product_authority_parallel",
+        "test_dashboard_bundle_cost_authority",
+        "test_operational_balance_profit_sources"
+      ]
+    },
+    "independent_ast_review": "Dashboard and profit source modules match baseline AST after removing diagnostic-only wrappers/imports/map.",
+    "whitespace": "git diff --check exit0",
+    "warning": "Existing Pydantic validator deprecation warnings only.",
+    "ci": "Fresh full-SHA CI and candidate are required for updated source A2; old source A evidence is explicitly historical.",
+    "frontend": {
+      "red": {
+        "failed": 2,
+        "passed": 73,
+        "skipped": 0,
+        "seconds": 1.559,
+        "reason": "Existing filter dropped all profit stage labels; previous assertions and73existing cases passed."
+      },
+      "green": {
+        "passed": 75,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 1.634
+      },
+      "runner": "Isolated Jest27.5.1/Babel27.5.1/jsdom27.5.1; Node24.22.3 within repository engine range. Pinned release Node22.23.2 remains a separate CI/rehearsal gate.",
+      "source_parity": "Removing only the3added whitelist lines reproduces the baseline module bytes.",
+      "private_fields": "Actual refreshVisibleSnapshot 408/409 path strips unknown labels, fields and nonfinite timings; one request, no retry and unchanged warning."
+    },
+    "commands": {
+      "root_affected": "PYTHONPATH=backend:backend/tests python -m pytest -q backend/tests/test_operational_balance_profit_stage_diagnostics.py backend/tests/test_operational_balance_profit_product_stage_diagnostics.py backend/tests/test_operational_balance_profit_context_parallel.py backend/tests/test_operational_balance_refresh_stage_timing.py backend/tests/test_operational_balance_source_stage_timing.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_automation.py backend/tests/test_operational_balance_automation_routes.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_refresh_parallel_profit.py backend/tests/test_dashboard_demand_builders.py --tb=short",
+      "product_adjacent": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_profit_product_authority_parallel.py backend/tests/test_dashboard_bundle_cost_authority.py backend/tests/test_operational_balance_profit_sources.py --tb=short",
+      "frontend": "node isolated-jest27/bin/jest.js --config isolated-jest.config.cjs --runInBand --ci; actual module frontend/src/pages/operational/visibleOperationalRead.test.js; CI repository command still required."
+    },
+    "source_contract_red": {
+      "failed": 3,
+      "passed": 28,
+      "subtests_passed": 5,
+      "skipped": 0,
+      "seconds": 9.43,
+      "reason": "Existing comparators did not account for the fixed stage scaffolding; direct profiles lookup raised StopIteration."
+    },
+    "source_contract_green": {
+      "passed": 31,
+      "subtests_passed": 27,
+      "skipped": 0,
+      "seconds": 4.33,
+      "rejected_scaffolding_cases": 17,
+      "body_query_calculation_mutations_retained_and_detected": 3
+    },
+    "root_contract_integration": {
+      "passed": 54,
+      "subtests_passed": 27,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 5.34,
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 GIT_NO_LAZY_FETCH=1 python -m pytest --noconftest -q backend/tests/test_dashboard_runtime_source_contract.py backend/tests/test_dashboard_ads_costs.py backend/tests/test_operational_balance_profit_stage_diagnostics.py backend/tests/test_operational_balance_profit_product_stage_diagnostics.py --tb=short"
+    },
+    "previous_A_CI": {
+      "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+      "frontend": {
+        "run_id": 45622546716,
+        "artifact_id": 15026472831,
+        "passed": 1844,
+        "failed": 0,
+        "skipped": 0,
+        "new_cases_executed": 2,
+        "artifact_sha256": "a7516e49f67c09adcc6d34f2217a3028546be9375f9f7ffee044ff0d07e3e0fe"
+      },
+      "stock": {
+        "run_id": 45622546655,
+        "artifact_id": 15028601119,
+        "passed": 6459,
+        "failed": 0,
+        "skipped": 0,
+        "new_cases_executed": 23,
+        "artifact_sha256": "7c9eae2fc0136582d5c05acbc7f71c27c2f1ec089bd0f8c52ffcaa2c481d3f35"
+      },
+      "known_failures": {
+        "run_ids": [
+          45622546705,
+          45622546527,
+          45622546646
+        ],
+        "cause": "Exact product oracle/companion-tail comparators reject the newly added diagnostic scaffolding; fixed only in the two test contract files."
+      },
+      "old_candidate": {
+        "artifact_id": 15026387651,
+        "run_id": 45622546938,
+        "sha256": "02ad0f6a0f5f37f8fb7215c6251d54adc0e2b3f301a91cd357797dfbb07c71b8",
+        "use": "Historical only; never freeze for the updated source."
+      }
+    }
+  },
+  "production_changed_by_this_task": false,
+  "next_safe_action": "Preserve updated source A2, verify all exact-source required CI including the3former frozen-source failures and executed new cases, then retrieve only the new candidate artifact. Validate with the original loader on an actual cleanGit checkout before intent-onlyB. No guard lease or publication yet.",
+  "continuity": {
+    "issue": 1006,
+    "comment_limit_observed": 2500,
+    "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
+  },
+  "last_remote_checkpoint": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+  "change": {
+    "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
+    "fixed_stages_added": 16,
+    "timing_limit_unchanged": 64,
+    "financial_formulas_changed": false,
+    "query_order_limits_changed": false,
+    "timeouts_changed": false,
+    "financial_source_writes_added": false,
+    "ordinary_calls": "No-op diagnostics outside the existing owned refresh context.",
+    "soft_failure_classification": "Observe the reader before the unchanged partial-result catches; deadline-cancelled reader is not classified as user cancellation.",
+    "frontend": "The existing manual 408/409 error logger retains the same fixed16new stage labels; no warning/retry/request flow change.",
+    "source_contract_compatibility": "Extend the existing exact frozen-reducer comparator to unwrap only the5reviewed fixed observer scopes and single exact local import. Retain every query/calculation statement and every original baseline/hash. Ads observer comparator uses the same exact normalizer."
+  },
+  "files": [
+    {
+      "path": "backend/dashboard_v2_routes.py",
+      "bytes": 126650,
+      "sha256": "10201c91f1d95c0c48e0ba08f072988e6e9b777b43e60bfb92a969716e0c7719"
+    },
+    {
+      "path": "backend/operational_demand_refresh.py",
+      "bytes": 22956,
+      "sha256": "f9456fdb68a44414c408413afd9fb470ae1068b0adc7e208354fb5bef1ac4828"
+    },
+    {
+      "path": "backend/operational_profit_sources.py",
+      "bytes": 22345,
+      "sha256": "12ce4f2983b347098fd41d25c4f00b3a6b9b7280fe4aadc0e76205106383c87a"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_profit_stage_diagnostics.py",
+      "bytes": 12126,
+      "sha256": "a5c6b165352415a6a53b4041cc818a06e60d843b014089aaa1978fed4fd55ad6"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_profit_product_stage_diagnostics.py",
+      "bytes": 8927,
+      "sha256": "25886c1d1ffecd2ed20bebb5d4d9cb70d8ff903aafbd2dee06407dc38458d6c8"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.js",
+      "bytes": 21279,
+      "sha256": "ea66ebc1f93ae1389a4764f3aa4788e86495c4ef2cade9239ebf69c9d79cebcb"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "bytes": 32309,
+      "sha256": "7a03b4c86879c5f2c52ce0e2a867bb1974a46583290cd05edc7e12f82687475d"
+    },
+    {
+      "path": "backend/tests/test_dashboard_runtime_source_contract.py",
+      "bytes": 26184,
+      "sha256": "a587f5680f0ea654fc13e84e74ef5ba1c760c96f57752a45d1c6fdf8e076293c"
+    },
+    {
+      "path": "backend/tests/test_dashboard_ads_costs.py",
+      "bytes": 22352,
+      "sha256": "0e631e67f6a4e206d369d98ea9015dd07fcd3ee77c0b3e4f31d4469253efe210"
+    }
+  ],
+  "review": {
+    "independent_source_review": "No blocking findings for combined backend/frontend diff.",
+    "ast_parity": "Full dashboard_v2_routes and operational_profit_sources modules match6323017after removing only diagnostic additions.",
+    "vocabulary": "Backend/frontend sets exactly50unique labels;16added. Existing64record tail unchanged.",
+    "remaining_limits": [
+      "Latest tail is bounded; repeatedCASattempts can evict earlier attempts.",
+      "A queued reader not admitted before budget expiry has no entered-stage record.",
+      "Source deadline cancellation is distinguished using source_errors, not stage outcome alone.",
+      "No production improvement or source-completeness claim."
+    ],
+    "source_contract": "Independent review found no blocker. Fixed top-level8statement shape, exact import and5scopes, no aliases/as/keywords/extra observer uses; normalizer preserves body/query/math changes so unchanged final comparisons reject them."
+  },
+  "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
+  "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
+  "evidence_checkpoint": "279d7e58fed289c2ad9e83c348200f2e2f92e897"
+}

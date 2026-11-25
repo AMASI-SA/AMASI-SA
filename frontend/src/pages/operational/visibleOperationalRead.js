@@ -142,6 +142,9 @@ const REFRESH_TIMING_STAGES = new Set([
     "source_primary_reads", "source_fee_settings", "source_setup", "source_statements", "source_delivery_history",
     "source_transactions", "source_native_links", "source_bundles", "source_option_catalog", "source_orders",
     "source_order_indexes", "source_bank_catalog", "source_invoices", "source_other_sources", "source_native_overlaps", "source_finalize",
+    "profit_context", "profit_sales", "profit_products", "profit_order_costs", "profit_ads", "profit_payroll", "profit_recurring",
+    "profit_context_settings", "profit_context_orders", "profit_context_raw", "profit_context_prepare",
+    "profit_product_catalog", "profit_product_inputs", "profit_product_authority", "profit_product_supplier", "profit_product_reduce",
 ]);
 
 // Local diagnostic evidence only. Nested stages overlap; their durations must
