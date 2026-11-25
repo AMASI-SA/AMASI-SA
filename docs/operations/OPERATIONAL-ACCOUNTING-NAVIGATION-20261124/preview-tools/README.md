@@ -221,3 +221,13 @@ Start with the already verified pinned Node executable and Vite `--config` point
 to this file. Never put database URLs, cookies, passwords or other secrets in
 frontend variables or this config. The exact private process launch and observed
 integration result are recorded separately in the parent task checkpoint.
+
+### Verified ingress mapping
+
+The browser's request for the observer asset reached this task's Vite process
+with `Host: salla-analytics.cluster-9.preview.emergentcf.cloud`, observed through
+the bounded host-only diagnostic on 2026-11-25. The concrete private config now
+allows exactly that hostname for the two static diagnostic assets and disables
+`debugAssetHost`. The browser origin remains exactly
+`https://salla-analytics.preview.emergentagent.com`. This host is already within
+the unchanged product Vite allowlist. No forwarded header grants access.

@@ -14,8 +14,8 @@ export default async function privatePreviewConfig(environment) {
       expectedSourceSha: '9a851854132bd71be922c4aae24b4cc20a546e41',
       previewOrigin: 'https://salla-analytics.preview.emergentagent.com',
       arm: 'candidate',
-      assetRequestHosts: [], // Pin the observed ingress hostname after diagnosis.
-      debugAssetHost: true, // Temporary: disable after pinning that exact hostname.
+      assetRequestHosts: ['salla-analytics.cluster-9.preview.emergentcf.cloud'], // Pin the observed ingress hostname after diagnosis.
+      debugAssetHost: false, // Temporary: disable after pinning that exact hostname.
     })],
     server: { ...config.server, hmr: false },
   };

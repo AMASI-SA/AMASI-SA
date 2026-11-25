@@ -6,8 +6,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 13459,
-      "sha256": "73527b7a2f9d7069df63b9b9a0c205695711b7a41a660b997ae6d3955117f46f"
+      "bytes": 14016,
+      "sha256": "9ffc749af44479c547b69da0ed7a6fc5534e48d2a26e65ae4cc610221e39e617"
     },
     {
       "path": "observer.css",
@@ -31,8 +31,8 @@
     },
     {
       "path": "runtime.config.mjs",
-      "bytes": 1051,
-      "sha256": "49a3675f9d22919b3eb455faf975d2556119be44c55c3c94dbdaec0df0d09d42"
+      "bytes": 1104,
+      "sha256": "a7e1410280c8491f8e0522f1cef40d3c43ddc9f0d698ba7415aa208d2d7febdf"
     }
   ]
 }
