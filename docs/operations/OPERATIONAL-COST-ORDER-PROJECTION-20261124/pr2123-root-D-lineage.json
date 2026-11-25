@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "head": "6323017fbf9ba160c536a94f408507435786412a",
+  "parents": [
+    "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "c71a0ba71e36a2306a0c4bce1822f39073e6984f"
+  ],
+  "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "A2_to_D_changed_files": [
+    "release/release-intent-v5.json"
+  ],
+  "tracked_file_count": 6599,
+  "critical_runtime_sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd",
+  "source_branch_unchanged": true,
+  "local_checkout": "detached exact D; source/intent branch stays B",
+  "source_or_intent_content_change": false
+}

@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:03:02.269Z",
+  "recorded_at": "2026-11-25T00:06:32.792Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "Exact A2/B CI PASS. Prior PR2120 publication independently verified and matching lease closed. PR2123 ready for normal merge; not yet merged or published.",
+  "status": "PR2123 merged normally as D6323017fbf9ba160c536a94f408507435786412a. Exact parents/tree/intent-only lineage PASS. Required exact-D push CI running; actual host rehearsal and publication pending. Prior PR2120 verification/closure complete.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -208,14 +208,28 @@
       "actual_diagnostic_cases_each": 22,
       "host20_24_original_rehearsal_review": "pr2123-b-ci-rehearsal-review.json",
       "cancelled_note": "Ready event superseded two scoped Snapchat workflows; replacement scope jobs pass and their out-of-scope dependent jobs skip. Never treat historical cancelled records as pass."
+    },
+    "deployment_D": {
+      "status": "RUNNING",
+      "scope": "Exact-D push workflows; independent review in progress. B tests are preserved separately."
     }
   },
   "pr": {
     "number": 2123,
-    "state": "Ready, exact frozen B CI PASS; unmerged",
+    "state": "merged",
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2123"
   },
-  "merge": "not merged",
+  "merge": {
+    "method": "merge",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "parents": [
+      "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "c71a0ba71e36a2306a0c4bce1822f39073e6984f"
+    ],
+    "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "root_review": "pr2123-root-D-lineage.json",
+    "A2_to_D_only_intent": true
+  },
   "intent": "Frozen original A2 candidate1531177bytes/blob57815f976f9bd6ed711024568f0acfa2d79bfcf6 into intent-only B, soleparentA2; no squash/rebase allowed.",
   "production_changed_by_this_candidate": false,
   "preceding_release": {
@@ -268,7 +282,7 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Fresh production ref must still be J and original guard inactive, then normal PR2123 merge expected frozen B. Verify exact D parents/tree/intent-only lineage and required exact-D CI; finalize and review current-host helper/envelope before one protected rehearsal.",
+  "next_safe_action": "Complete exact-D CI and finalized helper/envelope independent review; hash-pin durable files and freshly revalidate original inactive guard, J checkout and bound live-process identities, then run one protected owned-clone/canonical rehearsal. No prepare or publish until rehearsal PASS.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -375,5 +389,9 @@
       "scope": "Noexecution/import/lease/appmutation. Mustcompletepriorownerclose,exactDmerge+CI,finalfreshmetadataandindependentreview beforefinalpair.",
       "replacement_writer_observed_at": "2026-11-24T23:22:29.294903+00:00"
     }
-  ]
+  ],
+  "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+  "production_git_changed_by_this_candidate": true,
+  "production_runtime_changed_by_this_candidate": false,
+  "final_host_observation": "pr2123-final-host-observation.json"
 }
