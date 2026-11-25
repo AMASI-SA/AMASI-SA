@@ -66,7 +66,10 @@ def decide_courier_cod_delivery(event: CourierCODDelivery) -> PostingDecision:
         evidence = (Evidence.ACCOUNTANT_APPROVED if event.accountant_approved
                     else Evidence.MATCHED_BANK_STATEMENT if event.collection_method == "bank"
                     else Evidence.MATCHED_POS_STATEMENT)
-        destination = "bank" if event.collection_method == "bank" else "pos_receivable"
+        # The carrier is the collector. Even confirmed card/transfer COD
+        # remains receivable FROM THE CARRIER until an independently matched
+        # payout reaches the merchant's bank. Never credit bank here.
+        destination = "courier_receivable"
 
     policy = decide(PaymentEvent(
         order_id=event.order_id, provider=event.courier_id,
