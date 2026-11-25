@@ -1,22 +1,22 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25T13:26:02Z",
-  "phase": "E1_SOURCE_A_LOCAL_VALIDATED_CI_PENDING",
+  "recorded_at": "2026-11-25T13:39:40Z",
+  "phase": "E2_SOURCE_A2_CONTRACT_COMPATIBILITY_VALIDATED_CI_PENDING",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
   "source_base_J": "6323017fbf9ba160c536a94f408507435786412a",
-  "source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "source_A_tree": "3b6cd9961800c7655a5cb252bf783da6541048c9",
+  "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
   "previous_checkpoint": "45e047547f18fcde710adb2b062fd01c36f195c0",
   "pr": 2126,
   "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "diff": {
-    "changed_files": 8,
-    "ahead_by": 3,
-    "behind_by": 0,
-    "intent_changed": false,
-    "remote_blob_shas_match_local_files": true
+    "changed_files": 10,
+    "source_followup_changed_files": 3,
+    "runtime_or_frontend_changed_since_previous_A": false,
+    "previous_seven_source_files_byte_identical": true,
+    "intent_changed": false
   },
   "local_validation": {
     "backend_affected": {
@@ -49,15 +49,25 @@
       "frontend": 50,
       "added": 16,
       "tail_limit": 64
+    },
+    "source_contract": {
+      "red_failed": 3,
+      "red_passed": 28,
+      "green_passed": 31,
+      "green_subtests": 27,
+      "root_integration_passed": 54,
+      "root_integration_subtests": 27,
+      "root_seconds": 5.34,
+      "skipped": 0,
+      "negative_scaffolding_cases": 17,
+      "retained_body_query_calculation_mutations": 3,
+      "baseline_and_hash_constants_unchanged": true,
+      "independent_review": "No blocking finding; exact5scope/import normalization retains all original full-body comparisons."
     }
   },
   "source_CI": {
-    "state": "in_progress",
-    "readiness_run_id": 45622546938,
-    "operational_run_id": 45622546716,
-    "stock_run_id": 45622546655,
-    "candidate_artifact_id": null,
-    "required_new_cases_not_yet_verified_in_CI": true
+    "state": "fresh_A2_runs_pending",
+    "required_new_cases_not_yet_verified_in_A2_CI": true
   },
   "host_observation": {
     "observed_at": "2026-11-25T13:22:34.698322+00:00",
@@ -91,5 +101,43 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "Complete exact-A CI, verify23newbackend+2newfrontend cases from actual CI results, retrieve candidate artifact with provenance and verify original load_candidate_release_intent on an exact cleanA checkout before creating intent-onlyB."
+  "next_safe_action": "Review exact-A2 CI and new candidate artifact; use the original validator on a real cleanA2 checkout. No reuse of first-A candidate. Original guard must be freshly inactive before host changes or rehearsal. Freeze intent-onlyB only after all required source validation.",
+  "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+  "previous_evidence_commit": "279d7e58fed289c2ad9e83c348200f2e2f92e897",
+  "previous_A_CI": {
+    "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
+    "known_failed_runs": [
+      45622546705,
+      45622546527,
+      45622546646
+    ],
+    "cause": "Frozen source comparators did not recognize the new fixed instrumentation scopes. Source A2 updates only exact observer normalization in tests and the status record.",
+    "stock": {
+      "run_id": 45622546655,
+      "artifact_id": 15028601119,
+      "artifact_sha256": "7c9eae2fc0136582d5c05acbc7f71c27c2f1ec089bd0f8c52ffcaa2c481d3f35",
+      "passed": 6459,
+      "failed": 0,
+      "skipped": 0,
+      "new_cases_executed": 23
+    },
+    "frontend": {
+      "run_id": 45622546716,
+      "artifact_id": 15026472831,
+      "artifact_sha256": "a7516e49f67c09adcc6d34f2217a3028546be9375f9f7ffee044ff0d07e3e0fe",
+      "passed": 1844,
+      "failed": 0,
+      "pending": 0,
+      "new_cases_executed": 2
+    },
+    "backend_job": 139234218194,
+    "backend_result": "cancelled at source update; not a pass",
+    "candidate": {
+      "artifact_id": 15026387651,
+      "run_id": 45622546938,
+      "sha256": "02ad0f6a0f5f37f8fb7215c6251d54adc0e2b3f301a91cd357797dfbb07c71b8",
+      "valid_for_A2": false
+    }
+  },
+  "local_checkout_limit": "Scratch git network fetch was unavailable. Attempted metadata-only commit reconstruction did not reproduce official commit hashes, so no reconstructed commit or fake HEAD was accepted. Original candidate validation requires a real clean Git checkout on the authorized rehearsal host."
 }
