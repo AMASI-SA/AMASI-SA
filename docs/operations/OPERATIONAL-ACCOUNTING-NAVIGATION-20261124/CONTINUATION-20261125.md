@@ -1,5 +1,15 @@
 # PR2095 continuation — 25 November 2026
 
+## Latest state — remote runtime must be restored
+
+At2026-11-25T15:04:27Z a fresh code-server reconnect found `/tmp/mezan-pr2095-preview-20261125` entirely absent. Candidate frontend3000 and own Mongo27019 are not listening; old backend8001 and P01Mongo27018 remain reachable. The reason for loss is not established. No actual financial snapshot had been captured or imported, and no real navigation samples existed.
+
+The original release guard now reports **active:true** for a foreign protocol-v5 lease, source `6d4aa546259e9cad1cc379d4a464e245af6cfa91`, deployment `/app` HEAD `f3d8ee39e60ed087f0a4d6debf844d128e92a758`. This task did not modify/close that lease or edit `/app`. Do not restart task Preview services until the original guard and ports have been checked again. Independent source/tooling preparation may continue in `/root/mezan-pr2095-preview-20261125`, without shared source changes or release rehearsal.
+
+The native snapshot exporter, exact financial-source closure and private importer/runtime are being implemented and reviewed locally. The user securely connected the official Viewer, but stateGET500 still prevents viewer-based export; no browser credential extraction is allowed. Prepare all concrete tooling before a hidden terminal input handoff. The complete current state is in STATUS.json.
+
+**All ready/running statements and /tmp process identities below are historical observations and must not be used as current runtime evidence.** The observer source and exact candidate remain remotely recoverable on their evidence/source branches.
+
 ## Result and boundary
 
 Exact candidate `9a851854132bd71be922c4aae24b4cc20a546e41` (tree `436199d239a75910d94d441e9eb47408aea80080`) now renders its real login page in the existing Preview. A private passive measurement panel is visible and its JSON export reports the exact source/module identities and zero samples. The shared native keyboard collision is no longer the blocker: an authenticated independent cloud code-server terminal is usable.

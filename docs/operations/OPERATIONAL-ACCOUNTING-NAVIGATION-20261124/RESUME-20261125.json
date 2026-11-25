@@ -1,22 +1,22 @@
 {
   "schema": 1,
   "task": "OPERATIONAL-ACCOUNTING-NAVIGATION-20261124",
-  "observed_at_utc": "2026-11-25T14:52:02Z",
+  "observed_at_utc": "2026-11-25T15:04:27Z",
   "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
   "source_tree": "436199d239a75910d94d441e9eb47408aea80080",
   "frontend": {
-    "candidate_running_verified": true,
+    "candidate_running_verified": false,
     "real_latency_measured": false,
     "known_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
     "admin_saved_session": "Authenticated Emergent admin and independent cloud code-server terminal available.",
     "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
     "frontend_supervisor": "FATAL, exited too quickly",
     "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
-    "known_failure": "Frontend startup failure resolved for task-owned process. Existing October backend returns404 for current workspace bootstrap; canonical real accounting dataset is absent from locally accessible source databases.",
+    "known_failure": "Fresh reconnection found task /tmp root absent, candidate frontend3000 closed and task Mongo27019 closed. Existing8001/27018 remain reachable. Full source capture/import/runtime tooling is under local review; no actual dataset or route samples obtained.",
     "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
-    "candidate_source_prepared": true,
-    "source_preparation_attempt": "Independent clone and remote fetch succeeded; exact HEAD and tree verified; tracked-clean; no backend .env copied.",
-    "missing_runtime": "Resolved with candidate-owned pinned Node22.23.2 and Yarn1.22.22 under task cache; frozen dependency installation completed successfully.",
+    "candidate_source_prepared": false,
+    "source_preparation_attempt": "Prior exact clone and frozen dependencies were verified but are no longer present remotely. Restore into task-private /root/mezan-pr2095-preview-20261125; do not edit /app.",
+    "missing_runtime": "Prior own /tmp toolchain/cache was lost; exact pinned candidate runtime must be restored.",
     "local_backend_routing": {
       "live": {
         "status": 200,
@@ -31,9 +31,9 @@
         "mime": "application/json"
       }
     },
-    "candidate_source_directory": "/tmp/mezan-pr2095-preview-20261125/source",
+    "candidate_source_directory": "/root/mezan-pr2095-preview-20261125/source",
     "existing_backend_isolation": "Existing October backend and P01 data untouched; loopback database, separate signing, role/password/attempt protections, external egress blocked and automatic workers disabled remain as inspected.",
-    "runtime_scope": "Exact candidate frontend renders its genuine login page; source-serving Vite with NODE_ENV=production, not an optimized governed release artifact. Current backend remains the existing October private service.",
+    "runtime_scope": "No current task-owned frontend or database process. Earlier source-serving Vite browser integration remains historical evidence only.",
     "frontend_process": {
       "pid_at_start": 25822,
       "port": 3000,
@@ -42,7 +42,9 @@
       "supervisor_changed": false,
       "managed_by_supervisor": false,
       "host_restart_survival": false,
-      "started_at_utc": "2026-11-25T13:32:28.004502Z"
+      "started_at_utc": "2026-11-25T13:32:28.004502Z",
+      "running": false,
+      "receipt_status": "Historical only; source directory/PID files no longer exist. Never act on the old PID without fresh process identity."
     },
     "data_feasibility": {
       "p01": "Existing private fixture dataset is not representative; preserve it.",
@@ -58,8 +60,8 @@
       "files": "preview-tools/",
       "module_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
       "prepared": true,
-      "installed_remotely": true,
-      "browser_verified": true,
+      "installed_remotely": false,
+      "browser_verified": false,
       "real_samples": 0,
       "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group.",
       "installed_evidence_commit": "887e67e8b62bcbe9e86cd7f102451fbb19b7acc1",
@@ -74,19 +76,21 @@
         "longtask_supported": true,
         "resource_supported": true
       },
-      "runtime_integration_limit": "Login page and passive panel/export only; authenticated accounting selectors, navigation timings and data readiness remain unmeasured."
+      "runtime_integration_limit": "Earlier login/panel/empty-export verification is historical only after remote reset. Authenticated accounting selectors and real timings remain unmeasured.",
+      "browser_verified_historical": true
     },
     "toolchain": {
       "node": "22.23.2",
       "yarn": "1.22.22",
       "platform": "linux-arm64",
-      "cache": "/tmp/mezan-pr2095-preview-20261125/cache",
-      "receipt": "/tmp/mezan-pr2095-preview-20261125/toolchain.json",
-      "frozen_install_completed": true
+      "cache": "/root/mezan-pr2095-preview-20261125/cache",
+      "receipt": "/root/mezan-pr2095-preview-20261125/toolchain.json",
+      "frozen_install_completed": false,
+      "frozen_install_completed_historical": true
     },
     "existing_owner_identity_match": true,
     "private_mongo": {
-      "ready": true,
+      "ready": false,
       "started_at_utc": "2026-11-25T14:33:58.634438Z",
       "pid": 49277,
       "port": 27019,
@@ -101,29 +105,44 @@
       "cache_gb": 0.25,
       "source_data_imported": false,
       "snapshot_read_majority_journal_transaction_probe": "Passed on own disposable probe database only; no financial data.",
-      "old_p01_changed": false
+      "old_p01_changed": false,
+      "receipt_status": "Historical only; old /tmp root absent and loopback27019 closed. Restore own Mongo only after coordination check."
     },
     "private_current_api": {
       "prepared_in_progress": true,
       "running": false,
       "planned_port": 8002,
       "principle": "Exact current read routers and demand-only worker on own verified Mongo copy; original private authentication service unchanged. Gate all routes and external egress; no full server/startup providers."
+    },
+    "remote_loss": {
+      "observed_at_utc": "2026-11-25T15:04:27Z",
+      "original_root_absent": true,
+      "ports": {
+        "3000": false,
+        "8001": true,
+        "8002": false,
+        "27018": true,
+        "27019": false
+      },
+      "cause": "Not established. Terminal connection expired and state/files changed; do not infer which external operation removed them.",
+      "source_data_lost": false
     }
   },
   "release": {
-    "guard_active_observed": false,
+    "guard_active_observed": true,
     "owner": null,
-    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
-    "owner_state": "Historical PR2118 and PR2123 leases closed by their owners. Fresh unchanged original guard status returned active:false; /app tracked-clean.",
+    "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "owner_state": "Foreign protocol-v5 release lease active; untouched. No task service restart, /app edit or release action performed.",
     "this_task_prepared": false,
     "this_task_merged": false,
     "this_task_published": false,
     "production_changed_by_this_task": false,
-    "latest_guard_probe": "Original guard active:false immediately before final task-owned frontend restart at2026-11-25T13:32:28Z; /app HEAD6323017fbf9ba160c536a94f408507435786412a unchanged."
+    "latest_guard_probe": "Fresh original guard status returnedactive:true after terminal reload; /appHEAD f3d8ee39e60ed087f0a4d6debf844d128e92a758. Old /tmp task root absent; own3000/27019 closed.",
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91"
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
-    "real_preview_identity_and_api": "Exact frontend identity verified and login renders; current accounting API/dataset blocked.",
+    "real_preview_identity_and_api": "Earlier frontend-only identity verification is historical; candidate runtime restore and canonical data/current API remain pending.",
     "cold_warm_route_interactivity_p50_p95": "unverified",
     "all_accounting_sections_and_twelve_tabs_real_data": "unverified",
     "backend_queue_build_mongo_timings": "unverified",
