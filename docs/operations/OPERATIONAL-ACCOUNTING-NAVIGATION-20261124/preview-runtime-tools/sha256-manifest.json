@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "purpose": "Private isolated read runtime and verified native BSON importer; no product-source edits or real-data capture",
+  "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
+  "source_tree": "436199d239a75910d94d441e9eb47408aea80080",
+  "tracked_source_clean": true,
+  "prepared_at": "2026-11-25T15:30:55.088511+00:00",
+  "verification": {
+    "local_python": "3.12.14",
+    "importer_pymongo": "4.18.3",
+    "runtime_http_guard_tests": 11,
+    "native_bson_importer_tests": 7,
+    "independent_reviewer": "pr_status",
+    "independent_results": "18 passed after final denied_permissions contract repin and legacy movements enablement",
+    "network_scope": "Offline synthetic BSON plus guarded loopback API bind/start/stop; no Mongo/auth/provider/source service connections",
+    "remaining_gate": "Fresh remote actual source factory import, own replica, authentic owner session, genuine capture/import and runtime performance checks; previous remote temp services expired."
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 14931,
+      "sha256": "a9301251274bd7bbd758dd91e3d1f15c1c1ac8055a18d7580b293b2e7283f0f7"
+    },
+    {
+      "path": "coverage-policy.json",
+      "bytes": 3005,
+      "sha256": "c2825fca60808be20e34fc99c35a724d1b13032e0e50584208d40e55228cf522"
+    },
+    {
+      "path": "import_snapshot.py",
+      "bytes": 27375,
+      "sha256": "b3f108c352969dd231e905b4eb0df07176743857d5fb89b5bf6f4b011b60d5d8"
+    },
+    {
+      "path": "launch.py",
+      "bytes": 1431,
+      "sha256": "aa7949524fecb617142b5ec436ef6a1fb642b5bbb948dac75e44e3ca602913ba"
+    },
+    {
+      "path": "private_app.py",
+      "bytes": 7251,
+      "sha256": "b4240236ccece3f944755a0ee4d0ace0a5b1ebb0ae20d4585fa8f5e4ba89e64b"
+    },
+    {
+      "path": "private_common.py",
+      "bytes": 12782,
+      "sha256": "34d50debb7aeddf007feea9e7fcc6d116d87a16aded656e5261285f3ade1e96b"
+    },
+    {
+      "path": "private_entry.py",
+      "bytes": 1765,
+      "sha256": "0df07dc39b82af29a6647a629d519877f84bf7cb6a375bdc491bc102660da054"
+    },
+    {
+      "path": "private_guard.py",
+      "bytes": 3286,
+      "sha256": "71485a0ab5416b228242394d1b5f37995ce01e40502cd52d61c8a0587d8654af"
+    },
+    {
+      "path": "private_http.py",
+      "bytes": 8259,
+      "sha256": "bc3101edfeebf5e5006a7b33383e7d192e8b813447912d1895703e2d7a0713d0"
+    },
+    {
+      "path": "runtime.example.json",
+      "bytes": 373,
+      "sha256": "975dbae32711cb2447b2f42379e1a4828c07179b5f84e739be2ed447ffdd9b9b"
+    },
+    {
+      "path": "sitecustomize.py",
+      "bytes": 320,
+      "sha256": "776f9d1513a675defeed3e63d3c8922339171bb9f36550cac7814d173b647ed6"
+    },
+    {
+      "path": "source_contract_v2.json",
+      "bytes": 48376,
+      "sha256": "2d82e8cd81515f2cea82575b1765076d3374f9995081ecb75700577f92f62db5"
+    },
+    {
+      "path": "test_import_snapshot.py",
+      "bytes": 13516,
+      "sha256": "3090770bcbda6e79a8ee35631f89ad199decf2b56fbcb3f408d14afdf834d3b5"
+    },
+    {
+      "path": "test_private_runtime.py",
+      "bytes": 14603,
+      "sha256": "1fb545ea5644bcd06d7890ebd93dceea084b7e747a55e70b081007adb02f7f08"
+    }
+  ]
+}

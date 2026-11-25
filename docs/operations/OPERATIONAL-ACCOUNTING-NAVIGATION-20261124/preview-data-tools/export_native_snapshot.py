@@ -38,7 +38,7 @@ PURE_FUNCTIONS = frozenset({"content_key", "manifest", "validated_events",
 PURE_CONSTANTS = frozenset({"AUDIT_PAGES", "MARKER", "ISSUES", "ISSUE_MARK",
     "MAX_ISSUE_BSON", "SNAPSHOT", "SNAPSHOT_MARK", "SNAPSHOT_FIELDS", "MAX_SNAPSHOT_BSON"})
 USER_FIELDS = ("id", "name", "role", "created_by", "is_owner", "is_active",
-    "disabled", "deleted_at", "status", "web_page_access", "operational_balance_access")
+    "disabled", "deleted_at", "status", "web_page_access", "operational_balance_access", "denied_permissions")
 LIFECYCLE_FIELDS = ("status", "active", "is_active", "archived", "deleted", "is_archived", "is_deleted")
 IDENTITY_FIELDS = ("_id", "user_id", "id", "name", "display_name", "company_name",
     "account_type", "currency", *LIFECYCLE_FIELDS, "ready", "setup_issue")

@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-25",
-  "state": "native_exporter_reviewed_restored_source_importer_runtime_review_pending",
+  "state": "reviewed_capture_import_read_runtime_frozen_remote_preflight_pending",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -70,6 +70,13 @@
       "runtime_integration": "Browser login+panel+empty sanitized export verified; exact source/module identity, zero samples. No accounting acceptance measurement.",
       "measured_acceptance": false,
       "independent_review": "No blocking findings; checked host/method/fixed-path constraints, no credentials/query values in bounded diagnostics, no forwarded-host trust, strict browser origin preserved."
+    },
+    "private_native_pipeline": {
+      "exporter": 49,
+      "importer": 7,
+      "http_guard": 11,
+      "total": 67,
+      "independent_review": "All three suites repeated; no remaining concrete code/source-contract blocker. Genuine capture/import/actual source factory/host/browser acceptance not established by synthetic tests."
     }
   },
   "preview": {
@@ -122,7 +129,7 @@
       "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
       "official_admin_viewer": "User completed secure browserAuth; Production connection succeeded and canonical state/audit collections are present. Selecting the state collection returnedHTTP500; one normal refresh also failed and old collection rows remained visible. No stale rows copied. Advanced options expose new-document only, not export; no WebMCP tools. Connection credential was never exposed to the assistant.",
       "existing_bson_backup": "Bounded read-only search of known prior task directories found no BSON/mongodump/archive copy. Exact repository/checkpoint search also found no canonical export artifact.",
-      "native_capture": "Full exporter frozen and independently reviewed: 48offline tests passed; 56named scopes/55collections including27forecast sources. Single snapshot, unchanged primary head, BSON hashes and exact source/contract pins. No sourceURI/capture yet; importer/runtime contract enforcement stillunderreview."
+      "native_capture": "Final full exporter independently reviewed:49tests,56scopes/55collections, snapshot/primary-head/rawBSON and executable+semantic hashes. No genuine source connection/capture. Final permission-preserving bundle and importer/runtime ready for remote preflight."
     },
     "private_observer": {
       "files": "preview-tools/",
@@ -154,35 +161,43 @@
       "platform": "linux-arm64",
       "cache": "/var/tmp/mezan-pr2095-preview-20261125/cache",
       "receipt": "/var/tmp/mezan-pr2095-preview-20261125/toolchain.json",
-      "frozen_install_completed": false,
+      "frozen_install_completed": true,
       "frozen_install_completed_historical": true,
-      "restore_state": "Own cache/frozen install restarted after bounded recovery from persistent-partition ENOSPC; result pending."
+      "restore_state": "Restored pinned frozen install exit0 at2026-11-25T15:16:02.993157Z under own /var/tmp root."
     },
     "existing_owner_identity_match": true,
     "private_mongo": {
       "ready": false,
-      "started_at_utc": "2026-11-25T14:33:58.634438Z",
-      "pid": 49277,
+      "running": false,
       "port": 27019,
       "bind_ip": "127.0.0.1",
       "replica_set": "mezan_pr2095_private",
       "members": [
         "127.0.0.1:27019"
       ],
-      "directory": "/tmp/mezan-pr2095-preview-20261125/mongo/data",
-      "runtime_receipt": "/tmp/mezan-pr2095-preview-20261125/mongo/runtime.json",
-      "mongodb_version": "7.0.45",
+      "planned_directory": "/var/tmp/mezan-pr2095-preview-20261125/mongo/data",
       "cache_gb": 0.25,
       "source_data_imported": false,
-      "snapshot_read_majority_journal_transaction_probe": "Passed on own disposable probe database only; no financial data.",
       "old_p01_changed": false,
-      "receipt_status": "Historical only; old /tmp root absent and loopback27019 closed. Restore own Mongo only after coordination check."
+      "historical_verification": "Former own Mongo7.0.45/PID49277 passed snapshot+majority,journal transaction probe before /tmp runtime loss. That readiness is expired."
     },
     "private_current_api": {
-      "prepared_in_progress": true,
+      "prepared": true,
+      "prepared_in_progress": false,
       "running": false,
       "planned_port": 8002,
-      "principle": "Exact current read routers and demand-only worker on own verified Mongo copy; original private authentication service unchanged. Gate all routes and external egress; no full server/startup providers."
+      "files": "preview-runtime-tools/",
+      "bundle_manifest_sha256": "4742718a69563fdd8fd4129e884bd268870f37da8c997935463cfdfa3bcb372d",
+      "importer_sha256": "b3f108c352969dd231e905b4eb0df07176743857d5fb89b5bf6f4b011b60d5d8",
+      "coverage_policy_sha256": "c2825fca60808be20e34fc99c35a724d1b13032e0e50584208d40e55228cf522",
+      "source_contract_sha256": "2d82e8cd81515f2cea82575b1765076d3374f9995081ecb75700577f92f62db5",
+      "local_tests": {
+        "http_guard": 11,
+        "importer": 7,
+        "independently_repeated": true
+      },
+      "actual_source_factory_verified": false,
+      "principle": "Original current read handlers plus dedicated demand worker on verified new own DB. Original private authentication unchanged; no fabricated identity, full server startup or financial/provider action. All allowlisted actual source routes must exist."
     },
     "remote_loss": {
       "observed_at_utc": "2026-11-25T15:04:27Z",
@@ -201,16 +216,18 @@
       "directory": "preview-data-tools/",
       "ready_for_remote_preflight": true,
       "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
-      "offline_tests_passed": 48,
+      "offline_tests_passed": 49,
       "independently_verified": true,
       "scopes": 56,
       "collections": 55,
-      "source_contract_sha256": "d86111f994cd391a8e918cdc64a1c0b285b9fbcdcc9d6fc41d4370f070055cfe",
-      "exporter_sha256": "3bcc13452d0fffca98876f836b013c6efe7fcf9b9aa4eb4a07716762e5dec12b",
+      "source_contract_sha256": "2d82e8cd81515f2cea82575b1765076d3374f9995081ecb75700577f92f62db5",
+      "exporter_sha256": "dce03398b07be43529baf84298c17786d159de6bbee2f4a200db2d913a6b5643",
       "projection_module_sha256": "d0f4117c97cc63b7ca81e1e2e8d9f512718ac7244cc33449a589933e372b18e8",
-      "bundle_manifest_sha256": "cf2a661c328c00187de7c683513361d2b374b003f24846a800d68b5c50965037",
+      "bundle_manifest_sha256": "aee30b963d1f687e1513032ab7840df1910747084613f4559c41fb8b4a366462",
       "genuine_source_connection_performed": false,
-      "live_capture_verified": false
+      "live_capture_verified": false,
+      "permission_delta": "Canonical denied_permissions retained for owner and team; exact original movements denial regression passes.",
+      "remote_verification": "Earlier48-test bundle passed remotely at15:25:06Z; final49-test permission delta must be deployed/tested before credential input."
     },
     "storage_recovery": {
       "working_root": "/var/tmp/mezan-pr2095-preview-20261125",
@@ -231,8 +248,10 @@
     "this_task_merged": false,
     "this_task_published": false,
     "production_changed_by_this_task": false,
-    "latest_guard_probe": "Fresh original guard status returnedactive:true after terminal reload; /appHEAD f3d8ee39e60ed087f0a4d6debf844d128e92a758. Old /tmp task root absent; own3000/27019 closed.",
-    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91"
+    "latest_guard_probe": "Most recent original status command timed out after20seconds. Last completed status remains foreignactive:true at source6d4aa546259e9cad1cc379d4a464e245af6cfa91/deploymentf3d8ee39e60ed087f0a4d6debf844d128e92a758. Do not infer closure or start another verifier.",
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "latest_probe_completed": false,
+    "latest_probe_timeout_seconds": 20
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
@@ -242,7 +261,7 @@
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Deploy the reviewed exporter from this immutable checkpoint and verify pinned dependencies/offline tests on the remote task path. Finish independent importer/runtime contract/shape/hash review and persist that package. Keep foreign lease/sharedservices untouched. Recheck original guard and ports before own Preview activation; complete all tooling before user-controlled hidden sourceURIprompt.",
+  "next_safe_action": "Deploy/hash-verify final native exporter and importer/runtime packages, rerun49/7/11 focused tests with remote-compatible interpreters, and construct the actual source router factory under the existing guard with no lifespan/network/data. Resolve only concrete integration failures. Recheck original release guard before own public Preview activation. Prepare a new private hidden-TTY URI prompt only after concrete tooling preflight; never extract browser credentials. Actual capture/import/metrics remain unperformed.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
   "evidence_branch_is_deployable": false,
   "history": [
@@ -275,7 +294,12 @@
       "checkpoint": "b89675c2b0aef445daf4fcb255cb73db6427d251",
       "state": "native_tooling_preparation_remote_ephemeral_runtime_lost_foreign_release_active",
       "notes": "Records expired old /tmp runtime and active foreign lease. Source was subsequently restored; /root space failure recovered by moving only own files to /var/tmp."
+    },
+    {
+      "checkpoint": "b3f2e87bb6c36f4446a51411c95dfac1a348948c",
+      "state": "native_exporter_reviewed_restored_source_importer_runtime_review_pending",
+      "notes": "Initial reviewed48-test capture bundle. One final minimal denied_permissions field was added for original legacy/movements denial semantics; final49-test producer is now pinned by the reviewed importer/runtime. No capture used older bundle."
     }
   ],
-  "checkpoint_at_utc": "2026-11-25T15:20:03Z"
+  "checkpoint_at_utc": "2026-11-25T15:32:37Z"
 }

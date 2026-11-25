@@ -49,8 +49,10 @@ unpacked and validated only in memory, with their original packed bytes saved.
 
 The owner user must exist exactly once and have its stored role `owner`. Mongo
 `_id` is preserved in every context scope. Owner
-IDs and stored access/cutover policies are not remapped or invented. Missing
-control documents are recorded as zero matches; the later runtime must decide
+IDs and stored access/cutover policies are not remapped or invented.
+`denied_permissions` is preserved when present for both owner and team users,
+including the original explicit-denial semantics of the legacy movements read.
+Missing control documents are recorded as zero matches; the later runtime must decide
 whether that genuine absence satisfies its own preconditions. User email,
 password, session, MFA and authentication token fields are never selected.
 

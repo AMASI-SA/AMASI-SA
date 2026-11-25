@@ -1,20 +1,20 @@
 {
   "archive_validator_sha256": "a8e08fdd573fae56f184e1c10070bde994845f55bdb1ac9c81ba3dd46b833000",
-  "created_at": "2026-11-25T15:19:35.289545+00:00",
+  "created_at": "2026-11-25T15:28:24.839943+00:00",
   "files": {
-    "README.md": "371c8d85ea5d599bd10e30749bcfc874aadeee823d5f56b128ae754cd657588b",
-    "export_native_snapshot.py": "3bcc13452d0fffca98876f836b013c6efe7fcf9b9aa4eb4a07716762e5dec12b",
+    "README.md": "bcb479d481a24dbe1cfdb02f482993cd5e16a82bb70ff944ea9e44e6cf98acd2",
+    "export_native_snapshot.py": "dce03398b07be43529baf84298c17786d159de6bbee2f4a200db2d913a6b5643",
     "navigation_sources.py": "d0f4117c97cc63b7ca81e1e2e8d9f512718ac7244cc33449a589933e372b18e8",
     "requirements.txt": "ef9f04128aee41612c2fb36c9fa7cb5524a91d1a23610e179ecc8453b39114bd",
-    "source_contract_v2.json": "d86111f994cd391a8e918cdc64a1c0b285b9fbcdcc9d6fc41d4370f070055cfe",
-    "test_export_native_snapshot.py": "5ef042ca26b5e95786ce161b51bb5b81c1e7242796fa57c07985c59d1a9716c5"
+    "source_contract_v2.json": "2d82e8cd81515f2cea82575b1765076d3374f9995081ecb75700577f92f62db5",
+    "test_export_native_snapshot.py": "5a34aa230165c15fd54938f48098ea5d98d42cb6ba4154083a66d8ea26b34205"
   },
   "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
   "verification": {
     "genuine_source_connection_performed": false,
-    "independent_source_review": "passed_for_defined_owner_navigation",
+    "independent_source_review": "passed_for_defined_owner_navigation_including_explicit_movement_denial_delta",
     "live_capture_verified": false,
-    "offline_tests": 48,
+    "offline_tests": 49,
     "result": "passed",
     "runtime_performance_verified": false
   },

@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 import warnings
@@ -221,6 +222,44 @@ class ExportTests(unittest.TestCase):
             self.assertNotIn("password", fields)
             self.assertNotIn("email", fields)
         self.assertEqual(self.reader.context_calls[1][1], team_query)
+
+    def test_explicit_movement_denial_survives_owner_and_team_projection(self):
+        permission = "accounting.movements.view"
+        users = [spec for spec in export.context_specs(OWNER) if spec[1] == "users"]
+        for _, _, _, fields, _, _ in users:
+            self.assertEqual(fields.get("denied_permissions"), 1)
+        owner = {"_id": "synthetic-owner-id", "id": OWNER, "role": "owner",
+            "denied_permissions": [permission, "accounting.other.view"]}
+        team = {"_id": "synthetic-team-id", "id": "synthetic-team", "role": "accountant",
+            "created_by": OWNER, "denied_permissions": [permission]}
+        self.reader.rows[key("users", {"id": OWNER})] = [BSON.encode(owner)]
+        self.reader.rows[key("users", {"created_by": OWNER, "role": {"$ne": "owner"}})] = [BSON.encode(team)]
+        _, manifest = self.capture(include_context=True)
+        copied = []
+        for scope in manifest["supplemental"]:
+            if scope["collection"] == "users":
+                copied.extend(BSON((self.path / item["file"]).read_bytes()).decode() for item in scope["files"])
+        self.assertEqual([row["denied_permissions"] for row in copied],
+            [owner["denied_permissions"], team["denied_permissions"]])
+        # Execute the exact browser gate. Its explicit denial must preempt the
+        # downstream accounting-grant check, even for the stored owner role.
+        tree = ast.parse((ARCHIVE_SOURCE.parent / "operational_financial_activity.py").read_bytes())
+        node = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+            and node.name == "require_browser_activity_permission")
+        def denied(code, message, status):
+            self.assertEqual(status, 403)
+            raise PermissionError(code)
+        namespace = {"fail": denied}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "exact_browser_permission_gate", "exec"), namespace)
+        grant = Mock()
+        with patch.dict(export.sys.modules, {"accounting_module_contract": SimpleNamespace(require_accounting_permission=grant)}):
+            for actor in (owner, *copied):
+                with self.assertRaisesRegex(PermissionError, "accounting_permission_required"):
+                    namespace["require_browser_activity_permission"](actor, permission)
+            grant.assert_not_called()
+            without_denials = {key: value for key, value in owner.items() if key != "denied_permissions"}
+            namespace["require_browser_activity_permission"](without_denials, permission)
+            grant.assert_called_once_with(without_denials, permission)
 
     def test_unprojected_secret_user_field_fails(self):
         self.reader.rows[key("users", {"id": OWNER})] = [BSON.encode({

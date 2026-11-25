@@ -1,0 +1,8 @@
+{
+  "source_root": "/ABSOLUTE/PRIVATE/source",
+  "export_directory": "/ABSOLUTE/PRIVATE/VERIFIED-EXPORT-DIRECTORY",
+  "manifest_sha256": "REPLACE_WITH_VERIFIED_COMPLETE_MANIFEST_SHA256",
+  "database_name": "mezan_pr2095_20261125",
+  "expected_owner_id": "REPLACE_WITH_UNCHANGED_CANONICAL_OWNER_ID",
+  "preview_origin": "https://salla-analytics.preview.emergentagent.com"
+}
