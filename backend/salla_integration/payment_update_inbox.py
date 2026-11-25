@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 async def enqueue_verified_payment(db, event):
-    if event.get("event") != "order.payment.updated":
+    if event.get("event") not in {"order.created", "order.payment.updated"}:
         return None
     merchant = str(event.get("merchant") or "").strip()
     if not merchant or is_attribution_pilot_store(merchant):
@@ -25,7 +25,7 @@ async def enqueue_verified_payment(db, event):
     if not owner or not payload.get("reference_id") or not payload.get("id"):
         return None
     # Only the verified order payload needed for replay, no headers or secrets.
-    safe_event = {"event": "order.payment.updated", "merchant": merchant, "data": deepcopy(payload)}
+    safe_event = {"event": event["event"], "merchant": merchant, "data": deepcopy(payload)}
     key = hashlib.sha256(json.dumps(safe_event, sort_keys=True, default=str).encode()).hexdigest()
     now = datetime.now(timezone.utc)
     await db[COLLECTION].update_one({"_id": key}, {"$setOnInsert": {
@@ -39,8 +39,22 @@ async def enqueue_verified_payment(db, event):
 async def _apply(db, item):
     if await _resolve_user_id(db, item["merchant_id"]) != item["user_id"]:
         return "paused"
+    # order.created enters this inbox ONLY after the signed canonical order
+    # handler has persisted (or classified stale) its snapshot. Do not replay
+    # that full sync from the evidence worker: it may re-run fulfillment and
+    # create unnecessary work. The proof stage itself is idempotent.
+    if item["event"].get("event") == "order.created":
+        from operational_payment_salla_event_capture import stage_verified_payment_update
+        return "done" if await stage_verified_payment_update(db, item) else "pending"
     result = await sync_order_from_verified_webhook(db, item["event"])
     if result.get("synced") or result.get("reason") == "stale_salla_snapshot":
+        # A signed payment event may supply original capture proof even when
+        # its order snapshot has become stale. Preserve proof in the
+        # operational CAS only when the separately gated staging succeeds.
+        # No financial movement or account balance is changed here.
+        from operational_payment_salla_event_capture import stage_verified_payment_update
+        if not await stage_verified_payment_update(db, item):
+            return "pending"
         return "done"
     return "pending"
 

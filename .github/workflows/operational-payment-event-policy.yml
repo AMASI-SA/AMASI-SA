@@ -1,0 +1,128 @@
+name: Operational Payment Event Policy
+
+on:
+  push:
+    branches:
+      - "codex/operational-payment-events-current-20261124"
+    paths:
+      - ".github/workflows/operational-payment-event-policy.yml"
+      - "backend/operational_payment_*.py"
+      - "backend/tests/test_operational_payment_*.py"
+  pull_request:
+    paths:
+      - "backend/operational_payment_event_policy.py"
+      - "backend/tests/test_operational_payment_event_policy.py"
+      - "backend/tests/test_operational_source_validation_diagnostics.py"
+      - "backend/operational_source_diagnostics.py"
+      - "backend/operational_payment_reconciliation_plan.py"
+      - "backend/operational_payment_capture_adapter.py"
+      - "backend/operational_statement_auto_confirmation.py"
+      - "backend/operational_payment_snapshot_integrity.py"
+      - "backend/operational_payment_integrity_routes.py"
+      - "backend/operational_payment_evidence_inbox.py"
+      - "backend/operational_payment_cas_reconciliation.py"
+      - "backend/tests/test_operational_payment_cas_reconciliation.py"
+      - "backend/operational_payment_salla_event_capture.py"
+      - "backend/operational_payment_evidence_review.py"
+      - "backend/operational_payment_direct_provider.py"
+      - "backend/operational_payment_first_capture_writer.py"
+      - "backend/operational_payment_salla_order_page.py"
+      - "backend/operational_payment_direct_order_page.py"
+      - "backend/operational_payment_first_order_page_writer.py"
+      - "backend/operational_payment_refresh_health_gate.py"
+      - "backend/operational_refresh_failure_trace.py"
+      - "backend/operational_salla_schedule_diagnostics.py"
+      - "backend/operational_salla_event_source_gate.py"
+      - "backend/tests/test_operational_salla_event_source_gate.py"
+      - "backend/tests/test_operational_salla_event_source_integration.py"
+      - "backend/operational_salla_schedule_health_routes.py"
+      - "backend/operational_source_freshness.py"
+      - "backend/salla_integration/scheduled_reconciliation.py"
+      - "backend/tests/test_operational_salla_schedule_diagnostics.py"
+      - "backend/operational_balance_freshness.py"
+      - "backend/operational_remaining_bundle_sources.py"
+      - "backend/operational_demand_refresh.py"
+      - "backend/tests/test_operational_refresh_failure_trace.py"
+      - "backend/tests/test_operational_payment_refresh_health_gate.py"
+      - "backend/tests/test_operational_payment_first_order_page_writer.py"
+      - "backend/tests/test_operational_payment_direct_order_page.py"
+      - "backend/tests/test_operational_payment_salla_order_page.py"
+      - "backend/tests/test_operational_payment_first_capture_writer.py"
+      - "backend/tests/test_operational_payment_direct_provider.py"
+      - "backend/tests/test_operational_payment_canonical_date_parity.py"
+      - "backend/tests/test_operational_payment_pooled_history_parity.py"
+      - "backend/operational_provider_history.py"
+      - "backend/operational_provider_dates.py"
+      - "backend/operational_payment_native_capture_candidate.py"
+      - "backend/operational_payment_native_capture_read.py"
+      - "backend/operational_payment_full_refresh_parity.py"
+      - "backend/tests/test_operational_payment_full_refresh_parity.py"
+      - "backend/tests/test_operational_payment_real_reducer_parity.py"
+      - "backend/operational_payment_native_capture_routes.py"
+      - "backend/tests/test_operational_payment_native_capture_read.py"
+      - "backend/tests/test_operational_payment_native_capture_candidate.py"
+      - "backend/tests/test_operational_payment_evidence_review.py"
+      - "backend/salla_integration/payment_update_inbox.py"
+      - "backend/salla_integration/webhook_order_sync.py"
+      - "backend/tests/test_operational_payment_salla_event_capture.py"
+      - "backend/tests/test_operational_payment_initial_order_inbox.py"
+      - "backend/tests/test_operational_payment_evidence_inbox.py"
+      - "backend/operational_balance_routes.py"
+      - "backend/tests/test_operational_payment_snapshot_integrity.py"
+      - "backend/tests/test_operational_statement_auto_confirmation.py"
+      - "backend/tests/test_operational_payment_capture_adapter.py"
+      - "backend/tests/test_operational_payment_reconciliation_plan.py"
+      - "backend/operational_balance_service.py"
+      - ".github/workflows/operational-payment-event-policy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payment-policy-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isolated payment policy tests
+        working-directory: backend
+        run: |
+          python3 -m unittest discover -s tests -p 'test_operational_payment_event_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_source_validation_diagnostics.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_reconciliation_plan.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_capture_adapter.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_statement_auto_confirmation.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_snapshot_integrity.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_evidence_inbox.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_cas_reconciliation.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_salla_event_capture.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_evidence_review.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_direct_provider.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_canonical_date_parity.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_pooled_history_parity.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_native_capture_candidate.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_native_capture_read.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_full_refresh_parity.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_first_capture_writer.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_salla_order_page.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_direct_order_page.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_first_order_page_writer.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_refresh_health_gate.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_refresh_failure_trace.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_salla_schedule_diagnostics.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_salla_event_source_gate.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_salla_event_source_integration.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
+
+  real-reducer-parity-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install minimal financial reducer runtime dependencies
+        run: python3 -m pip install --quiet fastapi pymongo motor openpyxl
+      - name: Compare direct payment against actual canonical reducer
+        working-directory: backend
+        run: |
+          python3 -m unittest discover -s tests -p 'test_operational_payment_real_reducer_parity.py' -v
