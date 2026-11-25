@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 13:54:23 UTC",
+  "recorded_at": "2026-11-25 14:00:35 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E4_ORIGINAL_CANDIDATE_VALIDATED_BACKEND_CI_PENDING",
+  "status": "E5_SOURCE_A2_ALL_CI_PASS_INTENT_ONLY_B_PRESERVED",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -147,7 +147,7 @@
     "whitespace": "git diff --check exit0",
     "warning": "Existing Pydantic validator deprecation warnings only.",
     "ci": {
-      "state": "18_of_19_workflows_success_backend_running",
+      "state": "all_19_workflows_success_35_success_checks_6_scoped_skips",
       "observed_at": "2026-11-25 13:50:52 UTC",
       "all_former_contract_failures_resolved": true,
       "frontend": {
@@ -159,9 +159,7 @@
         "new_cases_executed": 2,
         "artifact_sha256": "88c1aa6fdf6b463e57f4fe75fc957be7d13307c4a3cd37deb603b3d866132249"
       },
-      "pending_jobs": [
-        139245384386
-      ],
+      "pending_jobs": [],
       "contract_runs": [
         45625707655,
         45625707945,
@@ -176,6 +174,24 @@
         "skipped": 0,
         "new_cases_executed": 23,
         "artifact_sha256": "0a6161ce61b460452cf50405503601704e9164ae15447d916c88e4535591bce3"
+      },
+      "backend": {
+        "run_id": 45625707762,
+        "job_id": 139245384386,
+        "artifact_id": 15030350539,
+        "artifact_sha256": "447e43c41227bc62a422b9ba3696246941626ba280caea9a61ac29a52d08fa4d",
+        "primary_tests_passed": 7689,
+        "subtests_passed": 151,
+        "junit_records": 7840,
+        "demand_read_passed": 106,
+        "shipping_passed": 16,
+        "shipping_subtests_passed": 18,
+        "new_backend_cases_executed": 23,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "artifact_source_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "artifact_source_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8"
       }
     },
     "frontend": {
@@ -262,13 +278,13 @@
     }
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Await exact-A2 Operational Balance Backend completion and inspect its required acceptance artifacts. Once all source gates pass, create B parentA2 changing only release/release-intent-v5.json to exact blob714c903b4264cc912c86df8bb2ee3caf2085fb65. Run B readiness including both real host adapter rehearsals. Do not create a lease yet.",
+  "next_safe_action": "Validate B with original load_release_intent/verify_release_intent_git on an isolated clean host worktree while exact-B CI runs. Resolve host disk allocation safely without deleting foreign work. After B required gates including Node20/24 host rehearsals pass, normal-merge B into unchanged J and verify D. No lease until original successful host rehearsal; prepublish immediately before one publish.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "last_remote_checkpoint": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -344,7 +360,7 @@
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
-  "evidence_checkpoint": "f95c471160a052ce2cf3a58974d0076d84c2955e",
+  "evidence_checkpoint": "5553afcea8262d75e8a6f64ca37a76c149a4df56",
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
   "candidate": {
@@ -360,7 +376,7 @@
     "preserved_path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/release-candidate-A2.json",
     "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
     "original_loader_validated": true,
-    "intent_commit_B_created": false,
+    "intent_commit_B_created": true,
     "original_validation": {
       "observed_at": "2026-11-25T13:52:11.949585+00:00",
       "original_candidate_validation": "PASS",
@@ -373,6 +389,21 @@
       "main_unchanged": true,
       "guard_active": false
     },
-    "original_import_warning": "Ignored backend/release_identity.json absent in the clean source-only checkout; original candidate validator completed successfully. No generated identity was used as evidence."
+    "original_import_warning": "Ignored backend/release_identity.json absent in the clean source-only checkout; original candidate validator completed successfully. No generated identity was used as evidence.",
+    "intent_commit_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
+  },
+  "release": {
+    "intent_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+    "merge_D": null,
+    "prepared": false,
+    "publish_clicked": false,
+    "production_changed": false,
+    "intent_B_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+    "intent_B_parent": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "intent_B_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "intent_B_blob": "714c903b4264cc912c86df8bb2ee3caf2085fb65",
+    "B_CI": "running_or_queued"
   }
 }

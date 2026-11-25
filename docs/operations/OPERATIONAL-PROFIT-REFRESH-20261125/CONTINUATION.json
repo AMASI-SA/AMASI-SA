@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 13:54:23 UTC",
-  "phase": "E4_ORIGINAL_CANDIDATE_VALIDATED_BACKEND_CI_PENDING",
+  "recorded_at": "2026-11-25 14:00:35 UTC",
+  "phase": "E5_SOURCE_A2_ALL_CI_PASS_INTENT_ONLY_B_PRESERVED",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
@@ -66,7 +66,7 @@
     }
   },
   "source_CI": {
-    "state": "18_of_19_workflows_success_backend_running",
+    "state": "all_19_workflows_success_35_success_checks_6_scoped_skips",
     "observed_at": "2026-11-25 13:50:52 UTC",
     "all_former_contract_failures_resolved": true,
     "frontend": {
@@ -78,9 +78,7 @@
       "new_cases_executed": 2,
       "artifact_sha256": "88c1aa6fdf6b463e57f4fe75fc957be7d13307c4a3cd37deb603b3d866132249"
     },
-    "pending_jobs": [
-      139245384386
-    ],
+    "pending_jobs": [],
     "contract_runs": [
       45625707655,
       45625707945,
@@ -95,6 +93,24 @@
       "skipped": 0,
       "new_cases_executed": 23,
       "artifact_sha256": "0a6161ce61b460452cf50405503601704e9164ae15447d916c88e4535591bce3"
+    },
+    "backend": {
+      "run_id": 45625707762,
+      "job_id": 139245384386,
+      "artifact_id": 15030350539,
+      "artifact_sha256": "447e43c41227bc62a422b9ba3696246941626ba280caea9a61ac29a52d08fa4d",
+      "primary_tests_passed": 7689,
+      "subtests_passed": 151,
+      "junit_records": 7840,
+      "demand_read_passed": 106,
+      "shipping_passed": 16,
+      "shipping_subtests_passed": 18,
+      "new_backend_cases_executed": 23,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "artifact_source_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "artifact_source_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8"
     }
   },
   "host_observation": {
@@ -111,11 +127,18 @@
     "normal_git_fetch_and_detached_worktree_only": true
   },
   "release": {
-    "intent_B": null,
+    "intent_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
     "merge_D": null,
     "prepared": false,
     "publish_clicked": false,
-    "production_changed": false
+    "production_changed": false,
+    "intent_B_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+    "intent_B_parent": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "intent_B_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "intent_B_blob": "714c903b4264cc912c86df8bb2ee3caf2085fb65",
+    "B_CI": "running_or_queued"
   },
   "other_work": {
     "pr2124": "Draft payment path, not merged; adds3different diagnostic names in the same file.",
@@ -134,9 +157,9 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "Await exact-A2 Operational Balance Backend completion and inspect its required acceptance artifacts. Once all source gates pass, create B parentA2 changing only release/release-intent-v5.json to exact blob714c903b4264cc912c86df8bb2ee3caf2085fb65. Run B readiness including both real host adapter rehearsals. Do not create a lease yet.",
+  "next_safe_action": "Validate B with original load_release_intent/verify_release_intent_git on an isolated clean host worktree while exact-B CI runs. Resolve host disk allocation safely without deleting foreign work. After B required gates including Node20/24 host rehearsals pass, normal-merge B into unchanged J and verify D. No lease until original successful host rehearsal; prepublish immediately before one publish.",
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "previous_evidence_commit": "f95c471160a052ce2cf3a58974d0076d84c2955e",
+  "previous_evidence_commit": "5553afcea8262d75e8a6f64ca37a76c149a4df56",
   "previous_A_CI": {
     "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
     "known_failed_runs": [
@@ -186,7 +209,7 @@
     "preserved_path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/release-candidate-A2.json",
     "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
     "original_loader_validated": true,
-    "intent_commit_B_created": false,
+    "intent_commit_B_created": true,
     "original_validation": {
       "observed_at": "2026-11-25T13:52:11.949585+00:00",
       "original_candidate_validation": "PASS",
@@ -199,11 +222,31 @@
       "main_unchanged": true,
       "guard_active": false
     },
-    "original_import_warning": "Ignored backend/release_identity.json absent in the clean source-only checkout; original candidate validator completed successfully. No generated identity was used as evidence."
+    "original_import_warning": "Ignored backend/release_identity.json absent in the clean source-only checkout; original candidate validator completed successfully. No generated identity was used as evidence.",
+    "intent_commit_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
   },
   "production_ref": {
     "observed_at": "2026-11-25 13:50:52 UTC",
     "sha": "6323017fbf9ba160c536a94f408507435786412a",
     "status": "identical_to_J"
+  },
+  "host_resources": {
+    "observed_at": "2026-11-25T13:56:06.194311+00:00",
+    "original_guard_active": false,
+    "app_free_bytes": 443985920,
+    "cgroup_memory_max_bytes": 8589934592,
+    "cgroup_memory_current_bytes": 3225546752,
+    "foreign_preview_processes_preserved": true,
+    "follow_up": "Inspect current disk allocation before host rehearsal; no cleanup or process termination performed."
+  },
+  "platform": {
+    "observed_at_approx": "2026-11-25T13:55Z",
+    "provider_version": "e6113be",
+    "published_version_ordinal": 100,
+    "republish_button_enabled": true,
+    "publish_clicked": false,
+    "agent_lock_absent_from_observed_manage_UI": true,
+    "credit_banner_present": true,
+    "credit_banner_not_proven_to_block_publication": true
   }
 }
