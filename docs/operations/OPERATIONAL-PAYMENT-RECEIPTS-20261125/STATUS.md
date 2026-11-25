@@ -203,3 +203,39 @@ merge, shared source mutation, lease preparation or publication has happened.
 Next: finish exact-B2 gates, verify fresh original shared guard/ref/foreign-file
 state, merge without squash/rebase and publish using a fresh matching v5 lease.
 Never reuse the first release's intent or manually clear an unrelated lease.
+
+
+## Optimized release merged and publishing — 2026-11-25 23:30 Riyadh
+
+PR #2131 merged as D2 `37fd7851bb76b39b74e434da19183262e4d42f26`, with exact B2 tree
+`4d56be96f39b4e15db172a61cb5ae96a9190d649` and parents D/B2. All 14 final workflows
+passed; the unrelated conditional TikTok workflow was skipped. All three
+post-merge D2 workflows also passed: readiness 45694647295, security 45694647302,
+and CodeQL 45694647308.
+
+Final B2 evidence: 7,750 backend cases + 151 subtests, including all 15 new
+counted-work fastpath cases and all 44 courier receipt cases, with zero failures,
+errors or skips. The real-Mongo courier concurrency test passed. Frontend:
+1,850 tests / 115 suites; dashboard fees: 268; stock: 6,423 + 97 subtests.
+The two original host clean-clone adapter rehearsals executed and passed.
+See `verification/performance-ci-proof.json` for artifact identifiers and hashes.
+
+The original shared /app advanced cleanly to D2. Original adapter build passed
+from 2026-11-25T20:27:13.035294+00:00 to 2026-11-25T20:28:23.017741+00:00 (exit 0). The current 59
+foreign-root metadata records and original dependency backup were preserved;
+no backend dotenv contents were accessed. Original frontend and package
+verification, prepare and prepublish passed. The fresh active lease belongs to
+`operational-payment-performance-20261125` with A2/D2 and release
+`rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7`.
+
+One authorized performance Republish was submitted. Emergent reports
+Deployment Started Nov 25, 11:30 PM, currently building. Shared stage:
+`/app/.git/payment-performance-2131-5a8d391c`, receipt phase `publication_started`.
+**Optimized production publication: in progress, not yet verified.**
+
+Next safe action: observe this publication's explicit completion and version;
+run the unchanged original three-probe verifier for its matching lease; require
+success and automatic inactive lease; then capture normal read-only health
+response samples and hosting metrics. Do not repeat publication, change frozen
+source, use the first release's intent, create financial test entries or enable
+new background work. Preexisting memory pressure remains a separate observation.

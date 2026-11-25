@@ -1,0 +1,62 @@
+{
+  "sourceA2": "164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa",
+  "intentB2": "514bd0d15b08a48353ab4566c1b243d1279e792b",
+  "deploymentD2": "37fd7851bb76b39b74e434da19183262e4d42f26",
+  "tree": "4d56be96f39b4e15db172a61cb5ae96a9190d649",
+  "release_id": "rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7",
+  "tests": {
+    "backend_run": 45691509090,
+    "backend_tests": 7750,
+    "backend_subtests": 151,
+    "fastpath_cases": 15,
+    "courier_cases": 44,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "mongodb": "8.0.12",
+    "concurrent_courier_replay": "passed",
+    "fastpath_fixture": "counted database fixture, not a Mongo/production load test",
+    "demand_tests": 106,
+    "shipping_tests": 16,
+    "shipping_subtests": 18,
+    "frontend_tests": 1850,
+    "frontend_suites": 115,
+    "dashboard_tests": 268,
+    "stock_tests": 6423,
+    "stock_subtests": 97,
+    "backend_artifact": 15060125944,
+    "backend_artifact_sha256": "436f8e910f460c049e9e317fe991da14a55805088625d151bdf1b6182c90b127",
+    "frontend_artifact": 15059600838,
+    "frontend_artifact_sha256": "1e6a9168a2d752447ae96c012dc4b37dd8d2dd8b33edaddd6ee042a166448157",
+    "readiness_run": 45691509189,
+    "host_rehearsals": [
+      {
+        "host": "20.20.2",
+        "job": 139478677009,
+        "artifact": 15058428674,
+        "digest": "610126884e527329e496a324dd602ae4fb2761269c0df593412ea95736606961"
+      },
+      {
+        "host": "24.19.0",
+        "job": 139478676889,
+        "artifact": 15059296775,
+        "digest": "ace04d4b9563eb29fbf37fc05298bdbb9eaf3f120471ddfda2809462db8145a8"
+      }
+    ]
+  },
+  "shared_stage": {
+    "stage": "/app/.git/payment-performance-2131-5a8d391c",
+    "pid": 27083,
+    "phase": "publication_started",
+    "started_at": "2026-11-25T20:27:13.035294+00:00",
+    "finished_at": "2026-11-25T20:28:23.017741+00:00",
+    "exit_code": 0,
+    "foreign_root_metadata_preserved": 59,
+    "free_mib_after": 381,
+    "guard_active": true,
+    "actor": "operational-payment-performance-20261125",
+    "prepublish_passed": true,
+    "publication_action_count": 1,
+    "publication_started_ui": "Nov 25, 11:30 PM Asia/Riyadh"
+  }
+}
