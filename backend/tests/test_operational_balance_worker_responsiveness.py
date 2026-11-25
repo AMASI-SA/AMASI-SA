@@ -61,7 +61,8 @@ async def test_refresh_calculation_does_not_block_unrelated_heartbeat(monkeypatc
     released = threading.Event()
     state = {**initial(), "owner_id": "owner"}
 
-    async def mutate(db, owner, apply):
+    async def mutate(db, owner, apply, *, replacement_state):
+        assert replacement_state is True
         return await apply(state)
 
     def slow_calculation(*args):
