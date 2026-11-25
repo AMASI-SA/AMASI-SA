@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 15:24:07 UTC",
-  "phase": "E12_PLATFORM_PUBLISHED_ORIGINAL_VERIFY_IN_PROGRESS",
+  "recorded_at": "2026-11-25 16:00:49 UTC",
+  "phase": "E13_PUBLISHED_ORIGINAL_VERIFY_PASS_OWN_LEASE_CLOSED",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
@@ -131,7 +131,7 @@
     "merge_D": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
     "prepared": true,
     "publish_clicked": true,
-    "production_changed": "platform_published_runtime_verify_pending",
+    "production_changed": true,
     "intent_B_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
     "intent_B_parent": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
     "intent_B_changed_paths": [
@@ -256,7 +256,7 @@
     ],
     "B_to_D_content_diff": [],
     "production_branch_changed": true,
-    "production_runtime_changed": "not_yet_verified",
+    "production_runtime_changed": true,
     "D_CI": {
       "repository": "AMASI-SA/AMASI-SA",
       "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
@@ -415,15 +415,18 @@
       "github_writes": 0,
       "host_actions": 0
     },
-    "active": true,
+    "active": false,
     "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
     "prepared_at": "2026-11-25T14:57:47.368128+00:00",
     "prepublish_passed": true,
     "platform_published": true,
     "provider_version": "97dc193",
     "verify_started": true,
-    "verified": false,
-    "closure_verified": false
+    "verified": true,
+    "closure_verified": true,
+    "checks": 3,
+    "closed_status_observed_at": "2026-11-25T15:34:11.304640+00:00",
+    "own_lease_closed_by_original_verify": true
   },
   "other_work": {
     "pr2124": "Draft payment path, not merged; adds3different diagnostic names in the same file.",
@@ -442,9 +445,9 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "Do not republish or start another verifier. Original verify is running in the task-owned Terminal 2 as child PID 17461 of wrapper 17443. Read /tmp/mezan-pr2126-app-dy90mxg3/evidence/production-verify-state.json and original stdout/stderr. Success must be verified=true, checks=3, exact A2/D/runtime ID, and original status active=false after matching lease closure. Preserve the full original archive, obtain independent review, update evidence and private report. No paid Emergent chat, foreign lease/file/process changes, manual financial refresh, or source synchronization.",
+  "next_safe_action": "PR2126 publication and its own matching lease closure are complete; do not republish, reopen or abort this finished lease. The next operational step is to read the next saved scheduled attempt after this publication and use the newly bounded profit context/product timings to identify the actual bottleneck before proposing a performance change. The prior saved r16948 and source-completeness gaps are independent of this publication; keep financial receipt comparisons private and separate from deployment proof. Existing scheduler remains enabled. Preserve other work, all financial invariants and original release gates. No paid Emergent agent chat.",
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "previous_evidence_commit": "670a2ca59e89bbad0e5fb2aac0b2436b00003ef9",
+  "previous_evidence_commit": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486",
   "previous_A_CI": {
     "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
     "known_failed_runs": [
@@ -1009,6 +1012,84 @@
   "publication": {
     "publish_changes_clicks": 1,
     "submitted_at": "2026-11-25T15:01:50.364Z",
+    "platform_completed_observed_at": "2026-11-25T15:13:57.582Z",
+    "platform_completed_display_Riyadh": "Nov 25, 06:12 PM",
+    "provider_revision": "97dc193",
+    "prior_provider_revision": "e6113be",
+    "platform_published": true,
+    "verified": true,
+    "checks": 3,
+    "closed_status_observed_at": "2026-11-25T15:34:11.304640+00:00",
+    "status_after": {
+      "active": false
+    },
+    "free_republishes": true,
+    "paid_agent_chat_used": false,
+    "ordinal_note": "UI ordinal labels are retained only in their historical observations; provider revision and original runtime identity establish this publication."
+  },
+  "original_verification": {
+    "result": "PASS",
+    "original_command": [
+      "/usr/local/bin/python",
+      "-B",
+      "scripts/production_release_guard.py",
+      "verify",
+      "--url",
+      "https://mezansalla.com"
+    ],
+    "cwd": "/app",
+    "wrapper_started_at": "2026-11-25T15:16:47.037626+00:00",
+    "verify_finished_at": "2026-11-25T15:34:11.230628+00:00",
+    "closed_status_observed_at": "2026-11-25T15:34:11.304640+00:00",
+    "elapsed_seconds": 1044.084,
+    "returncode": 0,
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "verified": true,
+    "checks": 3,
+    "protocol_version": 5,
+    "boot_started_at": "2026-11-25T15:12:12.032644+00:00",
+    "boot_started_at_observations": [
+      "2026-11-25T15:12:12.032644+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "cf204d4a8fab48dd45b691ebbd060fc147c07fda65a4fedf6662672d2e987c5e",
+    "frontend_checked_requests_count": 770,
+    "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
+    "prepared_at": "2026-11-25T14:57:47.368128+00:00",
+    "full_prepared_lease_matches_before": true,
+    "original_status_after": {
+      "active": false
+    },
+    "provider_revision": "97dc193",
+    "publish_changes_clicks": 1,
+    "limits": [
+      "The original verifier emits its aggregate result, first frontend request list and distinct boot times; it does not preserve each raw health response.",
+      "Publication identity verification does not establish financial source completeness or performance improvement.",
+      "First wrapper preflight failed before invoking original verify; its complete artifacts are retained separately."
+    ]
+  },
+  "publication_completed_ui": {
+    "observed_at": "2026-11-25T15:13:57.582Z",
+    "source": "Emergent Manage Overview UI",
+    "publication_completed_display_Riyadh": "Nov 25, 06:12 PM",
+    "provider_revision": "97dc193",
+    "current_published_ordinal_display": "100th publish",
+    "previous_provider_revision_display": "e6113be",
+    "previous_ordinal_display": "99th publish",
+    "publish_changes_clicks": 1,
+    "submitted_at": "2026-11-25T15:01:50.364Z",
+    "signals": [
+      "Deployment finished",
+      "Published versions shows new 97dc193 as latest",
+      "Republish enabled"
+    ],
+    "runtime_identity_verify": "in_progress",
+    "ordinal_limit": "Ordinal strings are retained as observed, not used as stable release identifiers."
+  },
+  "publication_submission_checkpoint": {
+    "publish_changes_clicks": 1,
+    "submitted_at": "2026-11-25T15:01:50.364Z",
     "observed_at": "2026-11-25T15:02:26.035Z",
     "observed_state": "Deployment Started / Publishing...",
     "explicit_new_success": false,
@@ -1018,7 +1099,7 @@
     "prior_publish_ordinal": 100,
     "verified": false
   },
-  "original_verification": {
+  "original_verification_started_checkpoint": {
     "command": [
       "python",
       "-B",
@@ -1052,22 +1133,38 @@
     "closure_not_yet_observed": true,
     "republish_again": false
   },
-  "publication_completed_ui": {
-    "observed_at": "2026-11-25T15:13:57.582Z",
-    "source": "Emergent Manage Overview UI",
-    "publication_completed_display_Riyadh": "Nov 25, 06:12 PM",
-    "provider_revision": "97dc193",
-    "current_published_ordinal_display": "100th publish",
-    "previous_provider_revision_display": "e6113be",
-    "previous_ordinal_display": "99th publish",
-    "publish_changes_clicks": 1,
-    "submitted_at": "2026-11-25T15:01:50.364Z",
-    "signals": [
-      "Deployment finished",
-      "Published versions shows new 97dc193 as latest",
-      "Republish enabled"
-    ],
-    "runtime_identity_verify": "in_progress",
-    "ordinal_limit": "Ordinal strings are retained as observed, not used as stable release identifiers."
+  "original_verification_artifact": {
+    "path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/PR2126-ORIGINAL-VERIFY-CLOSED.zip",
+    "bytes": 841833,
+    "sha256": "d5b8b87beb5aea35de24f875848a314b1d6701b6d9e6b7de16cf64d99a99c473",
+    "git_blob_sha": "8a3bdf5d850b7152be08882cd659c975c4e43908",
+    "members": 34,
+    "manifest_records": 33,
+    "root_crc_and_all_member_hashes_verified": true,
+    "independent_review": {
+      "path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/PR2126-ORIGINAL-VERIFY-CLOSED.review.json",
+      "result": "PASS_WITH_EVIDENCE_LIMITS",
+      "blockers": [],
+      "bytes": 7825,
+      "sha256": "1e673a7ee173c6da1cc2dfeaa037eb09d06e132efab8dc7a0c15eef624889d4e"
+    }
+  },
+  "original_verification_review": {
+    "result": "PASS_WITH_EVIDENCE_LIMITS",
+    "blockers": [],
+    "bytes": 7825,
+    "sha256": "1e673a7ee173c6da1cc2dfeaa037eb09d06e132efab8dc7a0c15eef624889d4e"
+  },
+  "post_publication_schedule_observation": {
+    "observed_at": "2026-11-25T15:29:50.352Z",
+    "source": "Authenticated operational-balances tools scheduling region after explicit status-only button check",
+    "enabled": true,
+    "last_attempt_display_Riyadh": "25/11/2026, 17:05",
+    "last_saved_calculation_display_Riyadh": "25/11/2026, 17:05",
+    "next_attempt_display_Riyadh": "25/11/2026, 19:07",
+    "new_post_PR2126_calculation_observed": false,
+    "manual_refresh_run": false,
+    "source_sync_run": false,
+    "status_check_button_enabled_after": true
   }
 }

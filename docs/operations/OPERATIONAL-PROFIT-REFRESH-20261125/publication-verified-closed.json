@@ -1,0 +1,89 @@
+{
+  "recorded_at": "2026-11-25 16:00:49 UTC",
+  "publication": {
+    "publish_changes_clicks": 1,
+    "submitted_at": "2026-11-25T15:01:50.364Z",
+    "platform_completed_observed_at": "2026-11-25T15:13:57.582Z",
+    "platform_completed_display_Riyadh": "Nov 25, 06:12 PM",
+    "provider_revision": "97dc193",
+    "prior_provider_revision": "e6113be",
+    "platform_published": true,
+    "verified": true,
+    "checks": 3,
+    "closed_status_observed_at": "2026-11-25T15:34:11.304640+00:00",
+    "status_after": {
+      "active": false
+    },
+    "free_republishes": true,
+    "paid_agent_chat_used": false,
+    "ordinal_note": "UI ordinal labels are retained only in their historical observations; provider revision and original runtime identity establish this publication."
+  },
+  "original_verify": {
+    "result": "PASS",
+    "original_command": [
+      "/usr/local/bin/python",
+      "-B",
+      "scripts/production_release_guard.py",
+      "verify",
+      "--url",
+      "https://mezansalla.com"
+    ],
+    "cwd": "/app",
+    "wrapper_started_at": "2026-11-25T15:16:47.037626+00:00",
+    "verify_finished_at": "2026-11-25T15:34:11.230628+00:00",
+    "closed_status_observed_at": "2026-11-25T15:34:11.304640+00:00",
+    "elapsed_seconds": 1044.084,
+    "returncode": 0,
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "verified": true,
+    "checks": 3,
+    "protocol_version": 5,
+    "boot_started_at": "2026-11-25T15:12:12.032644+00:00",
+    "boot_started_at_observations": [
+      "2026-11-25T15:12:12.032644+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "cf204d4a8fab48dd45b691ebbd060fc147c07fda65a4fedf6662672d2e987c5e",
+    "frontend_checked_requests_count": 770,
+    "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
+    "prepared_at": "2026-11-25T14:57:47.368128+00:00",
+    "full_prepared_lease_matches_before": true,
+    "original_status_after": {
+      "active": false
+    },
+    "provider_revision": "97dc193",
+    "publish_changes_clicks": 1,
+    "limits": [
+      "The original verifier emits its aggregate result, first frontend request list and distinct boot times; it does not preserve each raw health response.",
+      "Publication identity verification does not establish financial source completeness or performance improvement.",
+      "First wrapper preflight failed before invoking original verify; its complete artifacts are retained separately."
+    ]
+  },
+  "artifact": {
+    "path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/PR2126-ORIGINAL-VERIFY-CLOSED.zip",
+    "bytes": 841833,
+    "sha256": "d5b8b87beb5aea35de24f875848a314b1d6701b6d9e6b7de16cf64d99a99c473",
+    "git_blob_sha": "8a3bdf5d850b7152be08882cd659c975c4e43908",
+    "members": 34,
+    "manifest_records": 33,
+    "root_crc_and_all_member_hashes_verified": true,
+    "independent_review": {
+      "path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/PR2126-ORIGINAL-VERIFY-CLOSED.review.json",
+      "result": "PASS_WITH_EVIDENCE_LIMITS",
+      "blockers": [],
+      "bytes": 7825,
+      "sha256": "1e673a7ee173c6da1cc2dfeaa037eb09d06e132efab8dc7a0c15eef624889d4e"
+    }
+  },
+  "independent_review_result": "PASS_WITH_EVIDENCE_LIMITS",
+  "limits": [
+    "The original verifier emits an aggregate checks=3 result, first-cycle frontend request labels/cache/service-worker observations, and distinct boot timestamps. It does not retain the three raw health bodies or all per-request response bodies/headers/timestamps.",
+    "770 is the first-cycle ordered request-label list. The unmodified verifier source repeats the full frontend check in each of three successful cycles; the archive does not contain three independent raw HTTP transcripts.",
+    "The verified=true result and unchanged original guard source imply the required health identity/source/control/hash/Frontend flags passed; those individual raw health boolean payloads are not separately retained.",
+    "Boot times are deduplicated in output. One retained distinct timestamp with checks=3 records a common boot identity, not three separate raw boot records.",
+    "The Cloud platform revision and completion signals come from recorded UI observations. The bundle contains no raw Cloud Build transcript.",
+    "Lease inactivity is evidenced at 15:34:11.304640 UTC. This review performs no later host status read.",
+    "Deployment identity verification does not establish financial-source completeness, business-data recovery, or performance improvement."
+  ]
+}
