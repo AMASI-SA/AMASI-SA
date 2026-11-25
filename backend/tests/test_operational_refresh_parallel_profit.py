@@ -307,7 +307,7 @@ def test_visible_refresh_waits_for_primary_then_overlaps_remaining_collection_wi
 def test_source_failure_keeps_its_error_contract_and_joins_profit_without_reconciliation(
         monkeypatch, stage, failure_kind):
     async def scenario():
-        from operational_source_diagnostics import source_failure_detail
+        from operational_source_diagnostics import source_failure_detail, source_validation_failure_detail
 
         database, collected = setup_sources(monkeypatch)
         before = deepcopy(database.data[STATES])
@@ -358,10 +358,11 @@ def test_source_failure_keeps_its_error_contract_and_joins_profit_without_reconc
                     {"stage": row["stage"], "outcome": row["outcome"]}
                     for row in raised.value.detail["stage_timings"]]
             elif failure_kind == "setup":
-                assert raised.value.detail == {
-                    "code": "operational_source_setup_incomplete",
-                    "message": "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة",
-                }
+                # Unknown setup failures keep the original internal details
+                # private, but now provide a fixed actionable diagnostic.
+                assert raised.value.detail == source_validation_failure_detail(
+                    failures["setup"])
+                assert "private source setup failure" not in str(raised.value.detail)
             else:
                 assert raised.value is source.failure
         finally:
