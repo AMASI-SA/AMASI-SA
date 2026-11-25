@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-11-25T00:30:46.039115+00:00",
+  "reviewer": "code_review",
+  "result": "PASS_STATIC_DRAFT_NO_CODE_BLOCKER_UNBOUND_EXECUTION_REFUSED",
+  "execution_allowed": false,
+  "target": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-DRAFT.py",
+    "bytes": 6628,
+    "sha256": "87b04f5be1b00ed648ab636d56661b39875cd49e6c9005b6e8c4ee4b26723b10",
+    "git_blob": "4d1d66e2ccf256df55b9b9cde9e65ae05a0b5cc4"
+  },
+  "references": [
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2120-existing-release-verify-runner.py",
+      "bytes": 4223,
+      "sha256": "693bcdf4993b03b9f820e819989b953cc3d13719ca58b74c4d655007d2b96f31",
+      "git_blob": "81932acc86fb5998705a45d4081901c254fc3378"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1",
+      "git_blob": "77c9580e586064198b2342d20ddce9a1d7aeb312"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-DRAFT.diff",
+      "bytes": 6894,
+      "sha256": "b94469c598c657d625cdf72dfcdec4196cc112d58e94d577eea824b8dd6f5ea6",
+      "git_blob": "7d76ad2e20420bf53afe61edf6e142a1e6a3b673"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-DRAFT-review.json",
+      "bytes": 4971,
+      "sha256": "f53685ce9d19ce12624644bad158616cf5dacfba284816e5b07f21230ad757a3",
+      "git_blob": "d9739340f7829c3191068d3434e827496c4cfd12"
+    },
+    {
+      "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-original-verify-cli-sequence.md",
+      "bytes": 4264,
+      "sha256": "9748914bbffd20cc160bb7bcd20de04c014c901e867d605af90352b75e6f5e91",
+      "git_blob": "8fab8b26ed3283fdb2d43ca9c61fca75f18f7cf0"
+    }
+  ],
+  "original_guard_at_D": {
+    "commit": "6323017fbf9ba160c536a94f408507435786412a",
+    "path": "scripts/production_release_guard.py",
+    "bytes": 68995,
+    "sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "git_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+    "pin_exact": true
+  },
+  "fixed_identity": {
+    "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "protocol_version": 5
+  },
+  "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "unbound_values": {
+    "LEASE_SHA256": "DRAFT_UNBOUND_LEASE_SHA256",
+    "PREPARED_AT": "DRAFT_UNBOUND_PREPARED_AT"
+  },
+  "checks": [
+    {
+      "name": "static_identity_and_reference",
+      "result": "PASS",
+      "evidence": "Target bytes/hash/blob exact; saved unified diff exactly reconstructs target; now/save/capture ASTs identical to previous runner; A/J/D/RID/B agree with reviewed final envelope. Actor matches root-approved task actor."
+    },
+    {
+      "name": "early_unbound_refusal",
+      "result": "PASS",
+      "wrapper_lines": "28-43",
+      "evidence": "Both placeholders are rejected at lines 29-30. Invalid or naive prepared timestamp fails at 31-33. First filesystem access is STAGE.lstat at 39; first /app filesystem check is 93. No receipt write or child call precedes the refusal. This is source-order proof, not an executed refusal test."
+    },
+    {
+      "name": "assertions_and_environment",
+      "result": "PASS",
+      "wrapper_lines": "34-47",
+      "evidence": "Optimization is rejected before binding assertions. Child environment removes PYTHONOPTIMIZE/PYTHONHOME/PYTHONPATH; current Python and -B are used. No complete environment allowlist is claimed."
+    },
+    {
+      "name": "private_stage_and_binding",
+      "result": "PASS",
+      "wrapper_lines": "38-43,89-105",
+      "evidence": "Stage must be canonical real /tmp/mezan-pr2123-verify-* owned by euid, mode0700. Initial receipt is exclusive. Lease/parent and guard symlinks are refused; actual raw lease must match pinned SHA256 and saved original-lease-before.json, exact task identity and prepared_at; guard bytes must match D pin."
+    },
+    {
+      "name": "dynamic_frontend_expectations",
+      "result": "PASS",
+      "wrapper_lines": "102-111,121-124",
+      "guard_lines": "60,1430-1509,1771-1776",
+      "evidence": "Frontend manifest comes from the digest-pinned actual lease and must match its top-level alias. Artifact tree is exact. Unique request paths are /build-meta.json, /, /snapchat-accounts and each public file prefixed with slash. Build metadata has two Accept variants times two cache variants; every other path has two cache variants. Original result contains first observation request labels, so expected count is per observation, not multiplied by three. Malformed manifests still face original guard validation."
+    },
+    {
+      "name": "original_cli_and_capture_sequence",
+      "result": "PASS",
+      "wrapper_lines": "57,74-86,112-139",
+      "guard_lines": "1650-1776,1823-1854",
+      "evidence": "Exactly two capture call sites: one original verify --url https://mezansalla.com, timeout3600; only after zero exit and exact successful identity/checks/artifact/count validation, one original status, timeout45. No loop repeats either command. CLI documentation correctly names verify, not verify3 or a checks flag."
+    },
+    {
+      "name": "closure_ownership",
+      "result": "PASS",
+      "wrapper_lines": "125-139",
+      "guard_lines": "978-990,1639-1652,1692-1754",
+      "evidence": "Original guard performs all three observations and removes only its exact unchanged active lease under its own mutex. Wrapper performs no manual deletion and requires original status inactive, no incomplete directory, and absent lease directory before PASS. Non-PASS wrapper exits2."
+    },
+    {
+      "name": "no_extra_mutations_or_retry",
+      "result": "PASS",
+      "wrapper_lines": "1-139",
+      "evidence": "Wrapper writes only its owned-stage evidence and invokes original verify/status. It contains no prepare/prepublish/abort/publish, financial calls, source edits, rollback, manual lease clear, or automatic retry. CLI document describes the separate root-owned lifecycle but the wrapper does not execute those commands."
+    }
+  ],
+  "blockers": [],
+  "required_finalization": [
+    "After successful original prepare, root must preserve exact raw PR2123 lease and observed prepared_at, then bind only LEASE_SHA256 and PREPARED_AT in a separate final copy and obtain limited-diff review.",
+    "The static review grants no execution of this DRAFT and does not establish successful rehearsal, preparation, publication, or live verification.",
+    "Run final wrapper only once after authorized publication completes and all external gates are satisfied; original guard and fresh lease binding remain authoritative."
+  ],
+  "limits": [
+    "No wrapper or original guard was imported or executed; no tests, host/API/browser or external writes were used. Only source reading, AST parsing and compile-only validation occurred.",
+    "Frontend request count cannot be assigned a numeric value until the actual original lease is captured. Three full rounds are performed by original verify; the returned request list represents the first round.",
+    "Wrapper prebinding checks occur before the original guard acquires its mutex; the original guard owns the mutex and checks its observed lease remains unchanged before closure. This wrapper does not introduce a new lock protocol.",
+    "A partial or missing receipt is not success. A timeout or abrupt interruption does not permit a retry, manual cleanup, or inference of lease state; root must assess preserved evidence through the original controls."
+  ]
+}

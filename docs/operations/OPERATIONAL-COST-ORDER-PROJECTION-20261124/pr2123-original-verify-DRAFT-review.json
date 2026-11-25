@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "prepared_at_utc": "2026-11-25T00:28:00.503698+00:00",
+  "prepared_by": "rehearsal_refresh",
+  "status": "DRAFT_STATIC_ONLY_BLOCKED_UNBOUND_LEASE_DIGEST_AND_PREPARE_TIME",
+  "execution_allowed": false,
+  "target": {
+    "file": "pr2123-original-verify-DRAFT.py",
+    "bytes": 6628,
+    "sha256": "87b04f5be1b00ed648ab636d56661b39875cd49e6c9005b6e8c4ee4b26723b10",
+    "git_blob": "4d1d66e2ccf256df55b9b9cde9e65ae05a0b5cc4"
+  },
+  "references": [
+    {
+      "file": "pr2120-existing-release-verify-runner.py",
+      "bytes": 4223,
+      "sha256": "693bcdf4993b03b9f820e819989b953cc3d13719ca58b74c4d655007d2b96f31",
+      "git_blob": "81932acc86fb5998705a45d4081901c254fc3378"
+    },
+    {
+      "file": "operational-cost-order-projection/scripts/production_release_guard.py",
+      "bytes": 68995,
+      "sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+      "git_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252"
+    },
+    {
+      "file": "pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1",
+      "git_blob": "77c9580e586064198b2342d20ddce9a1d7aeb312"
+    }
+  ],
+  "prior_closed_runner_exactly_matches_reference": true,
+  "diff": {
+    "file": "pr2123-original-verify-DRAFT.diff",
+    "bytes": 6894,
+    "sha256": "b94469c598c657d625cdf72dfcdec4196cc112d58e94d577eea824b8dd6f5ea6",
+    "git_blob": "7d76ad2e20420bf53afe61edf6e142a1e6a3b673"
+  },
+  "cli_sequence": {
+    "file": "pr2123-original-verify-cli-sequence.md",
+    "bytes": 4264,
+    "sha256": "9748914bbffd20cc160bb7bcd20de04c014c901e867d605af90352b75e6f5e91",
+    "git_blob": "8fab8b26ed3283fdb2d43ca9c61fca75f18f7cf0"
+  },
+  "actor": {
+    "value": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+    "provenance": "Proposed from operational cost/order projection task and existing actor naming pattern, then explicitly accepted by root. No new authorization is inferred for cabinet actions."
+  },
+  "fixed_identity": {
+    "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "protocol_version": 5
+  },
+  "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "unbound_values": {
+    "lease_sha256": "DRAFT_UNBOUND_LEASE_SHA256",
+    "prepared_at": "DRAFT_UNBOUND_PREPARED_AT"
+  },
+  "static_checks": {
+    "AST": "PASS",
+    "compile_only": "PASS",
+    "original_now_save_capture_function_ASTs_unchanged": true,
+    "fixed_fields_match_authoritative_final_envelope": true,
+    "guard_pin_equals_local_original_guard_bytes": true,
+    "unbound_gate_precedes_APP_reads_stage_writes_and_subprocess": true,
+    "optimization_rejected_before_any_assert_binding_checks": true,
+    "mode": "0600"
+  },
+  "changes_from_previous_pattern": [
+    "PR2123 identities and actor; intent commit recorded as provenance, not invented as a lease field.",
+    "Unbound digest/time gate, exact aware prepared_at binding, sanitized child environment and optimization refusal.",
+    "Private owned-stage requirement and exclusive initial receipt; refuse lease/guard symlinks.",
+    "Frontend artifact and request count derived from the digest-pinned actual original lease, following the read original v5 source.",
+    "Wrapper returns nonzero unless its full verification/status receipt is PASS."
+  ],
+  "original_cli_contract": {
+    "prepare": [
+      "prepare",
+      "--actor",
+      "chatgpt-operational-cost-order-projection-20261124-pr2123"
+    ],
+    "prepublish": [
+      "prepublish"
+    ],
+    "verify": [
+      "verify",
+      "--url",
+      "https://mezansalla.com"
+    ],
+    "status": [
+      "status"
+    ],
+    "verify3_is_not_a_subcommand": true,
+    "checks": 3,
+    "closure": "Original verify removes the exact unchanged lease under its mutex; status only reports state."
+  },
+  "next_steps": [
+    "Independent review of this unexecuted draft and original CLI source.",
+    "After successful rehearsal and original prepare, preserve raw lease bytes and actual prepared_at.",
+    "Root creates a separate finalized wrapper with the two observed literal bindings, obtains limited-diff review, and invokes it once only after publication completes."
+  ],
+  "actions": {
+    "helper_import": false,
+    "helper_execution": false,
+    "wrapper_import": false,
+    "wrapper_execution": false,
+    "tests": false,
+    "host_calls": false,
+    "api_calls": false,
+    "remote_writes": false,
+    "original_guard_changes": false,
+    "lease_actions": false
+  },
+  "limits": "The original guard owns all verification and matching lease deletion. This draft has not observed a PR2123 prepared lease, publication or verification result."
+}

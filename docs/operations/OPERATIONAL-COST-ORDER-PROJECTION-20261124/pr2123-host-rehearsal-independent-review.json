@@ -1,0 +1,532 @@
+{
+  "schema_version": 1,
+  "kind": "pr2123_actual_host_rehearsal_independent_review",
+  "result": "PASS",
+  "reviewed_at_utc": "2026-11-25T00:35:53.399242+00:00",
+  "scope": "Independent local original receipt/log/manifest review only. No remote/host/API action, helper import/execution, test or rerun.",
+  "contract": {
+    "path": "release-preparation/pr2123-host-receipt-review-contract.json",
+    "sha256": "7eaf3658cc6e14376705fdc6d62a3f5a45dad397f7ca9c97e33dae1a49e8dea0",
+    "all_seven_acceptance_groups": "PASS"
+  },
+  "archive": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/PR2123-HOST-REHEARSAL-PASS.zip",
+    "bytes": 262705,
+    "sha256": "c29a0a6d83ce18d8d73f0c4cd10d34ffcb4a7df67a8001fac437cf4389cac9d2",
+    "member_count": 98,
+    "manifest_data_members": 97,
+    "manifest_sha256": "8fd88892ff912a070a897a8b0d1ea7bf6d35c25363021d6ce70f6da1f3fa2359",
+    "outer_CRC_pass": true,
+    "all97_member_sizes_hashes_and_extracted_source_bytes_pass": true
+  },
+  "input_evidence_commit": "872606dcad34deb8261c7ba1b1993d976d26c892",
+  "identities": {
+    "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "initial_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "expected_untracked_count": 432,
+    "allow_runtime_metadata_append": true,
+    "live_foreign_scope": {
+      "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+      "db_descendants_policy": "live_writer_managed_no_operator_access",
+      "process": {
+        "pid": 311,
+        "start_ticks": 40102116,
+        "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+        "exe": "/usr/bin/mongod",
+        "exe_identity": [
+          4194406,
+          85818,
+          493,
+          0,
+          0
+        ]
+      },
+      "directory_identities": {
+        ".worktrees": [
+          66340,
+          394231,
+          493,
+          0,
+          0
+        ],
+        ".worktrees/p01-acceptance-state-20260919": [
+          66340,
+          396081,
+          448,
+          0,
+          0
+        ],
+        ".worktrees/p01-acceptance-state-20260919/mongo": [
+          66340,
+          396082,
+          493,
+          0,
+          0
+        ]
+      },
+      "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      "log_identity": [
+        66340,
+        121637,
+        420,
+        0,
+        0
+      ],
+      "log_policy": "independent_same_inode_append_only"
+    }
+  },
+  "input_provenance": {
+    "actual_stage_helper_envelope_supervisor_byte_identical_to_reviewed_inputs": true,
+    "verified_inputs": {
+      "path": "supervisor/verified-inputs.json",
+      "bytes": 1083,
+      "sha256": "c91a92b10c142e705ece2aa6906867eb1b7f5ebbb79fa71691691947c6253fd8"
+    },
+    "helper": {
+      "path": "rehearsal/operator-helper.py",
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008"
+    },
+    "envelope": {
+      "path": "supervisor/pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1"
+    },
+    "supervisor": {
+      "path": "supervisor/pr2123_rehearsal_supervisor.py",
+      "bytes": 6945,
+      "sha256": "4654a6c91c8deca9f080f4b6b5d4f1a629a440568db0df6966f4e4643d802823"
+    }
+  },
+  "completion": {
+    "worker_pid": 29183,
+    "helper_pid": 29191,
+    "started_at_utc": "2026-11-25T00:18:26.200599+00:00",
+    "finished_at_utc": "2026-11-25T00:30:34.611447+00:00",
+    "elapsed_seconds": 728.410848,
+    "helper_returncode": 0,
+    "worker_error": null,
+    "receipt_status": "PASS",
+    "stdout_exact": "STAGE_PATH=/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg\nFINAL_STATUS=PASS\n",
+    "stderr_bytes": 0,
+    "supervisor_log_bytes": 0,
+    "all95_steps_match_original_order_and_pass_exit0": true,
+    "automatic_retry": false,
+    "cleanup_or_rollback": false,
+    "original_operation_lock_completion": "Pinned helper returned normally after leaving the original guard context manager; successful worker receipt confirms helper completion. No direct new lock read performed.",
+    "receipt": {
+      "path": "rehearsal/receipt.json",
+      "bytes": 24084,
+      "sha256": "5e3b85927bf9997d06859952c086f30f7d6db8831d6329440597c1c9e08dc15a"
+    },
+    "worker_exit": {
+      "path": "supervisor/worker-exit.json",
+      "bytes": 497,
+      "sha256": "fe17d3bb9e7648a95752d095a42288f1aef67c53b1ce501e4d0813a353512e52"
+    }
+  },
+  "original_control_checks": {
+    "initial_original_status": {
+      "active": false
+    },
+    "guard_bytes_checked_against_J": true,
+    "guard_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "lineage_control_checks_pass_in_app_and_owned_clone": true,
+    "D_parents": [
+      "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "c71a0ba71e36a2306a0c4bce1822f39073e6984f"
+    ],
+    "D_and_B_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "A2_to_D_only_intent": true,
+    "unchanged_release_control_checks_pass": true,
+    "incoming_path_disjointness_and_original_no_lease_checks_completed": true,
+    "fast_forward_step_number": 74,
+    "original_final_tracked_branch_head_remote_checks_completed": true,
+    "initial_public_status_and_final_absence_are_from_completed_pinned_helper": true,
+    "current_public_deployment_not_claimed": true
+  },
+  "adapter_phases": [
+    {
+      "label": "owned-clone",
+      "result": "PASS",
+      "log_files": [
+        {
+          "path": "rehearsal/49-owned-clone-adapter.log",
+          "bytes": 217356,
+          "sha256": "a521aaec679df7ea30240300abbaaf115cb98e765ba620b80e47fab9e369aae0"
+        },
+        {
+          "path": "rehearsal/50-owned-clone-verify-frontend.log",
+          "bytes": 134106,
+          "sha256": "be8cc0906b12bb0c962d0533492d66ffd1833f728970ca314d567e4623f01b6c"
+        },
+        {
+          "path": "rehearsal/51-owned-clone-verify-packages.log",
+          "bytes": 1278,
+          "sha256": "bb8c8fe02582e7c3392b6ff9c3895cbd5f5adff836130127496dae487634adb3"
+        },
+        {
+          "path": "rehearsal/52-owned-clone-full-proof.log",
+          "bytes": 21,
+          "sha256": "d954b4155a758de6093843990bac4251c123b3a7a6f290056e6c24da72d2e9ef"
+        }
+      ],
+      "adapter_elapsed_seconds": 82.205,
+      "governed_toolchain": {
+        "node_version": "v22.23.2",
+        "yarn_version": "1.22.22",
+        "platform": "linux-arm64",
+        "cache_state": "cold_installed",
+        "archive_sha256": "fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8"
+      },
+      "host": {
+        "host_node": "v24.19.0",
+        "host_yarn": "1.22.22",
+        "host_python": "3.11.18",
+        "architecture": "aarch64",
+        "git_directory_present": true,
+        "outer_build_command_observed": false,
+        "outer_install_command_observed": false,
+        "platform_snapshot_workspace_shared_observed": false
+      },
+      "full_frontend_build_and_reproducibility_equal_A2_intent": true,
+      "public_file_records": 381,
+      "package_boundary_exact_D_CI_both_hosts": true,
+      "package_boundary": {
+        "backend": {
+          "file_count": 1359,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 504390,
+            "path": "release_identity.json",
+            "sha256": "215eab0f74c5c11f76263126d27eaf3be4191205d53841b8434c12fbdb042c49"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "66efc6f0847831b94560a15e2d0bf0e3aa69d8d28988eda659b5b8fd7a24e9c6",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "0572d2565f69292f34314c48e54496801ae69d04ac9d69e3fef9943810f4a1f0",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+        "schema_version": 1,
+        "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+      },
+      "full_proof_marker": "CANONICAL_PROOF_PASS"
+    },
+    {
+      "label": "canonical-app",
+      "result": "PASS",
+      "log_files": [
+        {
+          "path": "rehearsal/81-canonical-app-adapter.log",
+          "bytes": 217012,
+          "sha256": "4f5d5e0c7498d8001021084be9c439b44e6f1c70bad963b415ead81c8f7483cf"
+        },
+        {
+          "path": "rehearsal/82-canonical-app-verify-frontend.log",
+          "bytes": 134106,
+          "sha256": "be8cc0906b12bb0c962d0533492d66ffd1833f728970ca314d567e4623f01b6c"
+        },
+        {
+          "path": "rehearsal/83-canonical-app-verify-packages.log",
+          "bytes": 1278,
+          "sha256": "bb8c8fe02582e7c3392b6ff9c3895cbd5f5adff836130127496dae487634adb3"
+        },
+        {
+          "path": "rehearsal/84-canonical-app-full-proof.log",
+          "bytes": 21,
+          "sha256": "d954b4155a758de6093843990bac4251c123b3a7a6f290056e6c24da72d2e9ef"
+        }
+      ],
+      "adapter_elapsed_seconds": 67.854,
+      "governed_toolchain": {
+        "node_version": "v22.23.2",
+        "yarn_version": "1.22.22",
+        "platform": "linux-arm64",
+        "cache_state": "warm_verified",
+        "archive_sha256": "fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8"
+      },
+      "host": {
+        "host_node": "v24.19.0",
+        "host_yarn": "1.22.22",
+        "host_python": "3.11.18",
+        "architecture": "aarch64",
+        "git_directory_present": true,
+        "outer_build_command_observed": false,
+        "outer_install_command_observed": false,
+        "platform_snapshot_workspace_shared_observed": false
+      },
+      "full_frontend_build_and_reproducibility_equal_A2_intent": true,
+      "public_file_records": 381,
+      "package_boundary_exact_D_CI_both_hosts": true,
+      "package_boundary": {
+        "backend": {
+          "file_count": 1359,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 504390,
+            "path": "release_identity.json",
+            "sha256": "215eab0f74c5c11f76263126d27eaf3be4191205d53841b8434c12fbdb042c49"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "66efc6f0847831b94560a15e2d0bf0e3aa69d8d28988eda659b5b8fd7a24e9c6",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "0572d2565f69292f34314c48e54496801ae69d04ac9d69e3fef9943810f4a1f0",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+        "schema_version": 1,
+        "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+      },
+      "full_proof_marker": "CANONICAL_PROOF_PASS"
+    }
+  ],
+  "frontend_proof_sha256": "dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e",
+  "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+  "backups": {
+    "all_four_present_copy_verified": true,
+    "total_entries": 77033,
+    "total_content_bytes": 417445383,
+    "records": [
+      {
+        "available_bytes": 264180912128,
+        "bytes": 11412940,
+        "destination": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/backups/frontend--build",
+        "entries": 390,
+        "present": true,
+        "required_copy_bytes": 12283904,
+        "source": "frontend/build",
+        "state": "COPY_VERIFIED"
+      },
+      {
+        "available_bytes": 264168550400,
+        "bytes": 1521,
+        "destination": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/backups/frontend--.release",
+        "entries": 2,
+        "present": true,
+        "required_copy_bytes": 8192,
+        "source": "frontend/.release",
+        "state": "COPY_VERIFIED"
+      },
+      {
+        "available_bytes": 264168538112,
+        "bytes": 504391,
+        "destination": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/backups/backend--release_identity.json",
+        "entries": 1,
+        "present": true,
+        "required_copy_bytes": 507904,
+        "source": "backend/release_identity.json",
+        "state": "COPY_VERIFIED"
+      },
+      {
+        "available_bytes": 264166490112,
+        "bytes": 405526531,
+        "destination": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/backups/frontend--node_modules",
+        "entries": 76640,
+        "present": true,
+        "required_copy_bytes": 645877760,
+        "source": "frontend/node_modules",
+        "state": "COPY_VERIFIED"
+      }
+    ],
+    "source_and_backup_pre_adapter_equality_and_fsync_basis": "Successful execution of unchanged pinned backup and verification functions; raw manifests are intentionally excluded."
+  },
+  "capacity": {
+    "both_original_capacity_phases_pass": true,
+    "arithmetic_independently_recomputed": true,
+    "source_inode_bound_not_separately_emitted": "The original helper evaluated the complete inode/source predicate; emitted summaries do not expose source_entries separately.",
+    "checks": [
+      {
+        "available_after_adapter_cleanup_estimate_bytes": 1071620096,
+        "calculation": "fresh free + measured reclaimable inherited outputs versus measured clone output allocation + changed-source bound",
+        "clone_measured_generated": {
+          "allocated_bytes": 656961536,
+          "entries": 77033,
+          "reclaimable_bytes": 0,
+          "reclaimable_inodes": 0,
+          "required_bytes": 658669568,
+          "target_fragment_bytes": 4096
+        },
+        "current_generated": {
+          "allocated_bytes": 656969728,
+          "entries": 77033,
+          "reclaimable_bytes": 656969728,
+          "reclaimable_inodes": 77033,
+          "required_bytes": 658677760,
+          "target_fragment_bytes": 4096
+        },
+        "fresh_free": {
+          "bytes": 414650368,
+          "device": 66340,
+          "fragment_bytes": 4096,
+          "inodes": 170586
+        },
+        "limitations": "No assumed old capacity; shared/OverlayFS extents and concurrent activity can affect actual free space; adapter must still pass.",
+        "phase": "before-ff",
+        "required_bytes": 660275200,
+        "source_install_upper_bound_bytes": 1605632
+      },
+      {
+        "available_after_adapter_cleanup_estimate_bytes": 1071513600,
+        "calculation": "fresh free + measured reclaimable inherited outputs versus measured clone output allocation + changed-source bound",
+        "clone_measured_generated": {
+          "allocated_bytes": 656961536,
+          "entries": 77033,
+          "reclaimable_bytes": 0,
+          "reclaimable_inodes": 0,
+          "required_bytes": 658669568,
+          "target_fragment_bytes": 4096
+        },
+        "current_generated": {
+          "allocated_bytes": 656969728,
+          "entries": 77033,
+          "reclaimable_bytes": 656969728,
+          "reclaimable_inodes": 77033,
+          "required_bytes": 658677760,
+          "target_fragment_bytes": 4096
+        },
+        "fresh_free": {
+          "bytes": 414543872,
+          "device": 66340,
+          "fragment_bytes": 4096,
+          "inodes": 170581
+        },
+        "limitations": "No assumed old capacity; shared/OverlayFS extents and concurrent activity can affect actual free space; adapter must still pass.",
+        "phase": "before-app-adapter",
+        "required_bytes": 658669568,
+        "source_install_upper_bound_bytes": 0
+      }
+    ],
+    "final": {
+      "app": {
+        "bytes": 414384128,
+        "device": 66340,
+        "fragment_bytes": 4096,
+        "inodes": 170581
+      },
+      "owned_stage": {
+        "bytes": 263740960768,
+        "device": 4194397,
+        "fragment_bytes": 4096,
+        "inodes": 17393446
+      }
+    }
+  },
+  "foreign_preservation": {
+    "receipt": {
+      "append_only_path": ".emergent/stripped_env_names",
+      "identical_entries": 185028,
+      "ignored_paths": 47,
+      "live_db_descendant_bytes_or_paths_compared": false,
+      "live_db_root_identity_preserved": ".worktrees/p01-acceptance-state-20260919/mongo",
+      "live_log_identity_and_original_prefix_preserved": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      "live_log_latest_observed_bytes": 19433454,
+      "live_log_original_prefix_bytes": 19427687,
+      "live_log_original_prefix_sha256": "dfb7854ac1e07e009c59a539b8b2a0c0be24c3c1e6a5de9886e5bfcf2d972d76",
+      "nonignored_paths": 432,
+      "records": 185030
+    },
+    "live_scope_exact_envelope": true,
+    "permitted_changed_records": 2,
+    "interpretation": "185028 exact fingerprints; the two permitted differences are the original runtime metadata append and same-inode live-log append. 432 counts nonignored Git entries, not all protected records.",
+    "raw_snapshots_independently_recompared": false,
+    "fingerprint_metadata_only": [
+      {
+        "path": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/backend--release_identity.json-manifest.json",
+        "bytes": 156,
+        "sha256": "fae616db974d85f4948f73d04ddf1d2e723785821fb072464a28969b26abfd18"
+      },
+      {
+        "path": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/frontend--.release-manifest.json",
+        "bytes": 231,
+        "sha256": "7e796d9ca457e4e3ca2e95aa0a8b55214661ed5d78a238b8e94a9b06b2fbc18c"
+      },
+      {
+        "path": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/frontend--build-manifest.json",
+        "bytes": 71434,
+        "sha256": "d6b9661309689db7b4fc012eebe81bbf569e61d9250093f608ad18750e4b1b67"
+      },
+      {
+        "path": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/frontend--node_modules-manifest.json",
+        "bytes": 13994997,
+        "sha256": "a1103751a5cf3c9e02608b417b4bd7a63dcf49ba570c29e92fa3de0204d4b4cd"
+      },
+      {
+        "path": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/foreign-before.json",
+        "bytes": 46224592,
+        "sha256": "c862fc0070e4de50bca9362bbf42cb96d8baeb327bbb7ea433f9b97e478b8ba5"
+      },
+      {
+        "path": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg/foreign-latest.json",
+        "bytes": 46224592,
+        "sha256": "d4188eab5daf999bf2c267c304df1cde4b7885c953b0d23b841def32e1939568"
+      }
+    ],
+    "evidence_limit": "Original completed pinned helper enforces set equality, unchanged fingerprints, live root/process identity and both prefix checks. The excluded six manifest contents were not transferred; their recorded SHA256 commitments are preserved but have not been rehashed locally. No claim of raw foreign snapshot reproduction or live DB descendant comparison."
+  },
+  "prebuild_diagnostic_context": {
+    "observed": true,
+    "logs": [
+      "48-validate-intent.log",
+      "49-owned-clone-adapter.log",
+      "78-validate-intent.log",
+      "81-canonical-app-adapter.log"
+    ],
+    "detail": "Original import-time release_identity diagnostics report absent generated identity before clean builds and the old generated runtime source after source fast-forward before canonical regeneration. The intent validators subsequently emitted UNCHANGED_INTENT_VALIDATOR_PASS and exited0. Both final adapters emitted built=true; independently compared final frontend/package/full proofs all match A2/D CI. These diagnostics are retained as prebuild state, not silently omitted or counted as final failures.",
+    "source_reference": "operational-cost-order-projection/backend/release_identity.py read_release_identity import-time fail-closed diagnostic; scripts/emergent_deployment_adapter.py build_cloud_release cleanup/build/materialize/verify order."
+  },
+  "release_state_scope": {
+    "lease_created": false,
+    "published": false,
+    "recalculated": false,
+    "automatic_rollback": false
+  },
+  "next_gate": {
+    "result": "NO_REVIEW_BLOCKER_FOR_ORIGINAL_PREPARE_AFTER_EVIDENCE_PERSISTED",
+    "owner": "root",
+    "required": "Persist this exact archive and review, then use the unchanged original fresh prepare/status lifecycle on the exact source/release identities. This review does not itself create a lease or bypass any original fresh guard.",
+    "additional_tests_required": false
+  },
+  "blockers": [],
+  "limitations": [
+    "This is host rehearsal completion, not proof of public D deployment or financial/performance effects.",
+    "Live DB descendants were neither read nor compared; preservation scope is precisely the reviewed one.",
+    "Generated build/backup trees and private foreign manifests were intentionally omitted; full original helper completion and emitted proofs, plus manifest commitments, are the evidence retained.",
+    "Numbered logs1-10 were not on disk because the stage was not yet created; subsequent captured Git stdout is not retained in its log. All95 successful steps are present in the receipt."
+  ]
+}

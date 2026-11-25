@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:23:30.267Z",
+  "recorded_at": "2026-11-25T00:36:23.918Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "Actual guarded host rehearsal started once at 2026-11-25T00:18:26.200599UTC; complete PASS and worker exit receipt pending. D6323017fbf9ba160c536a94f408507435786412a exact11 CI checks passed; prior PR2120 verified and matching lease closed. No own lease or publication yet.",
+  "status": "PR2123 exact-D CI and actual guarded host rehearsal independently PASS. All95 hoststeps PASS, workerexit0, both original adapter/fullproof paths, four verified backups and final preservation complete. Approved for original prepare/prepublish and one authorized publication; no ownlease or publication yet.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -301,7 +301,7 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Observe the existing owned stage and worker receipt without re-launching or competing guard commands. Full original rehearsal PASS and worker exit0 required before own prepare/prepublish and one authorized publication. Preserve backups/foreign data and exact frozen identities.",
+  "next_safe_action": "Run fresh original status, then original prepare for actor chatgpt-operational-cost-order-projection-20261124-pr2123. Preserve actual lease bytes/digest/prepared_at. Original prepublish immediately before one free platform Publishchanges; afternewcompletedpublicationrunoriginalverifythreeprobes and matchingstatusclosure. Bind/finalreviewcapturewrapperfromactuallease beforeverify.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -414,7 +414,7 @@
   "production_runtime_changed_by_this_candidate": false,
   "final_host_observation": "pr2123-final-host-observation.json",
   "operator_final": {
-    "status": "APPROVED_FOR_ONE_ATTEMPT_SUBJECT_TO_INTERNAL_FRESH_CHECKS",
+    "status": "HOST_REHEARSAL_AND_INDEPENDENT_RECEIPT_REVIEW_PASS",
     "operator": {
       "file": "pr2123_guarded_rehearsal.py",
       "bytes": 43667,
@@ -444,13 +444,126 @@
     "supervisor_stage": "/tmp/mezan-pr2123-supervisor-hl9hcfu8",
     "worker_pid": 29183,
     "rehearsal_stage": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg",
-    "run_state": "RUNNING_NOT_RESULT",
-    "latest_observation": "Original owned-clone adapter and frontend/package/full proofs PASS. Pre-update preservation checks underway. No final result yet."
+    "run_state": "PASS",
+    "latest_observation": "Original95 steps allPASS; clone/canonical adapter, frontend/packages/fullproof complete; no ownlease or publish.",
+    "completed_at": "2026-11-25T00:30:34.611447+00:00"
   },
   "platform_baseline": {
     "provider_version": "7191418",
     "latest_finished_label_riyadh": "Nov25,01:42AM",
     "republish_button_enabled_observed": true,
     "scope": "Manage Overview read only; no paid chat or publication click."
+  },
+  "host_rehearsal": {
+    "result": "PASS",
+    "finished_at": "2026-11-25T00:30:34.611447+00:00",
+    "worker_exit_code": 0,
+    "steps": 95,
+    "all_steps_pass": true,
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "archive": {
+      "path": "PR2123-HOST-REHEARSAL-PASS.zip",
+      "bytes": 262705,
+      "sha256": "c29a0a6d83ce18d8d73f0c4cd10d34ffcb4a7df67a8001fac437cf4389cac9d2",
+      "blob": "d8f7afae18ce097601ee5f435dad5043fd56dcce",
+      "members": 98
+    },
+    "backups": [
+      {
+        "source": "frontend/build",
+        "state": "COPY_VERIFIED",
+        "bytes": 11412940,
+        "entries": 390
+      },
+      {
+        "source": "frontend/.release",
+        "state": "COPY_VERIFIED",
+        "bytes": 1521,
+        "entries": 2
+      },
+      {
+        "source": "backend/release_identity.json",
+        "state": "COPY_VERIFIED",
+        "bytes": 504391,
+        "entries": 1
+      },
+      {
+        "source": "frontend/node_modules",
+        "state": "COPY_VERIFIED",
+        "bytes": 405526531,
+        "entries": 76640
+      }
+    ],
+    "preservation": {
+      "append_only_path": ".emergent/stripped_env_names",
+      "identical_entries": 185028,
+      "ignored_paths": 47,
+      "live_db_descendant_bytes_or_paths_compared": false,
+      "live_db_root_identity_preserved": ".worktrees/p01-acceptance-state-20260919/mongo",
+      "live_log_identity_and_original_prefix_preserved": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      "live_log_latest_observed_bytes": 19433454,
+      "live_log_original_prefix_bytes": 19427687,
+      "live_log_original_prefix_sha256": "dfb7854ac1e07e009c59a539b8b2a0c0be24c3c1e6a5de9886e5bfcf2d972d76",
+      "nonignored_paths": 432,
+      "records": 185030
+    },
+    "capacity_checks": [
+      {
+        "phase": "before-ff",
+        "required_bytes": 660275200,
+        "available_after_adapter_cleanup_estimate_bytes": 1071620096
+      },
+      {
+        "phase": "before-app-adapter",
+        "required_bytes": 658669568,
+        "available_after_adapter_cleanup_estimate_bytes": 1071513600
+      }
+    ],
+    "final_capacity": {
+      "app": {
+        "bytes": 414384128,
+        "device": 66340,
+        "fragment_bytes": 4096,
+        "inodes": 170581
+      },
+      "owned_stage": {
+        "bytes": 263740960768,
+        "device": 4194397,
+        "fragment_bytes": 4096,
+        "inodes": 17393446
+      }
+    },
+    "limitations": "LiveDBdescendant bytes/paths deliberatelynotread/compared; actualbackupandforeignmanifests retainedonhost, onlytheirhashesexported. No runtimepublicationinthisrehearsal.",
+    "independent_review": {
+      "file": "pr2123-host-rehearsal-independent-review.json",
+      "bytes": 22233,
+      "sha256": "a9d69d928c5e4cbc81eed334589fd50b7e5b2ac9c0d0e92d3495816dc7275679",
+      "result": "PASS",
+      "limits": "Archived originalreceipts/logs/hashesreviewed; sixexcludedpreservationmanifestscontentsnotexportedorindependentlyrecompared."
+    }
+  },
+  "postpublish_capture_draft": {
+    "file": "pr2123-original-verify-DRAFT.py",
+    "bytes": 6628,
+    "sha256": "87b04f5be1b00ed648ab636d56661b39875cd49e6c9005b6e8c4ee4b26723b10",
+    "independent_review": "pr2123-original-verify-DRAFT-independent-review.json",
+    "result": "STATIC_REVIEW_PASS_UNBOUND_EXECUTION_REFUSED",
+    "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+    "pending_bindings": [
+      "LEASE_SHA256",
+      "PREPARED_AT"
+    ]
+  },
+  "publication": {
+    "state": "NOT_YET_SUBMITTED",
+    "platform_baseline": {
+      "version": "7191418",
+      "ordinal": 100
+    },
+    "confirmation_observed": "Free republishes / Publish changes",
+    "lease_created": false,
+    "published": false
   }
 }

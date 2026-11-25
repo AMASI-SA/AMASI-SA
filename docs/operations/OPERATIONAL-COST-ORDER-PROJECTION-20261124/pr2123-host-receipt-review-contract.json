@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "kind": "pr2123_original_host_receipt_review_contract",
+  "status": "READY_FOR_ACTUAL_RECEIPT_NOT_A_HOST_PASS",
+  "prepared_at_utc": "2026-11-25T00:27:28.336510+00:00",
+  "scope": "Read original local final helper, envelope, supervisor and original guard. Define minimal evidence acceptance for the already-launched execution. No helper import/execution, tests, host/browser/API access or changes to original controls.",
+  "pinned_evidence_commit": "872606dcad34deb8261c7ba1b1993d976d26c892",
+  "expected_envelope": {
+    "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "initial_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "expected_untracked_count": 432,
+    "allow_runtime_metadata_append": true,
+    "live_foreign_scope": {
+      "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+      "db_descendants_policy": "live_writer_managed_no_operator_access",
+      "process": {
+        "pid": 311,
+        "start_ticks": 40102116,
+        "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+        "exe": "/usr/bin/mongod",
+        "exe_identity": [
+          4194406,
+          85818,
+          493,
+          0,
+          0
+        ]
+      },
+      "directory_identities": {
+        ".worktrees": [
+          66340,
+          394231,
+          493,
+          0,
+          0
+        ],
+        ".worktrees/p01-acceptance-state-20260919": [
+          66340,
+          396081,
+          448,
+          0,
+          0
+        ],
+        ".worktrees/p01-acceptance-state-20260919/mongo": [
+          66340,
+          396082,
+          493,
+          0,
+          0
+        ]
+      },
+      "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      "log_identity": [
+        66340,
+        121637,
+        420,
+        0,
+        0
+      ],
+      "log_policy": "independent_same_inode_append_only"
+    }
+  },
+  "inputs": [
+    {
+      "path": "release-preparation/pr2123_guarded_rehearsal.py",
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008"
+    },
+    {
+      "path": "release-preparation/pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1"
+    },
+    {
+      "path": "release-preparation/pr2123_rehearsal_supervisor.py",
+      "bytes": 6945,
+      "sha256": "4654a6c91c8deca9f080f4b6b5d4f1a629a440568db0df6966f4e4643d802823"
+    },
+    {
+      "path": "operational-cost-order-projection/scripts/production_release_guard.py",
+      "bytes": 68995,
+      "sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a"
+    }
+  ],
+  "reported_launch_binding": {
+    "source": "Root observation, not an independent host read",
+    "launched_at_utc": "2026-11-25T00:18:26Z",
+    "supervisor_stage": "/tmp/mezan-pr2123-supervisor-hl9hcfu8",
+    "worker_pid": 29183,
+    "rehearsal_stage": "/tmp/mezan-pr2123-live-refreshed-rehearsal-rj0uf4jg"
+  },
+  "acceptance": [
+    {
+      "id": "input_provenance",
+      "required": "verified-inputs.json fixes the full immutable evidence commit and exact helper/envelope bytes and SHA256; worker-start input_pins match. Actual receipt helper_sha256/envelope_sha256 equal the reviewed files. Source/deployment/intent/tree/release_id/initial_head/live_foreign_scope match the envelope exactly. The helper stage copy, if transferred, is byte-identical."
+    },
+    {
+      "id": "completed_single_execution",
+      "required": "launch.json and worker-start.json agree on worker PID and supervisor stage. worker-exit.json agrees on worker PID, has a concrete helper PID, helper_returncode=0, worker_error=null, automatic_retry=false and cleanup_or_rollback=false. Its stdout/stderr lengths and SHA256 match transferred originals. stdout contains the reported STAGE_PATH and FINAL_STATUS=PASS; receipt.status=PASS for that exact stage. Inspect stderr for contradictory failure, without inventing an original requirement that every successful stderr must be empty."
+    },
+    {
+      "id": "original_control_completion",
+      "required": "initial_public_status.active=false. Original status and original-guard-bytes steps passed before operation lock. All receipt steps have status PASS and exit_code 0; no RUNNING/FAILED row or failure_code. Successful helper process exit follows the original guarded block, thereby completing lock release; receipt PASS alone was written inside that block. Repeated original no-lease assertions, tracked cleanliness, branch/head/remote D and source-lineage controls must be represented by successful completion of the pinned code."
+    },
+    {
+      "id": "both_original_adapter_phases",
+      "required": "adapter_runs are exactly owned-clone at stage/rehearsal and canonical-app at /app, both status PASS. Each has successful adapter, verify-frontend, verify-packages and full-proof steps in original order. owned_rehearsal.status=PASS, its source/deployment/release identities match the envelope, and it precedes fast-forward and canonical-app. Retain original small proof outputs where emitted; accept no RUNNING-only checkpoint as result."
+    },
+    {
+      "id": "backups_and_capacity",
+      "required": "backups contains exactly frontend/build, frontend/.release, backend/release_identity.json and frontend/node_modules. A present source requires state COPY_VERIFIED plus destination in the same owned stage, entry/byte counts; absent is allowed only as the original receipt records. Original code verified and fsynced copies before mutation, and reverified originals/backups before adapter. capacity_checks contains before-ff and before-app-adapter phases with available_after_adapter_cleanup_estimate_bytes >= required_bytes and coherent measured source/generated bounds. Original inode/source-space predicates remain those in the pinned helper. Initial/final capacity objects are retained; do not add an unimplemented final-free-space threshold."
+    },
+    {
+      "id": "foreign_preservation",
+      "required": "Final foreign_preservation.nonignored_paths=432; fresh baseline/final path sets and non-exempt fingerprints were checked by the helper. Live DB root/process/executable/directory identities stay exactly pinned. live_db_descendant_bytes_or_paths_compared=false. Live log retains its original same-identity prefix and nondecreasing length, with original prefix bytes/SHA256 in receipt. The only other permitted changed path is .emergent/stripped_env_names under original same-inode/mode and existing-prefix append-only rules. append_only_path is null or that exact path; no new exception."
+    },
+    {
+      "id": "result_scope",
+      "required": "receipt lease_created=false, published=false, recalculated=false, automatic_rollback=false. A host rehearsal PASS proves /app FF and original adapter/proofs completed under preserved controls. It is not a public deployment, production performance result, finance recalculation, or proof of live DB descendant byte identity."
+    }
+  ],
+  "original_lock_contract": {
+    "guard_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "public_status_obtains_same_lock": true,
+    "helper_entire_protected_rehearsal_holds_original_operation_lock": true,
+    "lease_path": ".git/mezan-production-release.lock/lease.json",
+    "original_no_lease_check_includes_directory_absence": true,
+    "reviewer_action": "Do not call status while helper owns the operation lock. Wait for the existing worker exit; do not restart or clean stage to create missing proof."
+  },
+  "minimal_original_transfer_members": [
+    "rehearsal/receipt.json",
+    "supervisor/verified-inputs.json",
+    "supervisor/launch.json",
+    "supervisor/worker-start.json",
+    "supervisor/worker-exit.json",
+    "supervisor/stdout.log",
+    "supervisor/stderr.log",
+    "supervisor/supervisor.log",
+    "existing small original owned-clone/canonical-app verify-frontend, verify-packages and full-proof logs"
+  ],
+  "packaging_guidance": {
+    "allowlist_only": "Construct the archive from explicit receipt/log filenames. Do not recursively archive the supervisor or rehearsal stage.",
+    "manifest": "List member path, original source path, byte count and SHA256, pinned evidence commit, exact source/deployment/release identities, stages and worker/helper IDs. Label original bytes versus derived summaries. Verify archive CRC, sizes, hashes and any nested ZIP CRC locally.",
+    "preservation_evidence": "The original receipt records aggregate preservation and exact live-log prefix commitment. If foreign-before.json/foreign-latest.json or generated backup manifests are transferred for local comparison, keep exact original hashes and publish only aggregate comparison results and approved exception paths. Do not include private foreign payloads or a complete foreign path inventory in the shareable archive.",
+    "generated_backup_evidence": "Preserve receipt copy states/counts plus manifest hashes or bounded summaries. Actual backup contents remain in the original owned stage; no archive cleanup, restore, retry or removal is authorized by this review.",
+    "source_provenance": "The approved helper/envelope/supervisor already reside at the immutable evidence commit. Their exact hashes and existing independent review references suffice for the compact bundle; copied originals may be included only if useful, without duplication.",
+    "excluded": [
+      "rehearsal source clone and its .git",
+      "cache and tmp directories",
+      "frontend/build and frontend/node_modules trees",
+      "generated-output/backup payloads",
+      "Mongo database descendants",
+      "live Mongo log payload",
+      "environment or credentials",
+      "raw private foreign file contents"
+    ],
+    "logs": "Retain only original logs needed to substantiate adapter/proof completion. If a large log is omitted, preserve its exact byte count/SHA256 and clearly label any derived excerpt; do not call an excerpt the complete original."
+  },
+  "evidence_limits": [
+    "Original helper filesystem assertions are represented by the successful pinned execution and receipt; a receipt does not contain every raw filesystem read.",
+    "Some captured Git/status output is in memory rather than its numbered log; zero-length logs do not imply those successful assertions were skipped.",
+    "No new tests or product changes are introduced by receipt review.",
+    "Until actual completed receipts arrive, RUNNING step60 and owned-clone PASS remain partial progress only."
+  ],
+  "actions": {
+    "local_source_read": true,
+    "helper_import": false,
+    "helper_execution": false,
+    "tests": false,
+    "host": false,
+    "browser": false,
+    "remote_API": false,
+    "release_state_change": false
+  }
+}
