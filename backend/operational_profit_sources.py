@@ -4,6 +4,7 @@ The caller may save this presentation snapshot alongside a successful refresh.
 This module has no financial/database writer and is never called by a report GET.
 """
 from collections import Counter, defaultdict
+from contextlib import nullcontext
 from copy import deepcopy
 from datetime import time, timedelta
 from decimal import Decimal
@@ -26,6 +27,12 @@ from awaiting_payment_history import guard_financial_cohort_history
 
 RIYADH = ZoneInfo("Asia/Riyadh")
 MAX_ORDERS = 100_000
+# Closed diagnostic labels only; reader/owner identifiers never become log text.
+_READER_STAGES = {
+    "context": "profit_context", "sales": "profit_sales",
+    "products": "profit_products", "order_costs": "profit_order_costs",
+    "ads": "profit_ads", "payroll": "profit_payroll", "recurring": "profit_recurring",
+}
 
 
 def whole_days(start, end):
@@ -110,6 +117,7 @@ async def _cohort_cooperative(orders, raw_rows, settings, owner, start, end, bud
 
 async def _load_context(db, owner, start, end, state=None):
     from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+    from operational_demand_refresh import refresh_stage
     from operational_read_runtime import read_source_cursor
     from order_cost_authority import _parallel_inputs, _request_parallel_reads
     from order_currency import SALLA_RAW_CURRENCY_PROJECTION, hydrate_order_currency_fields_cooperative
@@ -122,21 +130,23 @@ async def _load_context(db, owner, start, end, state=None):
         return (await read_source_cursor(cursor, limit) if parallel else await cursor.to_list(limit))
 
     async def load_settings():
-        settings_rows = await read("settings", {"user_id": owner}, {"_id": 0, "user_id": 1,
-            "report_included_statuses": 1, "hide_inferred_date_orders": 1, "payment_methods": 1, "shipping_companies": 1}, 2)
-        if len(settings_rows) > 1 or any(row.get("user_id") != owner for row in settings_rows):
-            raise ValueError("profit_settings_ambiguous")
-        return settings_rows[0] if settings_rows else {}
+        with refresh_stage("profit_context_settings"):
+            settings_rows = await read("settings", {"user_id": owner}, {"_id": 0, "user_id": 1,
+                "report_included_statuses": 1, "hide_inferred_date_orders": 1, "payment_methods": 1, "shipping_companies": 1}, 2)
+            if len(settings_rows) > 1 or any(row.get("user_id") != owner for row in settings_rows):
+                raise ValueError("profit_settings_ambiguous")
+            return settings_rows[0] if settings_rows else {}
 
     async def load_orders():
-        # A one-day guard band covers historical date-only compatibility fields.
-        # Exact inclusion is decided from the original instant, not this index.
-        query = {"user_id": owner, "order_date": {
-            "$gte": (start.astimezone(RIYADH).date() - timedelta(days=1)).isoformat(),
-            "$lte": (end.astimezone(RIYADH).date() + timedelta(days=1)).isoformat()}}
-        orders = await read("unified_orders", query, {"_id": 0, "raw_by_source": 0}, MAX_ORDERS + 1)
-        if len(orders) > MAX_ORDERS:
-            raise ValueError("profit_order_scope_too_large")
+        with refresh_stage("profit_context_orders"):
+            # A one-day guard band covers historical date-only compatibility fields.
+            # Exact inclusion is decided from the original instant, not this index.
+            query = {"user_id": owner, "order_date": {
+                "$gte": (start.astimezone(RIYADH).date() - timedelta(days=1)).isoformat(),
+                "$lte": (end.astimezone(RIYADH).date() + timedelta(days=1)).isoformat()}}
+            orders = await read("unified_orders", query, {"_id": 0, "raw_by_source": 0}, MAX_ORDERS + 1)
+            if len(orders) > MAX_ORDERS:
+                raise ValueError("profit_order_scope_too_large")
         projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION, "user_id": 1,
             "raw_by_source.salla_direct.payment_method": 1, "raw_by_source.salla_direct.payment.method": 1,
             **{"raw_by_source.salla_direct." + field: 1 for field in ("id", "order_number", "date", "created_at", "order_date", "updated_at", "date_updated")}}
@@ -145,9 +155,10 @@ async def _load_context(db, owner, start, end, state=None):
             projection = {path: value for path, value in projection.items()
                           if not any(projection.get(".".join(path.split(".")[:index])) == 1
                                      for index in range(1, len(path.split("."))))}
-        raw_rows = await read("unified_orders", query, projection, MAX_ORDERS + 1) if orders else []
-        if len(raw_rows) > MAX_ORDERS:
-            raise ValueError("profit_order_scope_too_large")
+        with refresh_stage("profit_context_raw"):
+            raw_rows = await read("unified_orders", query, projection, MAX_ORDERS + 1) if orders else []
+            if len(raw_rows) > MAX_ORDERS:
+                raise ValueError("profit_order_scope_too_large")
         return orders, raw_rows
 
     if parallel:
@@ -157,18 +168,19 @@ async def _load_context(db, owner, start, end, state=None):
     else:
         settings = await load_settings()
         orders, raw_rows = await load_orders()
-    budget = CPUWorkBudget(PARSER_BUDGET_MS)
-    selected, coverage = await _cohort_cooperative(orders, raw_rows, settings, owner, start, end, budget)
-    selected = attach_financial_cohort_eligibility(selected, raw_rows, owner=owner, as_of=end)
-    selected = await guard_financial_cohort_history(db, owner, selected, state=state)
-    selected, financial_cohort = split_financial_cohort(selected)
-    # The original source identity/count remains intact for reconciliation.
-    # Only the separately guarded monetary cohort feeds component calculations.
-    coverage = {**coverage, **financial_cohort,
-                "complete": coverage["complete"] and financial_cohort["complete"]}
-    await attach_report_option_evidence_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
-    await hydrate_order_currency_fields_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
-    return {"orders": selected, "settings": settings, "coverage": coverage}
+    with refresh_stage("profit_context_prepare"):
+        budget = CPUWorkBudget(PARSER_BUDGET_MS)
+        selected, coverage = await _cohort_cooperative(orders, raw_rows, settings, owner, start, end, budget)
+        selected = attach_financial_cohort_eligibility(selected, raw_rows, owner=owner, as_of=end)
+        selected = await guard_financial_cohort_history(db, owner, selected, state=state)
+        selected, financial_cohort = split_financial_cohort(selected)
+        # The original source identity/count remains intact for reconciliation.
+        # Only the separately guarded monetary cohort feeds component calculations.
+        coverage = {**coverage, **financial_cohort,
+                    "complete": coverage["complete"] and financial_cohort["complete"]}
+        await attach_report_option_evidence_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
+        await hydrate_order_currency_fields_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
+        return {"orders": selected, "settings": settings, "coverage": coverage}
 
 
 async def _order_cost_totals(orders, settings):
@@ -315,6 +327,8 @@ def assemble_snapshot(owner, start, end, context, values, errors):
 
 async def load_profit_snapshot(db, owner, state, *, as_of, budget_seconds=25):
     """Return a bounded source snapshot; persist only through the caller's normal refresh."""
+    from operational_demand_refresh import refresh_stage
+
     if not owner or state.get("owner_id") != owner:
         raise ValueError("operational_profit_owner_mismatch")
     start, end = _instant(state["started_at"]), _instant(as_of)
@@ -325,7 +339,11 @@ async def load_profit_snapshot(db, owner, state, *, as_of, budget_seconds=25):
     async def batch(readers):
         async def read(_db, _owner, name):
             try:
-                value = await readers[name]()
+                stage = _READER_STAGES.get(name)
+                # Observe the reader before its existing partial-result handling.
+                # Source deadlines cancel the owned reader and join its cleanup.
+                with refresh_stage(stage) if stage is not None else nullcontext():
+                    value = await readers[name]()
                 values[name] = value
                 return value
             except SourceReadError:

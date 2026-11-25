@@ -198,6 +198,47 @@ test('refresh timeout evidence logs only allowed finite stage fields, once for t
   expect(api.refreshBalances).toHaveBeenCalledTimes(1);
 });
 
+test.each([[408, 'operational_refresh_timeout', 'timeout'], [409, 'operational_source_setup_incomplete', 'source']])(
+  'profit stage evidence survives the canonical %s failure without exposing private fields or retrying', async (status, code, label) => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const profitStages = [
+      'profit_context', 'profit_sales', 'profit_products', 'profit_order_costs',
+      'profit_ads', 'profit_payroll', 'profit_recurring',
+      'profit_context_settings', 'profit_context_orders', 'profit_context_raw', 'profit_context_prepare',
+      'profit_product_catalog', 'profit_product_inputs', 'profit_product_authority',
+      'profit_product_supplier', 'profit_product_reduce',
+    ];
+    const expected = profitStages.map((stage, index) => ({
+      stage, duration_ms: 1000 + index,
+      outcome: ['profit_products', 'profit_product_reduce'].includes(stage) ? 'cancelled' : 'complete',
+    }));
+    const detail = {code, message: 'احتُفظ بآخر لقطة ناجحة', owner_id: 'PRIVATE-OWNER',
+      stage_timings: [
+        ...expected.map(row => ({...row, owner_id: 'PRIVATE-OWNER', token: 'PRIVATE-TOKEN',
+          query: {user_id: 'PRIVATE-OWNER'}, rows: [{amount: 'PRIVATE-AMOUNT'}]})),
+        {stage: 'profit_products_PRIVATE-OWNER', duration_ms: 1, outcome: 'failed'},
+        {stage: 'profit_products', duration_ms: Infinity, outcome: 'cancelled'},
+        {stage: 'profit_context', duration_ms: 1, outcome: 'PRIVATE-OUTCOME'},
+      ]};
+    const originalDetail = JSON.stringify(detail);
+    const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status, data: {detail}},
+      config: {headers: {Authorization: 'PRIVATE-TOKEN'}}})};
+    const config = {signal: new AbortController().signal};
+
+    expect(await refreshVisibleSnapshot(api, config)).toEqual({
+      refresh_warning: 'تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. احتُفظ بآخر لقطة ناجحة',
+    });
+    expect(api.refreshBalances).toHaveBeenCalledWith(config);
+    expect(config.signal.aborted).toBe(false);
+    expect(JSON.stringify(detail)).toBe(originalDetail);
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(`operational_refresh_${label}_stage_timings ` + JSON.stringify(expected));
+    expect(JSON.stringify(info.mock.calls)).not.toContain('PRIVATE');
+    window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('online')); await flush();
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledTimes(1);
+  });
+
 test('source failure evidence uses its own label and preserves the saved-report warning without retry', async () => {
   const info = jest.spyOn(console, 'info').mockImplementation(() => {});
   const detail = {code: 'operational_source_setup_incomplete', cause: 'operational_source_read_timeout',

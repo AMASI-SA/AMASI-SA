@@ -370,6 +370,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     registry_sales = registry_currency["total_sar"]
     total_orders = financial_cohort["total_orders"]
     total_fees = matched_all["total_payment_fees"]
+    internal_wallet_paid_sar = fee_result.get("internal_wallet_paid_sar", 0)
     total_shipping = matched_all["total_shipping_cost"]
     deferred_shipping = matched_all.get("deferred_shipping_cost", 0.0)
 
@@ -381,6 +382,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
     other_payment_fees = 0.0
     bnpl_sales = other_payment_sales = cod_sales = cod_fees = 0.0
+    electronic_cash_basis_complete = True
     # iter-47 — Bank transfer split into its own KPI card.
     bank_sales = bank_fees = 0.0
     for p in matched_all.get("payment_breakdown", []):
@@ -401,7 +403,14 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         elif sub_key == "cash_on_delivery":
             cod_fees += fee; cod_sales += sales
         else:
-            other_payment_fees += fee; other_payment_sales += sales
+            other_payment_fees += fee
+            # Store-wallet tender remains revenue, but is not a new gateway
+            # receivable. Unknown tender proof must not become zero wallet.
+            wallet_paid = p.get("internal_wallet_paid_sar", 0)
+            if wallet_paid is None:
+                electronic_cash_basis_complete = False
+            else:
+                other_payment_sales += sales - wallet_paid
     for sh in matched_all.get("shipping_breakdown", []):
         total_vat += float(sh.get("vat_amount", 0) or 0)
     incomplete_fee_buckets = {
@@ -411,6 +420,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     electronic_fees_complete = not (incomplete_fee_buckets - {
         "bank_transfer", "tamara", "tabby", "emkan", "cash_on_delivery"})
     electronic_before_filter_complete = electronic_fees_complete
+    electronic_cash_before_filter_complete = electronic_cash_basis_complete
 
     # ── iter-45 — Electronic Net status filter ─────────────────────────────
     # The default `other_payment_sales` / `other_payment_fees` above include
@@ -465,29 +475,38 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         # Override electronic sales/fees with the filtered figures.
         filtered_elec_sales = 0.0
         filtered_elec_fees = 0.0
+        filtered_elec_cash_complete = True
         for p in matched_elec.get("payment_breakdown", []):
-            filtered_elec_sales += float(p.get("total_sales", 0) or 0)
+            wallet_paid = p.get("internal_wallet_paid_sar", 0)
+            if wallet_paid is None:
+                filtered_elec_cash_complete = False
+            else:
+                filtered_elec_sales += float(p.get("total_sales", 0) or 0) - wallet_paid
             filtered_elec_fees += float(p.get("fee_amount", 0) or 0)
         # Stash the pre-filter values for transparency in the response.
         electronic_net_breakdown = {
             "included_count": len(electronic_orders_included),
             "excluded_count": len(electronic_orders_excluded),
             "excluded_statuses_active": list(elec_excluded_terms),
-            "gross_before_filter": round(other_payment_sales, 2),
+            "gross_before_filter": (round(other_payment_sales, 2)
+                                    if electronic_cash_before_filter_complete else None),
             "fees_before_filter": round(other_payment_fees, 2),
-            "gross_after_filter": round(filtered_elec_sales, 2),
+            "gross_after_filter": round(filtered_elec_sales, 2) if filtered_elec_cash_complete else None,
             "fees_after_filter": round(filtered_elec_fees, 2),
         }
         other_payment_sales = filtered_elec_sales
         other_payment_fees = filtered_elec_fees
+        electronic_cash_basis_complete = filtered_elec_cash_complete
     else:
         electronic_net_breakdown = {
             "included_count": 0,
             "excluded_count": 0,
             "excluded_statuses_active": list(elec_excluded_terms),
-            "gross_before_filter": round(other_payment_sales, 2),
+            "gross_before_filter": (round(other_payment_sales, 2)
+                                    if electronic_cash_before_filter_complete else None),
             "fees_before_filter": round(other_payment_fees, 2),
-            "gross_after_filter": round(other_payment_sales, 2),
+            "gross_after_filter": (round(other_payment_sales, 2)
+                                   if electronic_cash_basis_complete else None),
             "fees_after_filter": round(other_payment_fees, 2),
         }
 
@@ -988,6 +1007,8 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "incomplete_buckets": sorted(incomplete_fee_buckets),
             "electronic_complete": electronic_fees_complete,
             "electronic_before_filter_complete": electronic_before_filter_complete,
+            "electronic_cash_basis_complete": electronic_cash_basis_complete,
+            "electronic_cash_before_filter_complete": electronic_cash_before_filter_complete,
             "legacy_analysis_fees_included": bool(legacy_analyses),
             **({key: fee_result[key] for key in (
                 "payment_fees_estimated", "payment_fee_estimate_sources", "estimated_orders_count")}
@@ -1027,11 +1048,11 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             # iter-56 — electronic_net now subtracts Salla settlements too
             "electronic_net": (
                 round(other_payment_sales - other_payment_fees - salla_adj, 2)
-                if currency_conversion_complete else None
+                if currency_conversion_complete and electronic_cash_basis_complete else None
             ),
             "electronic_net_before_settlements": (
                 round(other_payment_sales - other_payment_fees, 2)
-                if currency_conversion_complete else None
+                if currency_conversion_complete and electronic_cash_basis_complete else None
             ),
             # iter-45 — visible filtering metadata for the UI
             "electronic_net_breakdown": electronic_net_breakdown,
@@ -1056,13 +1077,14 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
             "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
+            "internal_wallet_paid_sar": internal_wallet_paid_sar,
             "expected_salla_transfer": (
                 round(
-                    total_sales - total_fees
+                    total_sales - total_fees - internal_wallet_paid_sar
                     - (total_shipping - deferred_shipping),
                     2,
                 )
-                if currency_conversion_complete else None
+                if currency_conversion_complete and internal_wallet_paid_sar is not None else None
             ),
             "total_ads_cost": round(daily_ads_total, 2),
             "total_product_cost": round(product_cost_effective, 2),

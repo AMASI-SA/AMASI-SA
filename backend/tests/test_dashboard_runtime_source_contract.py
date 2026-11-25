@@ -140,6 +140,50 @@ class SelectDefaultAuthorityReads(ast.NodeTransformer):
         return self.generic_visit(node)
 
 
+class RemoveProductRefreshStages:
+    """Unwrap only the five reviewed product observers; preserve every body."""
+    stages = (
+        'profit_product_catalog', 'profit_product_inputs',
+        'profit_product_authority', 'profit_product_supplier',
+        'profit_product_reduce',
+    )
+
+    def visit(self, node):
+        assert isinstance(node, ast.AsyncFunctionDef)
+        assert node.name == 'build_mezan_v2_product_cost_cooperative'
+        assert [type(statement) for statement in node.body] == [
+            ast.If, ast.ImportFrom, ast.With, ast.With,
+            ast.With, ast.With, ast.Assign, ast.With,
+        ]
+        imported = node.body[1]
+        expected_import = ast.parse(
+            'from operational_demand_refresh import refresh_stage'
+        ).body[0]
+        assert ast.dump(imported) == ast.dump(expected_import)
+        scopes = [node.body[index] for index in (2, 3, 4, 5, 7)]
+        for scope, label in zip(scopes, self.stages):
+            expected = ast.parse(f"with refresh_stage('{label}'):\n    pass").body[0]
+            assert [ast.dump(item) for item in scope.items] == [
+                ast.dump(item) for item in expected.items
+            ]
+            assert scope.type_comment is None
+        # No extra scope, import, or use of the observer binding can be hidden
+        # inside an approved body and disappear during normalization.
+        assert [part for part in ast.walk(node)
+                if isinstance(part, (ast.With, ast.AsyncWith))] == scopes
+        assert [part for part in ast.walk(node)
+                if isinstance(part, ast.ImportFrom)
+                and part.module == 'operational_demand_refresh'] == [imported]
+        assert {id(part) for part in ast.walk(node)
+                if isinstance(part, ast.Name) and part.id == 'refresh_stage'} == {
+            id(scope.items[0].context_expr.func) for scope in scopes
+        }
+        node.body = [node.body[0], *scopes[0].body, *scopes[1].body,
+                     *scopes[2].body, *scopes[3].body, node.body[6],
+                     *scopes[4].body]
+        return node
+
+
 class SourceContract(unittest.TestCase):
     def test_reducers_and_unchanged_shared_apis(self):
         for file, name in PAIRS:
@@ -182,6 +226,7 @@ class SourceContract(unittest.TestCase):
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
                 adopted = copy.deepcopy(function(current, name+'_cooperative'))
                 if name == 'build_mezan_v2_product_cost':
+                    adopted = RemoveProductRefreshStages().visit(adopted)
                     self.assertEqual([arg.arg for arg in adopted.args.kwonlyargs],
                                      ['include_product_rows', 'cost_collector', 'parallel_order_cost_reads'])
                     self.assertEqual([ast.unparse(arg.annotation) for arg in adopted.args.kwonlyargs],
@@ -227,8 +272,80 @@ class SourceContract(unittest.TestCase):
 
         for name in ('build_mezan_v2_product_cost', 'build_mezan_v2_product_cost_cooperative'):
             with self.subTest(function=name):
+                adopted = function(current, name)
+                if name == 'build_mezan_v2_product_cost_cooperative':
+                    adopted = RemoveProductRefreshStages().visit(adopted)
                 self.assertEqual(companion_reads_and_reducer(function(baseline, name)),
-                                 companion_reads_and_reducer(function(current, name)))
+                                 companion_reads_and_reducer(adopted))
+
+    def test_product_refresh_normalizer_rejects_unreviewed_scaffolding(self):
+        current = (ROOT/'backend/dashboard_v2_routes.py').read_text(encoding='utf8')
+        original = function(current, 'build_mezan_v2_product_cost_cooperative')
+        mutations = {
+            'other_function': lambda node: setattr(node, 'name', 'other_reducer'),
+            'import_alias': lambda node: setattr(node.body[1].names[0], 'asname', 'stage'),
+            'import_module': lambda node: setattr(node.body[1], 'module', 'other_observer'),
+            'relative_import': lambda node: setattr(node.body[1], 'level', 1),
+            'extra_import_name': lambda node: node.body[1].names.append(ast.alias(name='other')),
+            'label': lambda node: setattr(node.body[2].items[0].context_expr.args[0],
+                                          'value', 'profit_product_other'),
+            'call_alias': lambda node: setattr(node.body[2].items[0].context_expr.func,
+                                               'id', 'stage'),
+            'as_binding': lambda node: setattr(node.body[2].items[0], 'optional_vars',
+                                               ast.Name(id='stage', ctx=ast.Store())),
+            'extra_argument': lambda node: node.body[2].items[0].context_expr.args.append(
+                ast.Constant(value='extra')),
+            'keyword': lambda node: node.body[2].items[0].context_expr.keywords.append(
+                ast.keyword(arg='owner', value=ast.Constant(value='private'))),
+            'multiple_contexts': lambda node: node.body[2].items.append(
+                copy.deepcopy(node.body[3].items[0])),
+            'missing_scope': lambda node: node.body.pop(2),
+            'extra_scope': lambda node: node.body.insert(2, copy.deepcopy(node.body[2])),
+            'scope_order': lambda node: node.body.__setitem__(slice(2, 4), node.body[2:4][::-1]),
+            'nested_scope': lambda node: node.body[2].body.append(copy.deepcopy(node.body[3])),
+            'nested_import': lambda node: node.body[2].body.append(copy.deepcopy(node.body[1])),
+            'extra_observer_call': lambda node: node.body[2].body.append(
+                ast.parse("refresh_stage('profit_product_catalog')").body[0]),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(scaffolding=label):
+                adopted = copy.deepcopy(original)
+                mutate(adopted)
+                with self.assertRaises(AssertionError):
+                    RemoveProductRefreshStages().visit(adopted)
+
+    def test_product_refresh_normalizer_preserves_body_query_and_calculation_changes(self):
+        baseline = subprocess.check_output([
+            'git', 'show', '10ee7b41204dd1d39c8b91daf9f0a9d899041ebb:backend/dashboard_v2_routes.py',
+        ], cwd=ROOT, text=True, encoding='utf8')
+        current = (ROOT/'backend/dashboard_v2_routes.py').read_text(encoding='utf8')
+        name = 'build_mezan_v2_product_cost_cooperative'
+
+        def companion_tail(node):
+            start = next(index for index, statement in enumerate(node.body)
+                         if isinstance(statement, ast.Assign)
+                         and ast.unparse(statement.targets[0]) == 'profiles')
+            return ast.dump(ast.Module(body=node.body[start:], type_ignores=[]))
+
+        reference = companion_tail(function(baseline, name))
+        for change in ('body', 'query', 'calculation'):
+            with self.subTest(change=change):
+                adopted = function(current, name)
+                if change == 'body':
+                    changed = ast.parse('unexpected_side_effect()').body[0]
+                    adopted.body[3].body.append(changed)
+                elif change == 'query':
+                    changed = next(part for part in ast.walk(adopted.body[3].body[0])
+                                   if isinstance(part, ast.Constant) and part.value == 'user_id')
+                    changed.value = 'unreviewed_owner_key'
+                else:
+                    changed = next(part for part in ast.walk(adopted.body[7])
+                                   if isinstance(part, ast.AugAssign) and isinstance(part.op, ast.Add))
+                    changed.op = ast.Sub()
+                changed_dump = ast.dump(changed)
+                adopted = RemoveProductRefreshStages().visit(adopted)
+                self.assertIn(changed_dump, [ast.dump(part) for part in ast.walk(adopted)])
+                self.assertNotEqual(reference, companion_tail(adopted))
 
     def test_governor_and_data_access_allow_only_reviewed_telemetry(self):
         for file in ('resource_governor.py', 'mezan_profit_engine.py', 'sold_products_report_v2.py'):

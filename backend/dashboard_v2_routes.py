@@ -1051,344 +1051,351 @@ async def build_mezan_v2_product_cost_cooperative(
 ) -> dict[str, Any]:
     if not orders:
         return _empty_product_cost_result(include_product_rows=include_product_rows)
-    product_ids, (products_by_id, products_by_variant, products_by_sku) = (
-        await _load_cohort_catalog_products(db, user_id, orders)
-    )
-    profiles = await _to_list(
-        db[COST_PROFILES].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        max(1, len(product_ids)),
-    )
-    option_bindings = await _to_list(
-        db[BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        100000,
-    )
-    product_bindings = await _to_list(
-        db[PRODUCT_RESOURCE_BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        100000,
-    )
-    resource_ids = {
-        str(binding.get("resource_id"))
-        for binding in option_bindings + product_bindings
-        if binding.get("resource_id")
-    }
-    resource_rows = await _to_list(
-        db[RESOURCES].find(
-            {"user_id": user_id, "id": {"$in": list(resource_ids)}},
-            {"_id": 0},
-        ),
-        max(1, len(resource_ids)),
-    )
-    profile_map = {str(row.get("salla_product_id")): row for row in profiles}
-    option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in option_bindings:
-        option_map[str(row.get("salla_product_id"))].append(row)
-    for row in product_bindings:
-        product_binding_map[str(row.get("salla_product_id"))].append(row)
-    resources = {str(row.get("id")): row for row in resource_rows}
-    policy = await get_policy_map(db, user_id)
-    authority = await load_order_cost_authority(
-        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
-        parallel_reads=parallel_order_cost_reads,
-    )
-    supplier_authority = await load_supplier_invoice_reporting_costs(
-        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
-    )
+    from operational_demand_refresh import refresh_stage
+
+    with refresh_stage("profit_product_catalog"):
+        product_ids, (products_by_id, products_by_variant, products_by_sku) = (
+            await _load_cohort_catalog_products(db, user_id, orders)
+        )
+    with refresh_stage("profit_product_inputs"):
+        profiles = await _to_list(
+            db[COST_PROFILES].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            max(1, len(product_ids)),
+        )
+        option_bindings = await _to_list(
+            db[BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            100000,
+        )
+        product_bindings = await _to_list(
+            db[PRODUCT_RESOURCE_BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            100000,
+        )
+        resource_ids = {
+            str(binding.get("resource_id"))
+            for binding in option_bindings + product_bindings
+            if binding.get("resource_id")
+        }
+        resource_rows = await _to_list(
+            db[RESOURCES].find(
+                {"user_id": user_id, "id": {"$in": list(resource_ids)}},
+                {"_id": 0},
+            ),
+            max(1, len(resource_ids)),
+        )
+        profile_map = {str(row.get("salla_product_id")): row for row in profiles}
+        option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in option_bindings:
+            option_map[str(row.get("salla_product_id"))].append(row)
+        for row in product_bindings:
+            product_binding_map[str(row.get("salla_product_id"))].append(row)
+        resources = {str(row.get("id")): row for row in resource_rows}
+        policy = await get_policy_map(db, user_id)
+    with refresh_stage("profit_product_authority"):
+        authority = await load_order_cost_authority(
+            db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+            parallel_reads=parallel_order_cost_reads,
+        )
+    with refresh_stage("profit_product_supplier"):
+        supplier_authority = await load_supplier_invoice_reporting_costs(
+            db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+        )
     traffic_by_order = (
         await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
         if include_product_rows else {}
     )
 
-    totals = defaultdict(float)
-    source_lines = defaultdict(int)
-    uses_historical_authority = False
-    linked_products: set[str] = set()
-    missing_products: dict[str, dict[str, Any]] = {}
-    salla_fallback_products: set[str] = set()
-    missing_all_cost_products: set[str] = set()
-    missing_lines = 0
-    missing_all_cost_lines = 0
-    no_products_orders = 0
-    incomplete_orders = 0
-    product_profit_rows: dict[str, dict[str, Any]] = {}
+    with refresh_stage("profit_product_reduce"):
+        totals = defaultdict(float)
+        source_lines = defaultdict(int)
+        uses_historical_authority = False
+        linked_products: set[str] = set()
+        missing_products: dict[str, dict[str, Any]] = {}
+        salla_fallback_products: set[str] = set()
+        missing_all_cost_products: set[str] = set()
+        missing_lines = 0
+        missing_all_cost_lines = 0
+        no_products_orders = 0
+        incomplete_orders = 0
+        product_profit_rows: dict[str, dict[str, Any]] = {}
 
-    budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
-    for order in orders:
-        await budget.checkpoint()
-        if cost_collector is not None:
-            cost_collector.begin_order(order)
-        raw_order_total = 0.0
-        order_parts = defaultdict(float)
-        order_product_lines: list[dict[str, Any]] = []
-        items = order.get("products") or []
-        order_incomplete = not bool(items)
-        if not items:
-            no_products_orders += 1
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            product = _line_product(
-                item,
-                products_by_id=products_by_id,
-                products_by_variant=products_by_variant,
-                products_by_sku=products_by_sku,
-            )
-            product_id = str((product or {}).get("salla_product_id") or "")
-            catalog_result = calculate_mezan_v2_line_cost(
-                item,
-                product=product,
-                profile=profile_map.get(product_id),
-                product_bindings=product_binding_map.get(product_id, []),
-                option_bindings=option_map.get(product_id, []),
-                resources=resources,
-            )
-            result = resolve_order_line_cost(
-                item,
-                order_number=str(order.get("order_number") or ""),
-                catalog_cost=catalog_result,
-                authority=authority,
-                product_id=product_id,
-                include_service_scope_proof=True,
-            )
-            if (result.get("historical_cost_verified") or "_report_salla_question_keys" in item) and any(
-                reason.startswith("option_selection_unresolved:")
-                for reason in catalog_result.get("missing_cost_reasons") or []
-            ):
-                catalog_result = calculate_catalog_line_cost(
-                    item, product=product, profile=profile_map.get(product_id),
-                    product_bindings=product_binding_map.get(product_id, []),
-                    option_bindings=option_map.get(product_id, []), resources=resources,
-                    current_report=True, verified_historical_cost=result, use_recorded_choices=True,
-                )
-            result = resolve_supplier_invoice_reporting_cost(
-                item,
-                order_number=str(order.get("order_number") or ""),
-                catalog_cost=catalog_result,
-                historical_cost=result,
-                supplier_authority=supplier_authority,
-            )
+        budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
+        for order in orders:
+            await budget.checkpoint()
             if cost_collector is not None:
-                cost_collector.observe_line(order, item, result)
-            uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
-            identity = str(
-                product_id
-                or item.get("parent_product_id")
-                or item.get("product_id")
-                or item.get("sku")
-                or item.get("variant_id")
-                or item.get("name")
-                or "unknown"
-            ).strip().casefold()
-            source_lines[result["base_cost_source"]] += 1
-            if result["mezan_cost_complete"]:
-                linked_products.add(identity)
-            else:
-                missing_lines += 1
-                order_incomplete = True
-                current_missing = missing_products.setdefault(identity, {
+                cost_collector.begin_order(order)
+            raw_order_total = 0.0
+            order_parts = defaultdict(float)
+            order_product_lines: list[dict[str, Any]] = []
+            items = order.get("products") or []
+            order_incomplete = not bool(items)
+            if not items:
+                no_products_orders += 1
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                product = _line_product(
+                    item,
+                    products_by_id=products_by_id,
+                    products_by_variant=products_by_variant,
+                    products_by_sku=products_by_sku,
+                )
+                product_id = str((product or {}).get("salla_product_id") or "")
+                catalog_result = calculate_mezan_v2_line_cost(
+                    item,
+                    product=product,
+                    profile=profile_map.get(product_id),
+                    product_bindings=product_binding_map.get(product_id, []),
+                    option_bindings=option_map.get(product_id, []),
+                    resources=resources,
+                )
+                result = resolve_order_line_cost(
+                    item,
+                    order_number=str(order.get("order_number") or ""),
+                    catalog_cost=catalog_result,
+                    authority=authority,
+                    product_id=product_id,
+                    include_service_scope_proof=True,
+                )
+                if (result.get("historical_cost_verified") or "_report_salla_question_keys" in item) and any(
+                    reason.startswith("option_selection_unresolved:")
+                    for reason in catalog_result.get("missing_cost_reasons") or []
+                ):
+                    catalog_result = calculate_catalog_line_cost(
+                        item, product=product, profile=profile_map.get(product_id),
+                        product_bindings=product_binding_map.get(product_id, []),
+                        option_bindings=option_map.get(product_id, []), resources=resources,
+                        current_report=True, verified_historical_cost=result, use_recorded_choices=True,
+                    )
+                result = resolve_supplier_invoice_reporting_cost(
+                    item,
+                    order_number=str(order.get("order_number") or ""),
+                    catalog_cost=catalog_result,
+                    historical_cost=result,
+                    supplier_authority=supplier_authority,
+                )
+                if cost_collector is not None:
+                    cost_collector.observe_line(order, item, result)
+                uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
+                identity = str(
+                    product_id
+                    or item.get("parent_product_id")
+                    or item.get("product_id")
+                    or item.get("sku")
+                    or item.get("variant_id")
+                    or item.get("name")
+                    or "unknown"
+                ).strip().casefold()
+                source_lines[result["base_cost_source"]] += 1
+                if result["mezan_cost_complete"]:
+                    linked_products.add(identity)
+                else:
+                    missing_lines += 1
+                    order_incomplete = True
+                    current_missing = missing_products.setdefault(identity, {
+                        "identity": identity,
+                        "salla_product_id": product_id or str(
+                            item.get("parent_product_id")
+                            or item.get("product_id")
+                            or ""
+                        ).strip(),
+                        "mezan_product_id": str(
+                            (product or {}).get("mezan_product_id") or ""
+                        ).strip(),
+                        "catalog_product_found": bool(product),
+                        "name": (product or {}).get("name") or item.get("name") or "منتج بدون اسم",
+                        "sku": item.get("sku") or (product or {}).get("sku") or "",
+                        "uses_salla_fallback": False,
+                        "missing_everywhere": False,
+                        "fallback_sources": set(),
+                    })
+                    current_missing["uses_salla_fallback"] = bool(
+                        current_missing["uses_salla_fallback"]
+                        or result["uses_salla_fallback"]
+                    )
+                    current_missing["missing_everywhere"] = bool(
+                        current_missing["missing_everywhere"]
+                        or not result["base_complete"]
+                    )
+                    if result["uses_salla_fallback"]:
+                        salla_fallback_products.add(identity)
+                        current_missing["fallback_sources"].add(result["base_cost_source"])
+                    if not result["base_complete"]:
+                        missing_all_cost_lines += 1
+                        missing_all_cost_products.add(identity)
+                raw_order_total += result["line_total"]
+                order_parts[result["base_cost_source"]] += result["base_total"]
+                order_parts["product_components"] += result["product_components_total"]
+                order_parts["selected_options"] += result["selected_options_total"]
+                if not include_product_rows:
+                    continue
+                native_line_sales = _line_sales_total(item, result["quantity"])
+                order_product_lines.append({
                     "identity": identity,
                     "salla_product_id": product_id or str(
-                        item.get("parent_product_id")
-                        or item.get("product_id")
-                        or ""
+                        item.get("parent_product_id") or item.get("product_id") or ""
                     ).strip(),
-                    "mezan_product_id": str(
-                        (product or {}).get("mezan_product_id") or ""
-                    ).strip(),
+                    "mezan_product_id": str((product or {}).get("mezan_product_id") or "").strip(),
                     "catalog_product_found": bool(product),
                     "name": (product or {}).get("name") or item.get("name") or "منتج بدون اسم",
                     "sku": item.get("sku") or (product or {}).get("sku") or "",
+                    "image_url": (
+                        (product or {}).get("main_image")
+                        or item.get("image_url")
+                        or item.get("image")
+                        or ""
+                    ),
+                    "quantity": result["quantity"],
+                    "line_sales": order_amount_to_sar(native_line_sales, order),
+                    "line_cost": result["line_total"],
+                    "base_complete": result["base_complete"],
+                    "mezan_cost_complete": result["mezan_cost_complete"],
+                    "uses_salla_fallback": result["uses_salla_fallback"],
+                    "base_cost_source": result["base_cost_source"],
+                })
+
+            adjusted_total = effective_product_cost(
+                {**order, "total_product_cost": raw_order_total},
+                policy,
+            )
+            if cost_collector is not None:
+                cost_collector.finish_order(order, adjusted_total)
+            scale = adjusted_total / raw_order_total if raw_order_total > 0 else 0.0
+            totals["total"] += adjusted_total
+            for key, amount in order_parts.items():
+                totals[key] += amount * scale
+            # Apply the same return/cancellation scale used by the authoritative
+            # product-cost total. Missing-cost orders have no cost denominator, so
+            # retain their sold quantity and sales to surface them for correction.
+            product_scale = scale if raw_order_total > 0 else 1.0
+            seen_in_order: set[str] = set()
+            for line in order_product_lines:
+                if product_scale <= 0:
+                    continue
+                identity = str(line["identity"])
+                row = product_profit_rows.setdefault(identity, {
+                    "identity": identity,
+                    "salla_product_id": line["salla_product_id"],
+                    "mezan_product_id": line["mezan_product_id"],
+                    "catalog_product_found": line["catalog_product_found"],
+                    "name": line["name"],
+                    "sku": line["sku"],
+                    "image_url": line["image_url"],
+                    "units_sold": 0.0,
+                    "orders_count": 0,
+                    "total_sales": 0.0,
+                    "sales_conversion_complete": True,
+                    "total_cost": 0.0,
+                    "mezan_cost_complete": True,
                     "uses_salla_fallback": False,
                     "missing_everywhere": False,
-                    "fallback_sources": set(),
+                    "cost_sources": set(),
                 })
-                current_missing["uses_salla_fallback"] = bool(
-                    current_missing["uses_salla_fallback"]
-                    or result["uses_salla_fallback"]
+                row["units_sold"] += _float(line["quantity"]) * product_scale
+                add_traffic_units(row, traffic_by_order.get(id(order)) or resolve_traffic_source(order), _float(line["quantity"]) * product_scale)
+                if line["line_sales"] is None:
+                    row["sales_conversion_complete"] = False
+                else:
+                    row["total_sales"] += _float(line["line_sales"]) * product_scale
+                row["total_cost"] += _float(line["line_cost"]) * product_scale
+                row["mezan_cost_complete"] = bool(
+                    row["mezan_cost_complete"] and line["mezan_cost_complete"]
                 )
-                current_missing["missing_everywhere"] = bool(
-                    current_missing["missing_everywhere"]
-                    or not result["base_complete"]
+                row["uses_salla_fallback"] = bool(
+                    row["uses_salla_fallback"] or line["uses_salla_fallback"]
                 )
-                if result["uses_salla_fallback"]:
-                    salla_fallback_products.add(identity)
-                    current_missing["fallback_sources"].add(result["base_cost_source"])
-                if not result["base_complete"]:
-                    missing_all_cost_lines += 1
-                    missing_all_cost_products.add(identity)
-            raw_order_total += result["line_total"]
-            order_parts[result["base_cost_source"]] += result["base_total"]
-            order_parts["product_components"] += result["product_components_total"]
-            order_parts["selected_options"] += result["selected_options_total"]
-            if not include_product_rows:
-                continue
-            native_line_sales = _line_sales_total(item, result["quantity"])
-            order_product_lines.append({
-                "identity": identity,
-                "salla_product_id": product_id or str(
-                    item.get("parent_product_id") or item.get("product_id") or ""
-                ).strip(),
-                "mezan_product_id": str((product or {}).get("mezan_product_id") or "").strip(),
-                "catalog_product_found": bool(product),
-                "name": (product or {}).get("name") or item.get("name") or "منتج بدون اسم",
-                "sku": item.get("sku") or (product or {}).get("sku") or "",
-                "image_url": (
-                    (product or {}).get("main_image")
-                    or item.get("image_url")
-                    or item.get("image")
-                    or ""
-                ),
-                "quantity": result["quantity"],
-                "line_sales": order_amount_to_sar(native_line_sales, order),
-                "line_cost": result["line_total"],
-                "base_complete": result["base_complete"],
-                "mezan_cost_complete": result["mezan_cost_complete"],
-                "uses_salla_fallback": result["uses_salla_fallback"],
-                "base_cost_source": result["base_cost_source"],
-            })
+                row["missing_everywhere"] = bool(
+                    row["missing_everywhere"] or not line["base_complete"]
+                )
+                row["cost_sources"].add(str(line["base_cost_source"]))
+                if not row["image_url"] and line["image_url"]:
+                    row["image_url"] = line["image_url"]
+                if identity not in seen_in_order:
+                    row["orders_count"] += 1
+                    seen_in_order.add(identity)
+            if order_incomplete:
+                incomplete_orders += 1
 
-        adjusted_total = effective_product_cost(
-            {**order, "total_product_cost": raw_order_total},
-            policy,
+        missing_product_rows = []
+        for row in missing_products.values():
+            missing_product_rows.append({
+                **row,
+                "fallback_sources": sorted(row["fallback_sources"]),
+            })
+        missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
+        product_rows, product_profit_summary = (
+            _finalize_product_profit_rows(product_profit_rows)
+            if include_product_rows else ([], {})
         )
-        if cost_collector is not None:
-            cost_collector.finish_order(order, adjusted_total)
-        scale = adjusted_total / raw_order_total if raw_order_total > 0 else 0.0
-        totals["total"] += adjusted_total
-        for key, amount in order_parts.items():
-            totals[key] += amount * scale
-        # Apply the same return/cancellation scale used by the authoritative
-        # product-cost total. Missing-cost orders have no cost denominator, so
-        # retain their sold quantity and sales to surface them for correction.
-        product_scale = scale if raw_order_total > 0 else 1.0
-        seen_in_order: set[str] = set()
-        for line in order_product_lines:
-            if product_scale <= 0:
-                continue
-            identity = str(line["identity"])
-            row = product_profit_rows.setdefault(identity, {
-                "identity": identity,
-                "salla_product_id": line["salla_product_id"],
-                "mezan_product_id": line["mezan_product_id"],
-                "catalog_product_found": line["catalog_product_found"],
-                "name": line["name"],
-                "sku": line["sku"],
-                "image_url": line["image_url"],
-                "units_sold": 0.0,
-                "orders_count": 0,
-                "total_sales": 0.0,
-                "sales_conversion_complete": True,
-                "total_cost": 0.0,
-                "mezan_cost_complete": True,
-                "uses_salla_fallback": False,
-                "missing_everywhere": False,
-                "cost_sources": set(),
-            })
-            row["units_sold"] += _float(line["quantity"]) * product_scale
-            add_traffic_units(row, traffic_by_order.get(id(order)) or resolve_traffic_source(order), _float(line["quantity"]) * product_scale)
-            if line["line_sales"] is None:
-                row["sales_conversion_complete"] = False
-            else:
-                row["total_sales"] += _float(line["line_sales"]) * product_scale
-            row["total_cost"] += _float(line["line_cost"]) * product_scale
-            row["mezan_cost_complete"] = bool(
-                row["mezan_cost_complete"] and line["mezan_cost_complete"]
-            )
-            row["uses_salla_fallback"] = bool(
-                row["uses_salla_fallback"] or line["uses_salla_fallback"]
-            )
-            row["missing_everywhere"] = bool(
-                row["missing_everywhere"] or not line["base_complete"]
-            )
-            row["cost_sources"].add(str(line["base_cost_source"]))
-            if not row["image_url"] and line["image_url"]:
-                row["image_url"] = line["image_url"]
-            if identity not in seen_in_order:
-                row["orders_count"] += 1
-                seen_in_order.add(identity)
-        if order_incomplete:
-            incomplete_orders += 1
 
-    missing_product_rows = []
-    for row in missing_products.values():
-        missing_product_rows.append({
-            **row,
-            "fallback_sources": sorted(row["fallback_sources"]),
-        })
-    missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
-    product_rows, product_profit_summary = (
-        _finalize_product_profit_rows(product_profit_rows)
-        if include_product_rows else ([], {})
-    )
-
-    return {
-        "total": round(totals["total"], 2),
-        "breakdown": {
-            "mezan_v2_base": round(totals["mezan_v2_base"], 2),
-            "mezan_v2_variant": round(totals["mezan_v2_variant"], 2),
-            "salla_product_fallback": round(totals["salla_product_fallback"], 2),
-            "salla_variant_fallback": round(totals["salla_variant_fallback"], 2),
-            "product_components": round(totals["product_components"], 2),
-            "selected_options": round(totals["selected_options"], 2),
-            **{
-                source: round(totals[source], 2)
-                for source in source_lines
-                if source not in {
-                    "mezan_v2_base", "mezan_v2_variant", "salla_product_fallback",
-                    "salla_variant_fallback", "product_components", "selected_options", "missing",
-                }
+        return {
+            "total": round(totals["total"], 2),
+            "breakdown": {
+                "mezan_v2_base": round(totals["mezan_v2_base"], 2),
+                "mezan_v2_variant": round(totals["mezan_v2_variant"], 2),
+                "salla_product_fallback": round(totals["salla_product_fallback"], 2),
+                "salla_variant_fallback": round(totals["salla_variant_fallback"], 2),
+                "product_components": round(totals["product_components"], 2),
+                "selected_options": round(totals["selected_options"], 2),
+                **{
+                    source: round(totals[source], 2)
+                    for source in source_lines
+                    if source not in {
+                        "mezan_v2_base", "mezan_v2_variant", "salla_product_fallback",
+                        "salla_variant_fallback", "product_components", "selected_options", "missing",
+                    }
+                },
             },
-        },
-        "source_lines": dict(source_lines),
-        "linked_products_count": len(linked_products - set(missing_products)),
-        "missing_products_count": len(missing_products),
-        "missing_product_cost_count": missing_lines,
-        "missing_all_cost_products_count": len(missing_all_cost_products),
-        "missing_all_cost_lines_count": missing_all_cost_lines,
-        "salla_fallback_products_count": len(salla_fallback_products),
-        "missing_products": missing_product_rows,
-        **({
-            "product_rows": product_rows,
-            "product_profit_summary": product_profit_summary,
-        } if include_product_rows else {}),
-        "no_products_orders_count": no_products_orders,
-        "incomplete_orders_count": incomplete_orders,
-        "source_contract": {
-            "base_precedence": [
-                "mezan_v2_variant",
-                "mezan_v2_base",
-                "salla_variant_fallback",
-                "salla_product_fallback",
-            ],
-            # Keep the established catalog-only response byte-compatible.
-            # Describe historical rules when this cohort actually uses them.
+            "source_lines": dict(source_lines),
+            "linked_products_count": len(linked_products - set(missing_products)),
+            "missing_products_count": len(missing_products),
+            "missing_product_cost_count": missing_lines,
+            "missing_all_cost_products_count": len(missing_all_cost_products),
+            "missing_all_cost_lines_count": missing_all_cost_lines,
+            "salla_fallback_products_count": len(salla_fallback_products),
+            "missing_products": missing_product_rows,
             **({
-                "catalog_additions": ["product_components", "selected_option_components"],
-                "historical_cost_authority": "preserved bundle and approved correction authority; received ordinary components use approved supplier invoices",
-                "missing_bundle_authority": "incomplete; never current parent fallback",
-                "cost_currency": "SAR; independent of order sales currency",
-            } if uses_historical_authority else {
-                "always_added": ["product_components", "selected_option_components"],
-            }),
-            **({
-                "supplier_receipt_cost_authority": "approved invoice net cost once per received component; current catalog for uncovered units",
-                "supplier_receipt_date_basis": "selected sales cohort; no invoice approval range filter",
-            } if "supplier_invoice" in source_lines else {}),
-            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + (["supplier_invoice"] if "supplier_invoice" in source_lines else []) + ["mezan_v2_variant", "mezan_v2_base"],
-            "salla_fallback_is_missing_mezan_cost": True,
-            "product_sales": "native order lines converted by verified Salla order FX to SAR",
-            "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
-        },
-    }
+                "product_rows": product_rows,
+                "product_profit_summary": product_profit_summary,
+            } if include_product_rows else {}),
+            "no_products_orders_count": no_products_orders,
+            "incomplete_orders_count": incomplete_orders,
+            "source_contract": {
+                "base_precedence": [
+                    "mezan_v2_variant",
+                    "mezan_v2_base",
+                    "salla_variant_fallback",
+                    "salla_product_fallback",
+                ],
+                # Keep the established catalog-only response byte-compatible.
+                # Describe historical rules when this cohort actually uses them.
+                **({
+                    "catalog_additions": ["product_components", "selected_option_components"],
+                    "historical_cost_authority": "preserved bundle and approved correction authority; received ordinary components use approved supplier invoices",
+                    "missing_bundle_authority": "incomplete; never current parent fallback",
+                    "cost_currency": "SAR; independent of order sales currency",
+                } if uses_historical_authority else {
+                    "always_added": ["product_components", "selected_option_components"],
+                }),
+                **({
+                    "supplier_receipt_cost_authority": "approved invoice net cost once per received component; current catalog for uncovered units",
+                    "supplier_receipt_date_basis": "selected sales cohort; no invoice approval range filter",
+                } if "supplier_invoice" in source_lines else {}),
+                "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + (["supplier_invoice"] if "supplier_invoice" in source_lines else []) + ["mezan_v2_variant", "mezan_v2_base"],
+                "salla_fallback_is_missing_mezan_cost": True,
+                "product_sales": "native order lines converted by verified Salla order FX to SAR",
+                "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
+            },
+        }
 
 
 async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[str]:

@@ -225,6 +225,44 @@ class EmployeeBalanceReadsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["detail"]["code"], "employee_balance_snapshot_invalid")
 
+    async def test_compact_salary_keeps_latest_amount_and_original_balances(self):
+        async def salary(state):
+            for day in range(2, 15):
+                date = f"2026-11-{day:02d}"
+                identity = "salary:self:" + date
+                amount = "125.00" if day == 14 else "100.00"
+                state["engine"].setdefault("obligations", {})[identity] = {
+                    "id": identity, "party_type": "employee", "party_id": "self",
+                    "currency": "SAR", "kind": "salary", "direction": "payable",
+                    "confirmed": amount, "expected": "0.00", "business_date": date}
+                state["engine"].setdefault("salary_days", {})[identity] = {
+                    "amount": amount, "currency": "SAR"}
+        await mutate(self.db, "owner", salary)
+        await self.movement(amount="250", business_date="2026-11-10")
+        full = (await self.page()).json()
+        compact = (await self.page(view="compact_salary")).json()
+        self.assertEqual(compact["view"], "compact_salary")
+        self.assertEqual(compact["summary"], full["summary"])
+        self.assertEqual(compact["pagination"]["total"], 3)
+        latest = compact["items"][0]
+        self.assertEqual(latest["credit_amount"], "125.00")
+        self.assertEqual(latest["balance_after"], "3075.00")
+        self.assertEqual(latest["business_date"], "2026-11-14")
+        self.assertEqual(latest["salary_history_count"], 13)
+        self.assertEqual(latest["id"], full["items"][0]["id"])
+        first = (await self.page(view="salary_history", snapshot=compact["snapshot"])).json()
+        second = (await self.page(view="salary_history", page=2, snapshot=compact["snapshot"])).json()
+        history = first["items"] + second["items"]
+        self.assertEqual(first["view"], "salary_history")
+        self.assertEqual(len(history), 13)
+        self.assertEqual(len({row["id"] for row in history}), 13)
+        self.assertEqual(history[0]["balance_after"], latest["balance_after"])
+        self.assertEqual(history[-1]["business_date"], "2026-11-02")
+        self.assertTrue(all(row["kind_label"] == "راتب تلقائي" for row in history))
+        self.assertEqual((await self.page(view="salary_history")).status_code, 422)
+        self.actor_id = "peer"
+        self.assertEqual((await self.page(view="salary_history", snapshot=compact["snapshot"])).status_code, 409)
+
     async def test_unknown_legacy_date_never_invents_a_running_balance(self):
         saved = await self.movement(amount="100")
         await self.db[STATES].update_one({"_id": "owner", "movements.id": saved["id"]},

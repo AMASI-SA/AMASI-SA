@@ -20,6 +20,7 @@ from tests.test_dashboard_bundle_cost_authority import (
 )
 from tests.test_dashboard_runtime_source_contract import (
     RemoveCheckpoints, SelectDefaultAuthorityReads, SelectDefaultCostCollector, SelectDefaultProductRows,
+    RemoveProductRefreshStages,
 )
 
 
@@ -71,6 +72,7 @@ def test_default_observer_hooks_preserve_the_exact_frozen_product_oracle():
     assert hashlib.sha256(source.rstrip().encode()).hexdigest() == "ed1258846025d40913ab8de3ce8b317c3a6342d0c71bfa5854ae5fe41542ed49"
     before = ast.parse(source).body[0]
     adopted = ast.parse(inspect.getsource(dashboard.build_mezan_v2_product_cost_cooperative)).body[0]
+    adopted = RemoveProductRefreshStages().visit(adopted)
     assert [arg.arg for arg in adopted.args.kwonlyargs] == ["include_product_rows", "cost_collector", "parallel_order_cost_reads"]
     assert [ast.unparse(value) for value in adopted.args.kw_defaults] == ["True", "None", "False"]
     adopted.args.kwonlyargs, adopted.args.kw_defaults = [], []
