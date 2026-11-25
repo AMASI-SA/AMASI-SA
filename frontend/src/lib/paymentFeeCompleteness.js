@@ -6,11 +6,16 @@ export function paymentFeeCompleteness(totals = {}) {
     const reasons = Array.isArray(totals.payment_fee_review_reasons)
         ? totals.payment_fee_review_reasons : [];
     const awaitingCollection = reasons.includes("payment_awaiting_collection");
-    const otherReasons = reasons.some((reason) => reason !== "payment_awaiting_collection");
-    const hint = complete ? null
-        : awaitingCollection && otherReasons ? "بانتظار تحصيل بعض الطلبات واستكمال بيانات عمولات الدفع"
-            : awaitingCollection ? "بانتظار تحصيل بعض الطلبات"
-                : "بانتظار اكتمال بيانات عمولات الدفع";
+    const splitPaymentReview = reasons.includes("provider_split_payment_review_required");
+    const otherReasons = reasons.some((reason) => reason !== "payment_awaiting_collection"
+        && reason !== "provider_split_payment_review_required");
+    const pendingActions = [];
+    if (awaitingCollection) pendingActions.push("تحصيل بعض الطلبات");
+    if (splitPaymentReview) pendingActions.push(awaitingCollection
+        ? "مطابقة الدفعات المتعددة" : "مطابقة الدفعات المتعددة لبعض الطلبات");
+    if (otherReasons || pendingActions.length === 0) pendingActions.push(pendingActions.length
+        ? "استكمال بيانات عمولات الدفع" : "اكتمال بيانات عمولات الدفع");
+    const hint = complete ? null : `بانتظار ${pendingActions.join(" و")}`;
     const estimated = totals.payment_fees_estimated === true;
     const estimateSources = estimated && Array.isArray(totals.payment_fee_estimate_sources)
         ? totals.payment_fee_estimate_sources : [];
