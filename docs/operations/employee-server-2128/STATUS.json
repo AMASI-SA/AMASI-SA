@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task_id": "employee-server-2128",
-  "state": "published_verification_in_progress",
-  "updated_at": "2026-11-25 16:25:55 UTC",
+  "state": "completed",
+  "updated_at": "2026-11-25 16:41:46 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 2128,
   "task_branch": "codex/employee-progress-server-release-20261125",
@@ -38,12 +38,23 @@
   },
   "verification": {
     "started": true,
-    "verified": false,
+    "verified": true,
     "expected_checks": 3,
-    "lease_active": true,
+    "lease_active": false,
     "started_at": "2026-11-25T16:22:06Z",
     "wrapper_pid": 45287,
-    "evidence_directory": "/tmp/mezan-employee-2128.T6YZ9U/verification"
+    "evidence_directory": "/tmp/mezan-employee-2128.T6YZ9U/verification",
+    "exit_code": 0,
+    "checks": 3,
+    "completed_at": "2026-11-25T16:39:46Z",
+    "elapsed_seconds": 1060,
+    "frontend_requests_per_probe": 770,
+    "stderr_bytes": 0,
+    "boot_started_at_observations": [
+      "2026-11-25T16:20:56.733549+00:00",
+      "2026-11-25T16:20:47.945921+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "cf204d4a8fab48dd45b691ebbd060fc147c07fda65a4fedf6662672d2e987c5e"
   },
   "ci": {
     "reviewed_B": {
@@ -74,7 +85,7 @@
     "release_decision": "B and M trees are identical. Repository protocol permits tree-equivalent merge and does not impose a separate postmerge CodeQL-upload gate. Original guards, source, permissions and workflows remain unchanged; failed upload is recorded as failed."
   },
   "evidence_remote_directory": "/tmp/mezan-employee-2128.T6YZ9U",
-  "next_safe_action": "Inspect verification completion markers/process. Do not relaunch or run concurrent status. Require original verify exit0, verified true, checks3, exact A/M/release, and sequential final status inactive. Preserve receipts to proof branch.",
+  "next_safe_action": "Deployment is complete. No further publication or lease operation is needed for this task. Use this record for follow-up; future source changes require their own reviewed v5 release.",
   "limitations": [
     "Physical mobile-device parity and live response latency not measured.",
     "Pre-existing empty-string archive marker mismatch in legacy detail hydration documented; canonical null/missing pagination passed.",
@@ -82,16 +93,28 @@
   ],
   "production_changed": {
     "git_branch": true,
-    "live_runtime": "yes_provider_bbaba13_original_verification_running"
+    "live_runtime": "yes_provider_bbaba13_exact_release_confirmed_by_original_verify3"
   },
   "evidence_files": {
     "prepare.json": {
       "git_blob": "c654084b54b01ea66c0b72b2abf83c2d8e837924",
-      "sha256": "05dc2466ff747703f7f1647b7a616951195f9ecf3aa4c656d0b2ba40891c81f2"
+      "sha256": "05dc2466ff747703f7f1647b7a616951195f9ecf3aa4c656d0b2ba40891c81f2",
+      "bytes": 668480
     },
     "prepublish.json": {
       "git_blob": "493f728ef0b90de9b39f35e920066e3bddcdb0ac",
-      "sha256": "e9c4bc44a2fad202fed9609c1a42bab4d8817a2b51f1395d0f55eb6783b3a189"
+      "sha256": "e9c4bc44a2fad202fed9609c1a42bab4d8817a2b51f1395d0f55eb6783b3a189",
+      "bytes": 333
+    },
+    "verify.json": {
+      "git_blob": "842d679cb36abaef4d7287d67d9095cde820f169",
+      "sha256": "9675ce1242583f1964d6e88a6e97f4b688ce0a7f13c4a23fc180673da92b4560",
+      "bytes": 43129
+    },
+    "final-status.json": {
+      "git_blob": "156c781adb04db31c404c4ba808a3bbbc78dc51c",
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+      "bytes": 22
     }
   }
 }
