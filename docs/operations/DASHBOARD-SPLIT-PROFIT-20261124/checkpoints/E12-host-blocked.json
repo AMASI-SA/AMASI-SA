@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "checkpoint": "E12",
+  "observed_at": "2026-11-25T17:37:54.004047+00:00",
+  "evidence_parent": "85b0ed45d0d2686300080934b29655b276bad715",
+  "identities": {
+    "deployment_sha": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+    "envelope_sha256": "bbeb52d3573a8be9f1b7af30234e03121e9ac9dad1846616a5d8f5da517054a9",
+    "helper_sha256": "900cbe56a5d40e304c8975e559d4d4f77c5f4d9b0a9b77168d349d30d83a1780",
+    "intent_sha": "ebaae98290f25db5580d888601d236431961d104",
+    "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+    "source_base_sha": "30c970807c05e291e2f48b35c84155b271fb5f09",
+    "source_sha": "0b39c456ea17d6e80f824f44b57563764441216c",
+    "tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8",
+    "wrapper_sha256": "acf6fab67c1611a0666566938e407790a7be30c506c8ff8f823470c01a089aa0"
+  },
+  "original_host_rehearsal": {
+    "automatic_rollback": false,
+    "canonical_adapter_started": false,
+    "completed_at": "2026-11-25T17:17:33.683916+00:00",
+    "earlier_separate_diagnostic": "Inherited pre-adapter runtime identity reports dashboard_split_payment_fees.py as unreviewed. That diagnostic precedes the fatal strict manifest bytecode exception.",
+    "failed_command_exit_code": 1,
+    "failed_step": "validate-intent",
+    "failed_step_ordinal": 78,
+    "fatal_error": "release source manifests are invalid: Backend runtime source contains prepackaged bytecode: __pycache__",
+    "head_fast_forwarded_to_D": true,
+    "helper_exit_code": 2,
+    "helper_invocations": 1,
+    "lease_publish_scope": "Original helper contains no prepare, publish, restart or recalculation operation; initial public status was inactive. No final current guard state is included in this packet.",
+    "post_ff_tracked_clean_check": "PASS",
+    "started_at": "2026-11-25T17:07:27.015635+00:00",
+    "status": "BLOCKED",
+    "steps": 78,
+    "successful_commands": 77,
+    "wrapper_status": "COMPLETED"
+  },
+  "owned_clone_status": "PASS",
+  "canonical_app_status": "NOT_STARTED",
+  "release_readiness": "BLOCKED",
+  "own_lease_created": false,
+  "own_publish_clicked": false,
+  "cache_relocated": false,
+  "current_app_recorded_head": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+  "backups": [
+    {
+      "available_bytes": 270813282304,
+      "bytes": 11413250,
+      "entries": 390,
+      "manifest_sha256": "103223057daf8a8cb0d78580091985ba8f6bda79cf7bf09e95ed4b4868de7408",
+      "required_copy_bytes": 12283904,
+      "source": "frontend/build",
+      "state": "COPY_VERIFIED",
+      "types": {
+        "directory": 6,
+        "file": 384
+      }
+    },
+    {
+      "available_bytes": 270800924672,
+      "bytes": 1521,
+      "entries": 2,
+      "manifest_sha256": "1617373d85829db3290f54808c798e5cec7270dcd680702a4b8b4591c4f4ee00",
+      "required_copy_bytes": 8192,
+      "source": "frontend/.release",
+      "state": "COPY_VERIFIED",
+      "types": {
+        "directory": 1,
+        "file": 1
+      }
+    },
+    {
+      "available_bytes": 270800912384,
+      "bytes": 504655,
+      "entries": 1,
+      "manifest_sha256": "53cd0d560311650f73691169f8ddf712012d20ad90964030bf5f4abd01b43398",
+      "required_copy_bytes": 507904,
+      "source": "backend/release_identity.json",
+      "state": "COPY_VERIFIED",
+      "types": {
+        "file": 1
+      }
+    },
+    {
+      "available_bytes": 270800334848,
+      "bytes": 405526531,
+      "entries": 76640,
+      "manifest_sha256": "a1103751a5cf3c9e02608b417b4bd7a63dcf49ba570c29e92fa3de0204d4b4cd",
+      "required_copy_bytes": 645853184,
+      "source": "frontend/node_modules",
+      "state": "COPY_VERIFIED",
+      "types": {
+        "directory": 6353,
+        "file": 70037,
+        "symlink": 250
+      }
+    }
+  ],
+  "capacity": {
+    "app_failure_free_bytes": 429490176,
+    "arithmetic": "all exact and nonnegative bounds passed",
+    "available_after_cleanup_estimate_bytes": 1086566400,
+    "canonical_rebuild_capacity_proved": false,
+    "clone_required_bytes": 658653184,
+    "estimated_surplus_bytes": 426143744,
+    "fresh_free_bytes": 429621248,
+    "limitations": "No before-app-adapter capacity row or actual canonical adapter result exists. Per-backup free inodes and source entry count are not independently reconstructable from this compact receipt.",
+    "phase": "before-ff",
+    "reclaimable_bytes": 656945152,
+    "required_bytes": 660422656,
+    "source_install_upper_bound_bytes": 1769472
+  },
+  "preservation_boundary": "pre-FF",
+  "original_foreign_inventory_commitments": [
+    {
+      "bytes": 46225140,
+      "exported": false,
+      "name": "foreign-before.json",
+      "sha256": "caec17a1c18ccb3cd4252d4024b27652774fef66d5c13fc21ecc2255ff92c2b4"
+    },
+    {
+      "bytes": 46225140,
+      "exported": false,
+      "name": "foreign-latest.json",
+      "sha256": "0895e4b481cfce30595b0a151702e3315804317a3a7b28aea77b494f230ff2dc"
+    }
+  ],
+  "cache_scope": {
+    "backend_directories_walked": 38,
+    "baseline_scope": "exactly one ignored cache directory and its two files in exported scope excerpt",
+    "claim_limit": "This review did not rerun compilation, load marshal data, execute cache code, or inspect the host.",
+    "diagnostic_sequence": "Initial resolved-filename compilation reported frontend_build_identity payload mismatch and release_protocol_v5 match. Later read-only comparison using each recorded canonical co_filename reported full-cache and payload equality for both. Both original results remain present. No cached code execution is reported.",
+    "followlinks": false,
+    "identities_and_hashes_cross_packet": "consistent",
+    "original_baseline_equality": "reported true by host observations; full original baseline content deliberately excluded",
+    "paths": [
+      "backend/__pycache__/frontend_build_identity.cpython-311.pyc",
+      "backend/__pycache__/release_protocol_v5.cpython-311.pyc"
+    ],
+    "source_hashes": "match local reviewed source bytes",
+    "total_bytes": 120563,
+    "total_files": 2
+  },
+  "independent_review": "ACCEPT_AS_ORIGINAL_BLOCKED_EVIDENCE",
+  "public_evidence_review": {
+    "all_bytes_reviewed_as_text": true,
+    "credential_and_personal_data_pattern_scan": "No unresolved matches across both complete archives.",
+    "decision": "ACCEPT_FOR_PUBLIC_RELEASE_EVIDENCE",
+    "intentionally_absent": [
+      "foreign inventory contents",
+      "raw backup contents",
+      "Mongo data or log content",
+      "raw bytecode",
+      "environment file contents",
+      "customer/order/financial business records"
+    ],
+    "limitation": "Pattern scanning and structural inspection are bounded review, not a universal guarantee of absence of all sensitive information.",
+    "manifest_content_schema": "Generated-output manifests contain only safe relative paths, type/mode, lengths and SHA256 values; no file bodies.",
+    "resolved_false_positives": {
+      "dependency_package_at_version_warnings": 57
+    },
+    "secrets_or_private_business_payloads_identified": false
+  },
+  "root_checks": [
+    "Raw archive length/hash/CRC/member hashes and safe regular members exact",
+    "77 successful commands then original step78 failed, wrapperexit2 and BLOCKED retained",
+    "Pinned helper/envelope/runner and exactD source/intent bindings retained",
+    "Bounded secret-pattern scan across complete original failure archive: zero matches"
+  ],
+  "artifacts": [
+    {
+      "name": "PR2129-HOST-BLOCKED.zip",
+      "bytes": 3402817,
+      "sha256": "391c9eed3d8c9295cbabd4a70ecb8d550cbaf193f1de81814d9af1713f81bc6b",
+      "git_blob": "4c0115cd4eebc68704311a1f74c197baf85e1694"
+    },
+    {
+      "name": "PR2129-CACHE-OBSERVATIONS.zip",
+      "bytes": 2707,
+      "sha256": "78910062b49b97549c2b9c8171e5968c00df4d45647a7fb09dc7d0d148bf8af2",
+      "git_blob": "8d21ad63cbec97b5759af1a34f223a39817e3b88"
+    },
+    {
+      "name": "E12-host-blocked-independent-review.json",
+      "bytes": 11634,
+      "sha256": "dae01c4cdf88c6c4a25c8bc28529c53bb34902e6c88807d40f51b64e420433c9",
+      "git_blob": "31b9f65c58d820c42659ffac4ed7eb210e6f830b"
+    }
+  ],
+  "next_action": "Independently review and persist a new D-start recovery: original inactive guard and operation lock, exact baseline continuity, four backup rechecks/capacity, preserve only the exact two-file inherited cache with a no-overwrite same-filesystem rename into an owned private Git metadata directory, unchanged strict intent validation/canonical adapter and all final preservation/proof gates. Original BLOCKED run must never be relabelled PASS. Only after successful separate recovery may prepare/prepublish/one publication/original3-roundverify/finalinactive/UIacceptance occur.",
+  "limitations": [
+    "No post-FF backup recheck/canonical capacity/adapter/final foreign preservation exists in original run.",
+    "No new publication, Cloud Build transcript, or post-release dashboard acceptance observed.",
+    "The full foreign inventories, raw backups, bytecode, environment values and business records remain excluded from public archives.",
+    "Cache diagnostic comparisons are preserved as observed; they do not waive original strict package validation."
+  ]
+}

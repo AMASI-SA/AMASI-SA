@@ -776,3 +776,16 @@ PR2128 original verification completed three probes, exit0 and inactive status, 
 The exact ten-key envelope and one-shot runner are frozen with independent reviews and root review. The runner's initial journal error was fixed before any execution; three isolated error-recovery checks passed. The unchanged reviewed v4 helper retains all original guard/lock, source/pin/count, foreign-preservation, backup/capacity and two actual adapter gates. See `checkpoints/E11-D-host-handoff.json` and its archive for exact hashes and full evidence.
 
 Only the helper file has been staged under `/tmp/mezan-pr2129-operator-o1l3bv1c`; no helper invocation, own lease or own publication has occurred at this checkpoint. Production Git changed through the authorized merge; live runtime has not changed by this task. Next: verify production still D, transfer exact envelope/runner, launch once, inspect original helper completion and receipts, then prepare/prepublish, one publish, explicit new success, original verify3/inactive closure, and Nov24 dashboard demand-refresh acceptance. Do not invoke concurrent guard status while the helper owns the original operation lock. User authorization already covers these actions.
+
+
+## E12 — original host stop preserved; separate recovery required
+
+Observed 2026-11-25 after the single helper invocation at 17:07:27 UTC. The original helper completed at 17:17:33 UTC with exit 2 and receipt BLOCKED. All 77 earlier command steps passed, including the complete owned-clone original adapter/validators, four generated-output backups, pre-FF capacity/preservation, and the fast-forward plus tracked-clean checks at exact D. Step78 (unchanged strict intent validation) rejected the inherited backend/__pycache__ directory. The canonical-app adapter did not start. No own lease or publication occurred.
+
+The original receipt remains BLOCKED. The post-FF backup recheck, second capacity check, canonical adapter and final preservation were not reached. The original full foreign baseline and backups remain retained on the host, not exported. Both archived evidence sets and all four backup manifests received independent review, including bounded public-content review.
+
+Read-only full Backend inventory found exactly one inherited cache directory with two files totaling120563 bytes, all matching the original foreign baseline. No cache move has occurred. Both the initial resolved-filename comparison and the later recorded-filename comparison are preserved; no cache code was executed and no original validator rule is relaxed.
+
+A separate narrowly reviewed D-start preservation recovery is being prepared. It must preserve the exact cache via an exclusive same-filesystem move, retain all other foreign-state equality and existing append policies, recheck source/remote/lease/live scope/backups/capacity, then run the unchanged strict validator, canonical adapter and final proofs. Do not rerun v4 from D, reset the checkout, delete caches, waive bytecode validation, or relabel partial proof. Publication and live dashboard acceptance remain pending.
+
+Evidence: checkpoints/PR2129-HOST-BLOCKED.zip; checkpoints/PR2129-CACHE-OBSERVATIONS.zip; checkpoints/E12-host-blocked-independent-review.json; checkpoints/E12-host-blocked.json.
