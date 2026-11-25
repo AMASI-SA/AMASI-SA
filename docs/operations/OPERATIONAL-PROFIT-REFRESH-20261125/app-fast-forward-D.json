@@ -1,0 +1,22 @@
+{
+  "app_fast_forward": "PASS",
+  "observed_at": "2026-11-25T14:46:49.230634+00:00",
+  "from": "6323017fbf9ba160c536a94f408507435786412a",
+  "to": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+  "tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+  "branch": "hotfix/prod-snap-meta-final",
+  "tracked_clean": true,
+  "guard_active": false,
+  "parent": "/tmp/mezan-pr2126-app-dy90mxg3",
+  "cache": "/tmp/mezan-pr2126-app-dy90mxg3/cache",
+  "tmp": "/tmp/mezan-pr2126-app-dy90mxg3/tmp",
+  "evidence": "/tmp/mezan-pr2126-app-dy90mxg3/evidence",
+  "app_free_bytes": 438566912,
+  "tmp_free_bytes": 274956689408,
+  "host_node": "v24.19.0",
+  "host_yarn": "1.22.22",
+  "prior_rehearsal_remote_evidence": "0c391583e27293156921a9064c8b254d612916a3",
+  "production_runtime_changed": false,
+  "build_started": false,
+  "publish_clicked": false
+}

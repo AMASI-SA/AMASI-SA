@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 14:37:16 UTC",
-  "phase": "E8_D_ALL_CI_AND_ORIGINAL_HOST_REHEARSAL_PASS",
+  "recorded_at": "2026-11-25 14:47:33 UTC",
+  "phase": "E9_HOST_RECONNECTED_APP_FAST_FORWARD_D_ORIGINAL_BUILD_NEXT",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
@@ -433,9 +433,9 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "Fresh original /app guard must be inactive, /app on J tracked-clean, and origin production must still be exact D. Fast-forward /app to D only; run its own original yarn build, verify_frontend_build --reviewed-intent-v5, and adapter verify-packages with task-owned external cache/temp. Preserve all foreign processes and worktrees. Do not transplant outputs. Only after pass prepare own v5 lease, prepublish and one authorized Republish.",
+  "next_safe_action": "Run the original three governed commands in /app using fresh task-owned /tmp/mezan-pr2126-app-dy90mxg3 cache/temp and evidence directory. Recheck original /app guard inactive and exact D tracked-clean before starting. No lease during build. After all original checks pass and fresh source verification, prepare own v5 lease, prepublish immediately before one authorized publish, then verify and close only that lease.",
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "previous_evidence_commit": "904c4d5b63e8c301c72e328fc7a5ff089d631da9",
+  "previous_evidence_commit": "0c391583e27293156921a9064c8b254d612916a3",
   "previous_A_CI": {
     "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
     "known_failed_runs": [
@@ -548,89 +548,28 @@
     "guard_active": false
   },
   "latest_automatic_attempt": {
-    "observed_at": "2026-11-25T14:06:04.857Z",
-    "source": "Authenticated production scheduling UI; read-only observation",
-    "url": "https://mezansalla.com/operational-balances?view=tools",
-    "displayed_attempt_riyadh": "2026-11-25 17:00",
-    "displayed_next_attempt_riyadh": "2026-11-25 17:05",
-    "displayed_last_saved_riyadh": "2026-11-25 14:58",
-    "consecutive_failures": 1,
-    "error_code": "operational_source_setup_incomplete",
+    "observed_at": "2026-11-25T14:44:43.890Z",
+    "source": "Authenticated production scheduling UI after explicit status-only check",
+    "displayed_attempt_riyadh": "2026-11-25 17:05",
+    "displayed_last_saved_riyadh": "2026-11-25 17:05",
+    "displayed_next_attempt_riyadh": "2026-11-25 19:07",
+    "result": "saved",
+    "aggregate_ms": 70416.961,
+    "profit_snapshot_ms": 25163.131,
+    "primary_orders": {
+      "queue_ms": 0.014,
+      "budget_ms": 15000,
+      "first_row_ms": 10.029,
+      "read_elapsed_ms": 11714.796,
+      "rows_seen": 19112
+    },
+    "release": "Prior published PR2123; PR2126 not published",
     "manual_refresh_run": false,
     "source_sync_run": false,
-    "production_changed_by_this_task": false,
-    "stages": [
-      {
-        "stage": "native_evidence",
-        "outcome": "complete",
-        "duration_ms": 10534.702
-      },
-      {
-        "stage": "snapshot_raw_read",
-        "outcome": "complete",
-        "duration_ms": 53.201
-      },
-      {
-        "stage": "snapshot_unpack",
-        "outcome": "complete",
-        "duration_ms": 9249.005
-      },
-      {
-        "stage": "snapshot_copy_prepare",
-        "outcome": "complete",
-        "duration_ms": 3522.781
-      },
-      {
-        "stage": "snapshot_load",
-        "outcome": "complete",
-        "duration_ms": 12825.818
-      },
-      {
-        "stage": "source_collision",
-        "outcome": "complete",
-        "duration_ms": 0.012
-      },
-      {
-        "stage": "orders_cursor_build",
-        "outcome": "complete",
-        "duration_ms": 0.221
-      },
-      {
-        "stage": "orders_cursor_read",
-        "outcome": "cancelled",
-        "duration_ms": 16042.127
-      },
-      {
-        "stage": "source_primary_reads",
-        "outcome": "failed",
-        "duration_ms": 16462.198
-      },
-      {
-        "stage": "source_collection",
-        "outcome": "failed",
-        "duration_ms": 16462.835
-      },
-      {
-        "stage": "aggregate",
-        "outcome": "failed",
-        "duration_ms": 29364.043
-      }
-    ],
-    "primary_orders_read": {
-      "queue_ms": 0.015,
-      "budget_ms": 15000,
-      "first_row_ms": 9.003,
-      "read_elapsed_ms": 16042.11,
-      "rows_seen": 17538
-    },
-    "interpretation_limits": [
-      "Timings overlap and are not additive.",
-      "UI row counts are observed delivery, not complete source coverage.",
-      "The exact driver/network/CPU contribution is not yet proven.",
-      "No new successful saved receipt was observed.",
-      "Primary-source group failed while orders_cursor_read was cancelled. A sibling-source error can also cancel orders; precise cause/source_collection/primary observation outcome are needed before attributing origin.",
-      "read_elapsed includes owned join/close; duration beyond15seconds does not prove extra query work.",
-      "Retained row count is stopped progress, not the full source cohort."
+    "limits": [
+      "Nested timings overlap.",
+      "Profit snapshot completion does not prove all profit inputs complete.",
+      "Source completeness remains unverified."
     ]
   },
   "host_premerge": {
@@ -808,5 +747,122 @@
     "publish_clicked": false,
     "main_checkout_changed": false,
     "no_generated_outputs_copied_to_app": true
+  },
+  "host_recovery": {
+    "observed_at": "2026-11-25T14:45:22.334864+00:00",
+    "main_head": "6323017fbf9ba160c536a94f408507435786412a",
+    "tracked_clean": true,
+    "guard_active": false,
+    "old_isolated_source_exists": false,
+    "old_app_evidence_exists": false,
+    "conclusion": "Initial ff command did not execute. Temporary rehearsal files were absent after host reconnection; E8 remotely preserves verified result. No foreign files/processes were deleted or stopped by this task."
+  },
+  "app_fast_forward": {
+    "app_fast_forward": "PASS",
+    "observed_at": "2026-11-25T14:46:49.230634+00:00",
+    "from": "6323017fbf9ba160c536a94f408507435786412a",
+    "to": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_clean": true,
+    "guard_active": false,
+    "parent": "/tmp/mezan-pr2126-app-dy90mxg3",
+    "cache": "/tmp/mezan-pr2126-app-dy90mxg3/cache",
+    "tmp": "/tmp/mezan-pr2126-app-dy90mxg3/tmp",
+    "evidence": "/tmp/mezan-pr2126-app-dy90mxg3/evidence",
+    "app_free_bytes": 438566912,
+    "tmp_free_bytes": 274956689408,
+    "host_node": "v24.19.0",
+    "host_yarn": "1.22.22",
+    "prior_rehearsal_remote_evidence": "0c391583e27293156921a9064c8b254d612916a3",
+    "production_runtime_changed": false,
+    "build_started": false,
+    "publish_clicked": false
+  },
+  "prior_automatic_attempt": {
+    "observed_at": "2026-11-25T14:06:04.857Z",
+    "source": "Authenticated production scheduling UI; read-only observation",
+    "url": "https://mezansalla.com/operational-balances?view=tools",
+    "displayed_attempt_riyadh": "2026-11-25 17:00",
+    "displayed_next_attempt_riyadh": "2026-11-25 17:05",
+    "displayed_last_saved_riyadh": "2026-11-25 14:58",
+    "consecutive_failures": 1,
+    "error_code": "operational_source_setup_incomplete",
+    "manual_refresh_run": false,
+    "source_sync_run": false,
+    "production_changed_by_this_task": false,
+    "stages": [
+      {
+        "stage": "native_evidence",
+        "outcome": "complete",
+        "duration_ms": 10534.702
+      },
+      {
+        "stage": "snapshot_raw_read",
+        "outcome": "complete",
+        "duration_ms": 53.201
+      },
+      {
+        "stage": "snapshot_unpack",
+        "outcome": "complete",
+        "duration_ms": 9249.005
+      },
+      {
+        "stage": "snapshot_copy_prepare",
+        "outcome": "complete",
+        "duration_ms": 3522.781
+      },
+      {
+        "stage": "snapshot_load",
+        "outcome": "complete",
+        "duration_ms": 12825.818
+      },
+      {
+        "stage": "source_collision",
+        "outcome": "complete",
+        "duration_ms": 0.012
+      },
+      {
+        "stage": "orders_cursor_build",
+        "outcome": "complete",
+        "duration_ms": 0.221
+      },
+      {
+        "stage": "orders_cursor_read",
+        "outcome": "cancelled",
+        "duration_ms": 16042.127
+      },
+      {
+        "stage": "source_primary_reads",
+        "outcome": "failed",
+        "duration_ms": 16462.198
+      },
+      {
+        "stage": "source_collection",
+        "outcome": "failed",
+        "duration_ms": 16462.835
+      },
+      {
+        "stage": "aggregate",
+        "outcome": "failed",
+        "duration_ms": 29364.043
+      }
+    ],
+    "primary_orders_read": {
+      "queue_ms": 0.015,
+      "budget_ms": 15000,
+      "first_row_ms": 9.003,
+      "read_elapsed_ms": 16042.11,
+      "rows_seen": 17538
+    },
+    "interpretation_limits": [
+      "Timings overlap and are not additive.",
+      "UI row counts are observed delivery, not complete source coverage.",
+      "The exact driver/network/CPU contribution is not yet proven.",
+      "No new successful saved receipt was observed.",
+      "Primary-source group failed while orders_cursor_read was cancelled. A sibling-source error can also cancel orders; precise cause/source_collection/primary observation outcome are needed before attributing origin.",
+      "read_elapsed includes owned join/close; duration beyond15seconds does not prove extra query work.",
+      "Retained row count is stopped progress, not the full source cohort."
+    ]
   }
 }
