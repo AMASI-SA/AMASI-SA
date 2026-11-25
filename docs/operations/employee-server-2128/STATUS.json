@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task_id": "employee-server-2128",
-  "state": "publication_in_progress",
-  "updated_at": "2026-11-25 16:16:55 UTC",
+  "state": "published_verification_in_progress",
+  "updated_at": "2026-11-25 16:23:54 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 2128,
   "task_branch": "codex/employee-progress-server-release-20261125",
@@ -31,13 +31,19 @@
     "baseline_provider_version": "97dc193",
     "ui_started": "Deployment Started Nov 25, 07:11 PM",
     "timezone": "Asia/Riyadh",
-    "explicit_success_observed": false
+    "explicit_success_observed": true,
+    "success_observed_at": "2026-11-25T16:21:51.230Z",
+    "ui_finished": "Deployment finished Nov 25, 07:21 PM",
+    "provider_version": "bbaba13"
   },
   "verification": {
-    "started": false,
+    "started": true,
     "verified": false,
     "expected_checks": 3,
-    "lease_active": true
+    "lease_active": true,
+    "started_at": "2026-11-25T16:22:06Z",
+    "wrapper_pid": 45287,
+    "evidence_directory": "/tmp/mezan-employee-2128.T6YZ9U/verification"
   },
   "ci": {
     "reviewed_B": {
@@ -68,13 +74,14 @@
     "release_decision": "B and M trees are identical. Repository protocol permits tree-equivalent merge and does not impose a separate postmerge CodeQL-upload gate. Original guards, source, permissions and workflows remain unchanged; failed upload is recorded as failed."
   },
   "evidence_remote_directory": "/tmp/mezan-employee-2128.T6YZ9U",
-  "next_safe_action": "Observe current publication until explicit newer success; do not republish. Then run original verify once with default3 checks, require exact A/M/release and inactive lease, and preserve successful receipts on proof branch.",
+  "next_safe_action": "Inspect verification completion markers/process. Do not relaunch or run concurrent status. Require original verify exit0, verified true, checks3, exact A/M/release, and sequential final status inactive. Preserve receipts to proof branch.",
   "limitations": [
     "Physical mobile-device parity and live response latency not measured.",
-    "Pre-existing empty-string archive marker mismatch in legacy detail hydration documented; canonical null/missing pagination passed."
+    "Pre-existing empty-string archive marker mismatch in legacy detail hydration documented; canonical null/missing pagination passed.",
+    "Only runtime log view is available in Emergent; Cloud Build adapter transcript was not observed."
   ],
   "production_changed": {
     "git_branch": true,
-    "live_runtime": "pending_explicit_completion_and_original_verification"
+    "live_runtime": "yes_provider_bbaba13_original_verification_running"
   }
 }
