@@ -111,3 +111,65 @@ does not establish the shared lease state.
 
 **Production changed by this task: no.** This is a recoverable implementation
 checkpoint, not a claim of completed publication or live automation activation.
+
+## Superseding checkpoint: publication and load requirement — 2026-11-25
+
+The historical release-state statements above are superseded by this section.
+PR #2130 is merged. Reviewed source A is
+`ca426cee9e4ed4fa730dece2409f916003249f83`, intent-only B is
+`66ac128fd6c9c25b86f1e8cdb7c5ccb929310636`, and deployment D is
+`17a0c8c58a71962d1733e7888eeac31d20bc40c0`. Its runtime release is
+`rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7`.
+Exact-B CI passed 20 workflows; one unrelated conditional TikTok run was skipped.
+Operational CI passed 7,735 backend tests plus 151 subtests, all 44 new bank
+receipt cases, the real Mongo replica-set concurrent replay, and 1,850 frontend
+tests in 115 suites. Both final-B adapter rehearsals and all three D workflows
+passed. The original shared adapter build, package checks, prepare and prepublish
+passed. Emergent recorded the authorized direct publication finished at
+22:51 Asia/Riyadh, version `04fc573`, without Preview or paid agent chat.
+The original three-probe verifier is running; its matching lease must remain
+untouched until that verifier closes it. Live form inspection confirms the
+bank reference and initially unchecked arrival confirmation are displayed.
+No financial entry was submitted by the inspection.
+
+The merchant added a controlling requirement that this update must not add
+unnecessary pressure to Mezan. Focused independent review found no new recurring
+job, polling, source resync or extra courier-write query, but identified two
+avoidable costs. The next reviewed release is based on D and uses task branch
+`codex/operational-payment-performance-20261125`:
+
+- Empty payment evidence previously dispatched a calculation through two extra
+  authorization/lease checkpoint rounds. The same pure helper now runs inline
+  only for an absent or empty dictionary inbox. It retains counter validation
+  and reset, while avoiding eight metadata reads, two lease renewals and one
+  thread handoff for that empty stage. Nonempty and malformed inboxes keep the
+  original guarded path. Surrounding authorization, CAS and retry checks remain.
+- Dashboard split-payment pricing now builds one immutable conflict lookup per
+  breakdown and reuses it. Full-cohort and current-cohort conflicts remain
+  combined, including when pricing subsets. Direct list callers remain valid.
+  No context is mutated, persisted or globally cached. This removes repeated
+  conflict-set construction that grew quadratically in a synthetic conflict
+  cohort; memory remains linear in conflict count.
+
+Local implementation checkpoints are `9cdc3b6d26fca7db50700052b0106af9e1d553b7`
+and `a8074de8e4e31fec54db61773b9688d6221985ff`, both with sole parent D. The first
+passed 175 affected tests, including 15 focused cases that first reproduced the
+extra work. The second passed 100 focused plus 168 related tests; its operation
+counter reproduced superlinear work before the fix. Independent review found
+no blocking issue in either patch. These are synthetic/counting-boundary checks,
+not production capacity estimates. The composed exact source still requires
+its own CI, new reviewed intent-only handoff and original release checks.
+
+Before this publication, three normal health requests took 352.4–369.3 ms and
+returned the previous verified source. The hosting dashboard already reported
+79% memory usage with a 100% peak, CPU 22% with a 54% peak, and several severe
+resource intervals before the 22:39 publication start. These observations do not
+establish the cause of resource pressure or a before/after performance result.
+No production stress test, capacity purchase, historical money backfill or
+experimental payment-flag activation was performed.
+
+Next: complete the original live verifier without repeating publication, run
+exact-source CI for the two narrow optimizations, obtain its matching candidate
+intent, commit intent-only B2, merge and publish through the unchanged original
+v5 guard. Preserve all frozen first-release identities and foreign shared files.
+Do not reuse the first release's intent or active lease for the next release.

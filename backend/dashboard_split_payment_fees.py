@@ -151,7 +151,10 @@ already one transaction there and must not acquire a second fixed charge.
     if not split or issues:
         raise ValueError(issues[0]["code"] if issues else "provider_split_payment_review_required")
     tenders = split["split"]["tenders"]
-    conflicts = set(context.get("split_fee_reference_conflicts") or [])
+    conflicts = context.get("split_fee_reference_conflicts")
+    if not isinstance(conflicts, frozenset):
+        # Direct helper callers may still supply the original list contract.
+        conflicts = frozenset(conflicts or [])
     if any(leg["reference"] in conflicts for leg in tenders):
         raise ValueError("provider_payment_reference_conflict")
     if any(leg["provider"] != "salla" and leg["method"] != "customer_wallet" for leg in tenders):
