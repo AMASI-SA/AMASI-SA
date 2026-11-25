@@ -941,3 +941,18 @@ The original first attempt remains **BLOCKED**, interrupted recovery final outco
 
 Evidence: `checkpoints/E17-observation.json`. This public handoff excludes private business amounts/counts, account or order identifiers, references, tariff values, evidence text, secrets and connection strings.
 
+
+
+## E18 — Latest successor visible; fresh dashboard acceptance still incomplete
+
+Parent evidence is E17 `603442ebae4e7fcc9bf0012c82fb04f2b6c7f2fd`, tree `e58a9751a7b0138b5e77a3d07fafaf0c8cf5f812`. The complete E17 STATUS prefix is preserved.
+
+The immutable PR2131 review now establishes 8 of 11 scoped PR2129 source/status blobs exact and three reviewed performance deltas, with all nine release controls exact. The two code hunks build/reuse immutable conflict membership while retaining list compatibility and existing rejection/completeness logic; the test file appends three regressions. Root independently read those three immutable overlapping patches. Source A2 is `164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa`, intent B2 `514bd0d15b08a48353ab4566c1b243d1279e792b`, deployment D2 `37fd7851bb76b39b74e434da19183262e4d42f26`; lineage and B2/D2 tree equality are recorded in the public review. This source review does not establish a remedy for the generic fee blocker.
+
+After the E17 handoff, root observed Emergent version `cf13467` finished Nov25 at 23:41 Asia/Riyadh. Public health reported A2 and release `rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7`, boot `2026-11-25T20:40:18.156091+00:00`, and true identity-availability, critical-hash and frontend-build flags. Public build-meta JSON also identified A2. The latest PR2131 owner handoff still had a 20:34:32 UTC update; root has not observed that release's original three-probe verifier or current guard closure. Public metadata is not substituted for those gates. This task performed no publication or lease action.
+
+Root reloaded the dashboard, explicitly selected Nov24 through Nov24, performed one normal period refresh and observed it finish, then expanded payment fees. Net profit remained incomplete with the generic payment-fee message. Mada, credit-card and Tamara buckets were incomplete; the other visible methods had numeric values. No private values are exported. The additional Tamara state is an observation, not proof of a regression or any particular data change. The exact reason remains unestablished and the user goal remains incomplete.
+
+Production viewer access remains unconfigured. MongoDB Atlas was still not installed in the latest confirmed connector lookup at approximately 20:44 UTC. No production secret was read/copied/entered and no production configuration or business data was changed. Next: connect the existing production database through the secure approved flow, establish authenticated owner scope, and read the exact saved executive fee reasons. Existing push/merge/publish authorization persists. Preserve the other owner release and lease, and do not repeat completed publication steps or execute stale E14 operators.
+
+Evidence: `checkpoints/E18-observation.json` and `checkpoints/E18-successor-readonly-review.json`. Original recovery limits recorded in E12-E17 remain unchanged.

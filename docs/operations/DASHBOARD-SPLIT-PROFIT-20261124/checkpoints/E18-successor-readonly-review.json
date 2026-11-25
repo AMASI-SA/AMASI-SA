@@ -1,0 +1,385 @@
+{
+  "schema_version": 1,
+  "status": "PASS_BOUNDED_IMMUTABLE_SOURCE_REVIEW_WITH_THREE_PERFORMANCE_DELTAS",
+  "reviewed_at": "2026-11-25T20:43:58.644Z",
+  "scope": "GitHub GET-only immutable lineage, exact blob comparison, and inspection of the three changed PR2129 paths. Local report only; no host/browser access, source/remote mutations, imports, tests, builds, guard, lease, or publication action.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "prior_dashboard_pr": 2129,
+  "immediate_predecessor_pr": 2130,
+  "successor_pr": 2131,
+  "identities": {
+    "pr2129_source": "0b39c456ea17d6e80f824f44b57563764441216c",
+    "pr2129_intent": "ebaae98290f25db5580d888601d236431961d104",
+    "pr2129_deployment": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+    "pr2129_tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8",
+    "pr2130_deployment": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "pr2130_tree": "039cacf3578f645fb2a0172cb5a2e2e15112a3c5",
+    "pr2131_source": "164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa",
+    "pr2131_source_tree": "ba03515ac7d10c03ae1d8e6c16156389c4ca154c",
+    "pr2131_intent": "514bd0d15b08a48353ab4566c1b243d1279e792b",
+    "pr2131_deployment": "37fd7851bb76b39b74e434da19183262e4d42f26",
+    "pr2131_tree": "4d56be96f39b4e15db172a61cb5ae96a9190d649",
+    "pr2131_release_id_from_owner_handoff": "rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7"
+  },
+  "lineage": {
+    "source_parents": [
+      "17a0c8c58a71962d1733e7888eeac31d20bc40c0"
+    ],
+    "intent_parents": [
+      "164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa"
+    ],
+    "deployment_parents": [
+      "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+      "514bd0d15b08a48353ab4566c1b243d1279e792b"
+    ],
+    "intent_tree": "4d56be96f39b4e15db172a61cb5ae96a9190d649",
+    "deployment_tree": "4d56be96f39b4e15db172a61cb5ae96a9190d649",
+    "intent_and_deployment_trees_equal": true,
+    "a_to_b_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "a_to_b_only_release_intent": true,
+    "pr2130_to_pr2131_compare": {
+      "status": "ahead",
+      "ahead_by": 3,
+      "behind_by": 0,
+      "total_commits": 3,
+      "changed_paths": [
+        "backend/dashboard_payment_fees.py",
+        "backend/dashboard_split_payment_fees.py",
+        "backend/operational_balance_service.py",
+        "backend/tests/test_dashboard_split_payment_fees.py",
+        "backend/tests/test_operational_balance_payment_evidence_fastpath.py",
+        "docs/operations/OPERATIONAL-PAYMENT-RECEIPTS-20261125/STATUS.md",
+        "release/release-intent-v5.json"
+      ]
+    }
+  },
+  "tree_comparison": {
+    "pr2129_tree_entries": 7116,
+    "pr2131_tree_entries": 7177,
+    "both_recursive_responses_untruncated": true,
+    "source_status_paths_compared": 11,
+    "source_status_exact": 8,
+    "source_status_changed": 3,
+    "all_eleven_unchanged": false,
+    "unchanged_control_paths": 9,
+    "all_scoped_paths_keep_mode_and_type": true
+  },
+  "pr2129_source_status_paths": [
+    {
+      "path": ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
+      "pr2129_blob": "b5bfbf68e6da402398f1f02e5ed98cc341c48460",
+      "pr2130_blob": "b5bfbf68e6da402398f1f02e5ed98cc341c48460",
+      "pr2131_blob": "b5bfbf68e6da402398f1f02e5ed98cc341c48460",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "backend/dashboard_payment_fees.py",
+      "pr2129_blob": "f88feb5e8c8041f7ba27c0ed605c2894bb4d0b63",
+      "pr2130_blob": "f88feb5e8c8041f7ba27c0ed605c2894bb4d0b63",
+      "pr2131_blob": "cb3c3457b4220a4201380153cede5a024d79c23a",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": false,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "backend/dashboard_split_payment_fees.py",
+      "pr2129_blob": "585ec4755dd7458047d2dd1dcfb86c4416f950dd",
+      "pr2130_blob": "585ec4755dd7458047d2dd1dcfb86c4416f950dd",
+      "pr2131_blob": "f46231027799ae888edffe8992df8bae826f291e",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": false,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "backend/legacy_dashboard_reader.py",
+      "pr2129_blob": "cc70f5d44987925086e8237bd89696aebeaab59f",
+      "pr2130_blob": "cc70f5d44987925086e8237bd89696aebeaab59f",
+      "pr2131_blob": "cc70f5d44987925086e8237bd89696aebeaab59f",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "backend/tests/test_dashboard_ads_account_results.py",
+      "pr2129_blob": "a6831a3394891c269a051f67b0f848b7fb3d9a87",
+      "pr2130_blob": "a6831a3394891c269a051f67b0f848b7fb3d9a87",
+      "pr2131_blob": "a6831a3394891c269a051f67b0f848b7fb3d9a87",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "backend/tests/test_dashboard_split_payment_cash_basis.py",
+      "pr2129_blob": "a30d251f942879d7fb3c0b74894bed21a3a89457",
+      "pr2130_blob": "a30d251f942879d7fb3c0b74894bed21a3a89457",
+      "pr2131_blob": "a30d251f942879d7fb3c0b74894bed21a3a89457",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "backend/tests/test_dashboard_split_payment_fees.py",
+      "pr2129_blob": "8744d3cdeb4b80371d76cabbc35a5b5476a96034",
+      "pr2130_blob": "8744d3cdeb4b80371d76cabbc35a5b5476a96034",
+      "pr2131_blob": "ca2b3bb05c9943588038c3675d5ac68ebff825f2",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": false,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "docs/operations/DASHBOARD-SPLIT-PROFIT-20261124/STATUS.md",
+      "pr2129_blob": "c31428eefa72368ec7e9ef0d23b32f9ed7cd98d6",
+      "pr2130_blob": "c31428eefa72368ec7e9ef0d23b32f9ed7cd98d6",
+      "pr2131_blob": "c31428eefa72368ec7e9ef0d23b32f9ed7cd98d6",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx",
+      "pr2129_blob": "f48e7f203feff2b86b56a01e57729138faed3f48",
+      "pr2130_blob": "f48e7f203feff2b86b56a01e57729138faed3f48",
+      "pr2131_blob": "f48e7f203feff2b86b56a01e57729138faed3f48",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "frontend/src/lib/paymentFeeCompleteness.js",
+      "pr2129_blob": "d0204441d74a4826685f0278bd271f00acf65e38",
+      "pr2130_blob": "d0204441d74a4826685f0278bd271f00acf65e38",
+      "pr2131_blob": "d0204441d74a4826685f0278bd271f00acf65e38",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx",
+      "pr2129_blob": "21d369005033504e495b44789b0eade7ac761f11",
+      "pr2130_blob": "21d369005033504e495b44789b0eade7ac761f11",
+      "pr2131_blob": "21d369005033504e495b44789b0eade7ac761f11",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    }
+  ],
+  "release_protocol_and_control_paths": [
+    {
+      "path": "AGENTS.md",
+      "pr2129_blob": "0e0bbff4d9625f9323affae84b620a0cf12eb209",
+      "pr2130_blob": "0e0bbff4d9625f9323affae84b620a0cf12eb209",
+      "pr2131_blob": "0e0bbff4d9625f9323affae84b620a0cf12eb209",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "docs/PRODUCTION_RELEASE_PROTOCOL.md",
+      "pr2129_blob": "c38289eba83fd7d20c77e3a4582781dacb9fe6c8",
+      "pr2130_blob": "c38289eba83fd7d20c77e3a4582781dacb9fe6c8",
+      "pr2131_blob": "c38289eba83fd7d20c77e3a4582781dacb9fe6c8",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "scripts/production_release_guard.py",
+      "pr2129_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+      "pr2130_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+      "pr2131_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "scripts/emergent_deployment_adapter.py",
+      "pr2129_blob": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+      "pr2130_blob": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+      "pr2131_blob": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "scripts/frontend_release_toolchain.py",
+      "pr2129_blob": "24ec1b60656aafe4bf1514df06592d8c108335e2",
+      "pr2130_blob": "24ec1b60656aafe4bf1514df06592d8c108335e2",
+      "pr2131_blob": "24ec1b60656aafe4bf1514df06592d8c108335e2",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "scripts/verify_frontend_build.py",
+      "pr2129_blob": "8d9a5c31963aba825dc4a1d8edebf0db92c00601",
+      "pr2130_blob": "8d9a5c31963aba825dc4a1d8edebf0db92c00601",
+      "pr2131_blob": "8d9a5c31963aba825dc4a1d8edebf0db92c00601",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "frontend/scripts/build-entry.cjs",
+      "pr2129_blob": "327ea41b20dc49c6ce3597969b77774deed6c0d3",
+      "pr2130_blob": "327ea41b20dc49c6ce3597969b77774deed6c0d3",
+      "pr2131_blob": "327ea41b20dc49c6ce3597969b77774deed6c0d3",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": "frontend/scripts/build-release-frontend.cjs",
+      "pr2129_blob": "63704e2148fc2fe745376bae6dc3e6eab8c4c339",
+      "pr2130_blob": "63704e2148fc2fe745376bae6dc3e6eab8c4c339",
+      "pr2131_blob": "63704e2148fc2fe745376bae6dc3e6eab8c4c339",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    },
+    {
+      "path": ".github/workflows/mezan-production-release.yml",
+      "pr2129_blob": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+      "pr2130_blob": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+      "pr2131_blob": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+      "pr2129_mode": "100644",
+      "pr2131_mode": "100644",
+      "pr2129_type": "blob",
+      "pr2131_type": "blob",
+      "exact_from_pr2129": true,
+      "pr2130_matches_pr2129": true
+    }
+  ],
+  "reviewed_overlapping_patches": [
+    {
+      "path": "backend/dashboard_payment_fees.py",
+      "scope": "dashboard_fee_breakdown internal split_fee_reference_conflicts lookup",
+      "observed_change": "Replaces sorted(set(existing_conflicts) | set(current_cohort_conflicts)) with frozenset(existing_conflicts) | frozenset(current_cohort_conflicts), constructed once per breakdown.",
+      "retained_logic": "The same inherited full-cohort conflicts and freshly calculated current-cohort conflicts are united in a copied context. No fee formula, fee source, method selection, rate, amount, eligibility condition, or completeness gate is changed in this hunk.",
+      "bounded_interpretation": "Preserves conflict membership while avoiding repeated conversion of the inherited cohort lookup. Internal ordering/container type changes; this is a code review inference, not a runtime equivalence measurement."
+    },
+    {
+      "path": "backend/dashboard_split_payment_fees.py",
+      "scope": "_split_basis conflict membership lookup",
+      "observed_change": "Reuses an existing frozenset; converts original list-compatible input to frozenset only when needed.",
+      "retained_logic": "The same any(leg reference in conflicts) rejection and provider_payment_reference_conflict error remain. The surrounding split validation, provider eligibility, amounts, and fee calculations are untouched.",
+      "bounded_interpretation": "The split-payment conflict guard remains present for both precomputed immutable lookups and direct callers supplying the former list shape."
+    },
+    {
+      "path": "backend/tests/test_dashboard_split_payment_fees.py",
+      "scope": "66 appended lines; existing test content is retained by the additive hunk",
+      "observed_change": "Adds three regressions for linear conflict-hash work across subsets, direct list-context compatibility with unchanged inputs, and no lookup leakage between breakdown calls.",
+      "retained_logic": "No existing tests are removed or rewritten in this patch.",
+      "bounded_interpretation": "The assertions support the intended optimization and preserved conflict behavior. This child did not run the tests or independently inspect their CI artifacts."
+    }
+  ],
+  "other_source_delta": {
+    "path": "backend/operational_balance_service.py",
+    "observed_change": "For an absent/empty dictionary payment-evidence inbox, invokes the same evidence reconciliation function inline; nonempty or malformed inboxes retain run_calculation.",
+    "limit": "Inspected to identify release scope only. No broad accounting/authentication equivalence or performance certification is asserted."
+  },
+  "conclusion": {
+    "pr2129_fix_exact_blob_retention": "8 of 11 scoped source/status paths are exact; 3 have the reviewed performance-only deltas above. All 9 protocol/control paths are exact.",
+    "split_payment_fix_retained_in_reviewed_logic": true,
+    "fee_formulas_and_completeness_guards_changed_in_reviewed_hunks": false,
+    "generic_mada_card_fee_blocker_resolved": "NOT_ESTABLISHED",
+    "production_publication_or_verification_completed": "NOT_ESTABLISHED_BY_THIS_REVIEW",
+    "explanation": "The successor preserves the inspected split-payment conflict and completeness behavior while changing lookup construction/reuse. Its code does not establish a remedy for the separately observed generic Mada/card fee warning. The affected merchant's production fee reasons and inputs still require authorized read-only diagnosis; successful source ancestry or a release verifier does not itself establish numeric net-profit acceptance."
+  },
+  "owner_handoff_snapshot": {
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2131",
+    "title": "Avoid idle payment refresh I/O and repeated split-fee conflict scans",
+    "merged_at": "2026-11-25T20:24:19Z",
+    "body_updated_at": "2026-11-25T20:34:32Z",
+    "reported_actor": "operational-payment-performance-20261125",
+    "reported_publication_started_at": "2026-11-25T20:30:00Z",
+    "reported_publish_invocations_for_this_performance_release": 1,
+    "reported_lease_active": true,
+    "reported_platform_publication_and_original_three_probe_verification": "PENDING",
+    "attribution": "PR2131 owner text as retrieved; no actual host receipt, deployment UI, public verifier result, or lease closure was read by this child. The PR body is mutable and this snapshot does not establish later state."
+  },
+  "prior_report": {
+    "path": "pr2129-release/successor-2130-readonly-review.json",
+    "bytes": 11410,
+    "sha256": "b98fa82d012007774f242ae30247e37d9b003194c144280c848e3a8d93de9e00",
+    "use": "Prior exact PR2129-to-PR2130 retention; all original PR2129 blobs were additionally re-read from its immutable recursive tree for this comparison."
+  },
+  "limits": [
+    "Static, path-bounded source review only. No tests were executed and no current production/business data were accessed.",
+    "PR2131 CI and clean-clone success claims are owner-reported here; their artifacts were not independently revalidated in this task.",
+    "All eleven own paths must not be described as byte-identical in PR2131; the three explicit performance deltas are material to the source identity.",
+    "Original own host2 candidate remains historical NOT_RUN and binds prior deployment b651eacf; this review does not authorize executing it over a successor.",
+    "Earlier interrupted recovery retains UNKNOWN final status; this review does not reconstruct its missing completion or foreign-file continuity."
+  ],
+  "evidence_urls": [
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/37fd7851bb76b39b74e434da19183262e4d42f26",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/17a0c8c58a71962d1733e7888eeac31d20bc40c0...37fd7851bb76b39b74e434da19183262e4d42f26",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa...514bd0d15b08a48353ab4566c1b243d1279e792b",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees/d50681f64d3387eb4b6f2137658be9cb11c62bd8?recursive=1",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees/4d56be96f39b4e15db172a61cb5ae96a9190d649?recursive=1",
+    "https://github.com/AMASI-SA/AMASI-SA/pull/2131",
+    "https://github.com/AMASI-SA/AMASI-SA/blob/37fd7851bb76b39b74e434da19183262e4d42f26/backend/dashboard_payment_fees.py",
+    "https://github.com/AMASI-SA/AMASI-SA/blob/37fd7851bb76b39b74e434da19183262e4d42f26/backend/dashboard_split_payment_fees.py",
+    "https://github.com/AMASI-SA/AMASI-SA/blob/37fd7851bb76b39b74e434da19183262e4d42f26/backend/tests/test_dashboard_split_payment_fees.py"
+  ]
+}

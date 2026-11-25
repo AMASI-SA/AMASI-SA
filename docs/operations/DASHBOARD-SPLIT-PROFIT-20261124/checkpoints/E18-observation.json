@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "checkpoint": "E18",
+  "recorded_at_utc": "2026-11-25T20:49:18.373040+00:00",
+  "parent_commit": "603442ebae4e7fcc9bf0012c82fb04f2b6c7f2fd",
+  "parent_tree": "e58a9751a7b0138b5e77a3d07fafaf0c8cf5f812",
+  "source_review": {
+    "exact_scoped_paths": 8,
+    "reviewed_performance_deltas": 3,
+    "exact_controls": 9,
+    "retained_split_logic": true,
+    "report_sha256": "c27d6e35b292c82e306cc354e67e437b184907bc05006fbcbdbce1f4d5d0e6c3",
+    "root_independently_read_three_overlapping_patches": true
+  },
+  "successor": {
+    "pr": 2131,
+    "source": "164466b6d1caacb956e23b9fe1a8b2cf3c65a9aa",
+    "intent": "514bd0d15b08a48353ab4566c1b243d1279e792b",
+    "deployment": "37fd7851bb76b39b74e434da19183262e4d42f26",
+    "release_id": "rg5-0d4df1ef2bc9e0c6f95f60361e2201ba934fbe4100b9524d0f98c425c23819b7"
+  },
+  "platform": {
+    "version": "cf13467",
+    "finished_label": "Nov 25, 11:41 PM",
+    "timezone": "Asia/Riyadh",
+    "root_publication_clicks": 0
+  },
+  "public_runtime": {
+    "surface": "/api/health",
+    "boot_started_at": "2026-11-25T20:40:18.156091+00:00",
+    "source_matches_successor": true,
+    "release_id_matches_successor": true,
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "build_meta_source_matches_successor": true,
+    "build_meta_surface": "/build-meta.json",
+    "observation_after_utc": "2026-11-25T20:44:21Z",
+    "original_three_probe_verifier_for_pr2131": "NOT_OBSERVED",
+    "current_guard_state": "NOT_ESTABLISHED"
+  },
+  "live_acceptance": {
+    "period": [
+      "2026-11-24",
+      "2026-11-24"
+    ],
+    "actions": [
+      "reload",
+      "explicit_date_selection",
+      "one_normal_period_refresh",
+      "expand_payment_fees"
+    ],
+    "refresh_completed": true,
+    "net_profit": "INCOMPLETE",
+    "hint": "GENERIC_PAYMENT_FEES",
+    "incomplete_method_buckets": [
+      "mada",
+      "credit_card",
+      "tamara"
+    ],
+    "other_method_values": "PRESENT; PRIVATE VALUES OMITTED",
+    "cause": "NOT_ESTABLISHED",
+    "user_goal_complete": false
+  },
+  "access": {
+    "production_viewer_connection": "NOT_CONFIGURED",
+    "mongodb_atlas_latest_confirmed_installed": false,
+    "latest_connector_check_utc": "2026-11-25T20:44:21Z",
+    "secrets_read_copied_or_entered": false,
+    "production_configuration_changed": false
+  },
+  "limits": [
+    "Public runtime metadata is not a substitute for the original three-probe guard verification.",
+    "Policy presence and a generic UI warning do not establish the remaining canonical fee reason.",
+    "The new Tamara incomplete bucket is observed, not attributed to a code regression or data change.",
+    "No private amounts, business counts, customer identifiers, transaction references, tariff values or connection strings are included."
+  ],
+  "next": "Connect the existing production database through the secure approved flow; read the exact authenticated-owner executive fee reasons and resolve the evidenced cause. Preserve the other owner release/lease; do not repeat publication. Prior push/merge/publish authorization persists."
+}
