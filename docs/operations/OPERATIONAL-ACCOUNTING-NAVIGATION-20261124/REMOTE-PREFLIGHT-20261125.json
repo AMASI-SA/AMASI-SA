@@ -1,0 +1,47 @@
+{
+  "suites": [
+    {
+      "name": "exporter",
+      "exit_code": 0,
+      "expected_tests": 49,
+      "actual_tests": 49,
+      "ok": true
+    },
+    {
+      "name": "importer",
+      "exit_code": 0,
+      "expected_tests": 7,
+      "actual_tests": 7,
+      "ok": true
+    },
+    {
+      "name": "http_guard",
+      "exit_code": 0,
+      "expected_tests": 11,
+      "actual_tests": 11,
+      "ok": true
+    }
+  ],
+  "genuine_source_connection": false,
+  "services_activated": false,
+  "evidence_commit": "70e3d9b0b2675794faebc9a784151811e430fe21",
+  "factory_exit_code": 0,
+  "factory": {
+    "auth_routes": 4,
+    "demand_release_routes": 1,
+    "fee_get_routes": 2,
+    "gate": "factory_construction_only",
+    "io_attempts": {
+      "filesystem_mutation": 0,
+      "network": 0
+    },
+    "lifespan_started": false,
+    "mounted_routes": 41,
+    "ok": true,
+    "product_get_routes": 34,
+    "served_requests": 0,
+    "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41"
+  },
+  "ok": true,
+  "completed_at_utc": "2026-11-25T15:52:44.028523+00:00"
+}

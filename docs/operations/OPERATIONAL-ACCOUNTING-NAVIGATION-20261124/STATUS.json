@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-25",
-  "state": "reviewed_capture_import_read_runtime_frozen_remote_preflight_pending",
+  "state": "remote_native_pipeline_and_actual_factory_verified_hidden_source_uri_prompt_waiting",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -76,7 +76,54 @@
       "importer": 7,
       "http_guard": 11,
       "total": 67,
-      "independent_review": "All three suites repeated; no remaining concrete code/source-contract blocker. Genuine capture/import/actual source factory/host/browser acceptance not established by synthetic tests."
+      "independent_review": "All three suites repeated; no remaining concrete code/source-contract blocker. Genuine capture/import/actual source factory/host/browser acceptance not established by synthetic tests.",
+      "remote_verified": {
+        "suites": [
+          {
+            "name": "exporter",
+            "exit_code": 0,
+            "expected_tests": 49,
+            "actual_tests": 49,
+            "ok": true
+          },
+          {
+            "name": "importer",
+            "exit_code": 0,
+            "expected_tests": 7,
+            "actual_tests": 7,
+            "ok": true
+          },
+          {
+            "name": "http_guard",
+            "exit_code": 0,
+            "expected_tests": 11,
+            "actual_tests": 11,
+            "ok": true
+          }
+        ],
+        "genuine_source_connection": false,
+        "services_activated": false,
+        "evidence_commit": "70e3d9b0b2675794faebc9a784151811e430fe21",
+        "factory_exit_code": 0,
+        "factory": {
+          "auth_routes": 4,
+          "demand_release_routes": 1,
+          "fee_get_routes": 2,
+          "gate": "factory_construction_only",
+          "io_attempts": {
+            "filesystem_mutation": 0,
+            "network": 0
+          },
+          "lifespan_started": false,
+          "mounted_routes": 41,
+          "ok": true,
+          "product_get_routes": 34,
+          "served_requests": 0,
+          "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41"
+        },
+        "ok": true,
+        "completed_at_utc": "2026-11-25T15:52:44.028523+00:00"
+      }
     }
   },
   "preview": {
@@ -87,11 +134,11 @@
     "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
     "frontend_supervisor": "FATAL, exited too quickly",
     "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
-    "known_failure": "No running candidate frontend/current API or actual dataset yet. Foreignv5lease remains active. Earlier /tmp runtime was lost; restored own source/observer and preparing dependencies on roomy /var/tmp.",
+    "known_failure": "No real dataset/current API/frontend acceptance yet. Final tools and actual factory verified remotely; hidden-TTY native source URI prompt is now waiting. Foreign lease closure remains unproven; do not activate public Preview until original guard permits.",
     "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
     "candidate_source_prepared": true,
     "source_preparation_attempt": "Exact source restored on2026-11-25T15:08:46Z, sameHEAD/tree, tracked-clean, no backend.env. Moved only task files to /var/tmp after persistent /root-/app partition ENOSPC.",
-    "missing_runtime": "Prior own /tmp toolchain/cache was lost; exact pinned candidate runtime must be restored.",
+    "missing_runtime": "Pinned Node/Yarn and frozen dependencies restored; own Mongo/API/worker/frontend processes still require activation after appropriate guard and data checks.",
     "local_backend_routing": {
       "live": {
         "status": 200,
@@ -129,7 +176,7 @@
       "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
       "official_admin_viewer": "User completed secure browserAuth; Production connection succeeded and canonical state/audit collections are present. Selecting the state collection returnedHTTP500; one normal refresh also failed and old collection rows remained visible. No stale rows copied. Advanced options expose new-document only, not export; no WebMCP tools. Connection credential was never exposed to the assistant.",
       "existing_bson_backup": "Bounded read-only search of known prior task directories found no BSON/mongodump/archive copy. Exact repository/checkpoint search also found no canonical export artifact.",
-      "native_capture": "Final full exporter independently reviewed:49tests,56scopes/55collections, snapshot/primary-head/rawBSON and executable+semantic hashes. No genuine source connection/capture. Final permission-preserving bundle and importer/runtime ready for remote preflight."
+      "native_capture": "Final permission-preserving 49-test exporter installed/hash-verified and passed remotely. New exclusive private output path and actual hidden-TTY prompt are ready. User URI entry and genuine capture/import remain outstanding."
     },
     "private_observer": {
       "files": "preview-tools/",
@@ -196,8 +243,16 @@
         "importer": 7,
         "independently_repeated": true
       },
-      "actual_source_factory_verified": false,
-      "principle": "Original current read handlers plus dedicated demand worker on verified new own DB. Original private authentication unchanged; no fabricated identity, full server startup or financial/provider action. All allowlisted actual source routes must exist."
+      "actual_source_factory_verified": true,
+      "principle": "Original current read handlers plus dedicated demand worker on verified new own DB. Original private authentication unchanged; no fabricated identity, full server startup or financial/provider action. All allowlisted actual source routes must exist.",
+      "remote_tests": {
+        "importer": 7,
+        "http_guard": 11,
+        "passed": true,
+        "completed_at_utc": "2026-11-25T15:52:44.028523+00:00"
+      },
+      "installed_evidence_commit": "70e3d9b0b2675794faebc9a784151811e430fe21",
+      "actual_source_factory_limit": "Constructor and 41 method/path mounts only; no lifespan, serving requests, DB/auth network or snapshot binding exercised."
     },
     "remote_loss": {
       "observed_at_utc": "2026-11-25T15:04:27Z",
@@ -227,7 +282,12 @@
       "genuine_source_connection_performed": false,
       "live_capture_verified": false,
       "permission_delta": "Canonical denied_permissions retained for owner and team; exact original movements denial regression passes.",
-      "remote_verification": "Earlier48-test bundle passed remotely at15:25:06Z; final49-test permission delta must be deployed/tested before credential input."
+      "remote_verification": "Final 49 tests passed remotely at 2026-11-25T15:52:44.028523Z as part of the 67-test combined gate.",
+      "installed_evidence_commit": "70e3d9b0b2675794faebc9a784151811e430fe21",
+      "hidden_prompt_waiting": true,
+      "hidden_prompt_label": "Source MongoDB URI (hidden; not saved):",
+      "input_policy": "User enters credential directly into the controlling-terminal hidden prompt via manual takeover; never chat, model-visible tools, browser credential extraction, CLI argument or environment.",
+      "private_output_path_disclosure": "Excluded from public evidence; inspect task-owned directory only after user returns. Partial captures are not reusable."
     },
     "storage_recovery": {
       "working_root": "/var/tmp/mezan-pr2095-preview-20261125",
@@ -245,7 +305,25 @@
       "expected_mounted_method_paths": 41,
       "requires_exact_source_and_runtime_manifest": true,
       "mode": "construct only; installed runtime guard plus denial of all network and filesystem mutation; no lifespan/requests",
-      "run": false
+      "run": true,
+      "passed": true,
+      "observed": {
+        "auth_routes": 4,
+        "demand_release_routes": 1,
+        "fee_get_routes": 2,
+        "gate": "factory_construction_only",
+        "io_attempts": {
+          "filesystem_mutation": 0,
+          "network": 0
+        },
+        "lifespan_started": false,
+        "mounted_routes": 41,
+        "ok": true,
+        "product_get_routes": 34,
+        "served_requests": 0,
+        "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41"
+      },
+      "completed_at_utc": "2026-11-25T15:52:44.028523+00:00"
     }
   },
   "shared_release": {
@@ -268,7 +346,9 @@
       "platform_completed_observed_at_utc": "2026-11-25T15:13:57.582Z",
       "original_verifier_started_at_utc": "2026-11-25T15:16:47.037626Z",
       "closure_observed": false,
-      "action": "Do not republish, start another verifier, close or modify foreign lease."
+      "action": "Do not republish, start another verifier, close or modify foreign lease.",
+      "rechecked_at_utc": "2026-11-25T15:56:37Z",
+      "latest_branch_still": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486"
     }
   },
   "acceptance": {
@@ -280,7 +360,7 @@
     "production_performance_fix": "unverified",
     "measurement_cohort": "Eight operational views, twelve report tabs and eight listed operational specialized destinations. Additional settings/inventory/legacy links are not covered. Specialized data-readiness and inner-view commitment need separate evidence; observer shell timing alone is insufficient."
   },
-  "next_safe_action": "Deploy/hash-verify final native exporter and importer/runtime packages, rerun49/7/11 focused tests with remote-compatible interpreters, and construct the actual source router factory under the existing guard with no lifespan/network/data. Resolve only concrete integration failures. Recheck original release guard before own public Preview activation. Prepare a new private hidden-TTY URI prompt only after concrete tooling preflight; never extract browser credentials. Actual capture/import/metrics remain unperformed.",
+  "next_safe_action": "User enters source Mongo URI directly into the already-running hidden TTY prompt; use manual takeover and never collect the value in chat. After return inspect only sanitized completion and verify full native manifest. Do not reuse partial output. If complete, recheck original guard and own ports before public Preview activation; import to new own Mongo only, verify binding/current API/normal authentication, then measure frozen A/B cohort. Do not infer foreign lease closure.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
   "evidence_branch_is_deployable": false,
   "history": [
@@ -318,7 +398,12 @@
       "checkpoint": "b3f2e87bb6c36f4446a51411c95dfac1a348948c",
       "state": "native_exporter_reviewed_restored_source_importer_runtime_review_pending",
       "notes": "Initial reviewed48-test capture bundle. One final minimal denied_permissions field was added for original legacy/movements denial semantics; final49-test producer is now pinned by the reviewed importer/runtime. No capture used older bundle."
+    },
+    {
+      "checkpoint": "70e3d9b0b2675794faebc9a784151811e430fe21",
+      "state": "reviewed_capture_import_read_runtime_frozen_remote_preflight_pending",
+      "notes": "All final tools then deployed and hash-verified remotely. 49+7+11 tests and guarded actual-source 41-route constructor passed; real capture remains absent. Two ephemeral test-runner formatting/count-parsing errors were corrected before final successful receipt; frozen product/tool bundles did not change."
     }
   ],
-  "checkpoint_at_utc": "2026-11-25T15:41:16Z"
+  "checkpoint_at_utc": "2026-11-25T15:56:37Z"
 }

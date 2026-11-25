@@ -1,0 +1,242 @@
+{
+  "schema": 1,
+  "task": "OPERATIONAL-ACCOUNTING-NAVIGATION-20261124",
+  "observed_at_utc": "2026-11-25T15:56:37Z",
+  "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
+  "source_tree": "436199d239a75910d94d441e9eb47408aea80080",
+  "frontend": {
+    "candidate_running_verified": false,
+    "real_latency_measured": false,
+    "known_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
+    "admin_saved_session": "Authenticated Emergent admin and independent cloud code-server terminal available.",
+    "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
+    "frontend_supervisor": "FATAL, exited too quickly",
+    "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
+    "known_failure": "No real dataset/current API/frontend acceptance yet. Final tools and actual factory verified remotely; hidden-TTY native source URI prompt is now waiting. Foreign lease closure remains unproven; do not activate public Preview until original guard permits.",
+    "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
+    "candidate_source_prepared": true,
+    "source_preparation_attempt": "Exact source restored on2026-11-25T15:08:46Z, sameHEAD/tree, tracked-clean, no backend.env. Moved only task files to /var/tmp after persistent /root-/app partition ENOSPC.",
+    "missing_runtime": "Pinned Node/Yarn and frozen dependencies restored; own Mongo/API/worker/frontend processes still require activation after appropriate guard and data checks.",
+    "local_backend_routing": {
+      "live": {
+        "status": 200,
+        "mime": "application/json"
+      },
+      "unauthenticated_auth_me": {
+        "status": 401,
+        "mime": "application/json"
+      },
+      "current_workspace_bootstrap": {
+        "status": 404,
+        "mime": "application/json"
+      }
+    },
+    "candidate_source_directory": "/var/tmp/mezan-pr2095-preview-20261125/source",
+    "existing_backend_isolation": "Existing October backend and P01 data untouched; loopback database, separate signing, role/password/attempt protections, external egress blocked and automatic workers disabled remain as inspected.",
+    "runtime_scope": "No current task-owned frontend or database process. Earlier source-serving Vite browser integration remains historical evidence only.",
+    "frontend_process": {
+      "pid_at_start": 25822,
+      "port": 3000,
+      "pid_file": "/tmp/mezan-pr2095-preview-20261125/frontend.pid",
+      "log": "/tmp/mezan-pr2095-preview-20261125/frontend.log",
+      "supervisor_changed": false,
+      "managed_by_supervisor": false,
+      "host_restart_survival": false,
+      "started_at_utc": "2026-11-25T13:32:28.004502Z",
+      "running": false,
+      "receipt_status": "Historical only; source directory/PID files no longer exist. Never act on the old PID without fresh process identity."
+    },
+    "data_feasibility": {
+      "p01": "Existing private fixture dataset is not representative; preserve it.",
+      "other_local_database": "Order volume exists but operational_balance_states_v1 is absent; do not manufacture state from projected report JSON.",
+      "production_browser": "Existing owner session permits protected read-only GETs; freshness confirms a real active saved state.",
+      "cross_origin_candidate_to_production": "Production does not allow Preview origin; no CORS, authentication or proxy change performed.",
+      "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
+      "official_admin_viewer": "User completed secure browserAuth; Production connection succeeded and canonical state/audit collections are present. Selecting the state collection returnedHTTP500; one normal refresh also failed and old collection rows remained visible. No stale rows copied. Advanced options expose new-document only, not export; no WebMCP tools. Connection credential was never exposed to the assistant.",
+      "existing_bson_backup": "Bounded read-only search of known prior task directories found no BSON/mongodump/archive copy. Exact repository/checkpoint search also found no canonical export artifact.",
+      "native_capture": "Final permission-preserving 49-test exporter installed/hash-verified and passed remotely. New exclusive private output path and actual hidden-TTY prompt are ready. User URI entry and genuine capture/import remain outstanding."
+    },
+    "private_observer": {
+      "files": "preview-tools/",
+      "module_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
+      "prepared": true,
+      "installed_remotely": true,
+      "browser_verified": false,
+      "real_samples": 0,
+      "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group.",
+      "installed_evidence_commit": "887e67e8b62bcbe9e86cd7f102451fbb19b7acc1",
+      "manifest_sha256": "97ebb7bd773af1796b97a5484d6a19ac10d83a3f0d98f749174de79dcb095432",
+      "observed_ingress_host": "salla-analytics.cluster-9.preview.emergentcf.cloud",
+      "temporary_asset_host_logging": false,
+      "empty_export_verified": {
+        "source_sha": "9a851854132bd71be922c4aae24b4cc20a546e41",
+        "observer_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
+        "samples": 0,
+        "groups": 0,
+        "longtask_supported": true,
+        "resource_supported": true
+      },
+      "runtime_integration_limit": "Earlier login/panel/empty-export verification is historical only after remote reset. Authenticated accounting selectors and real timings remain unmeasured.",
+      "browser_verified_historical": true,
+      "restored_source_package_verified": true
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "platform": "linux-arm64",
+      "cache": "/var/tmp/mezan-pr2095-preview-20261125/cache",
+      "receipt": "/var/tmp/mezan-pr2095-preview-20261125/toolchain.json",
+      "frozen_install_completed": true,
+      "frozen_install_completed_historical": true,
+      "restore_state": "Restored pinned frozen install exit0 at2026-11-25T15:16:02.993157Z under own /var/tmp root."
+    },
+    "existing_owner_identity_match": true,
+    "private_mongo": {
+      "ready": false,
+      "running": false,
+      "port": 27019,
+      "bind_ip": "127.0.0.1",
+      "replica_set": "mezan_pr2095_private",
+      "members": [
+        "127.0.0.1:27019"
+      ],
+      "planned_directory": "/var/tmp/mezan-pr2095-preview-20261125/mongo/data",
+      "cache_gb": 0.25,
+      "source_data_imported": false,
+      "old_p01_changed": false,
+      "historical_verification": "Former own Mongo7.0.45/PID49277 passed snapshot+majority,journal transaction probe before /tmp runtime loss. That readiness is expired."
+    },
+    "private_current_api": {
+      "prepared": true,
+      "prepared_in_progress": false,
+      "running": false,
+      "planned_port": 8002,
+      "files": "preview-runtime-tools/",
+      "bundle_manifest_sha256": "4742718a69563fdd8fd4129e884bd268870f37da8c997935463cfdfa3bcb372d",
+      "importer_sha256": "b3f108c352969dd231e905b4eb0df07176743857d5fb89b5bf6f4b011b60d5d8",
+      "coverage_policy_sha256": "c2825fca60808be20e34fc99c35a724d1b13032e0e50584208d40e55228cf522",
+      "source_contract_sha256": "2d82e8cd81515f2cea82575b1765076d3374f9995081ecb75700577f92f62db5",
+      "local_tests": {
+        "http_guard": 11,
+        "importer": 7,
+        "independently_repeated": true
+      },
+      "actual_source_factory_verified": true,
+      "principle": "Original current read handlers plus dedicated demand worker on verified new own DB. Original private authentication unchanged; no fabricated identity, full server startup or financial/provider action. All allowlisted actual source routes must exist.",
+      "remote_tests": {
+        "importer": 7,
+        "http_guard": 11,
+        "passed": true,
+        "completed_at_utc": "2026-11-25T15:52:44.028523+00:00"
+      },
+      "installed_evidence_commit": "70e3d9b0b2675794faebc9a784151811e430fe21",
+      "actual_source_factory_limit": "Constructor and 41 method/path mounts only; no lifespan, serving requests, DB/auth network or snapshot binding exercised."
+    },
+    "remote_loss": {
+      "observed_at_utc": "2026-11-25T15:04:27Z",
+      "original_root_absent": true,
+      "ports": {
+        "3000": false,
+        "8001": true,
+        "8002": false,
+        "27018": true,
+        "27019": false
+      },
+      "cause": "Not established. Terminal connection expired and state/files changed; do not infer which external operation removed them.",
+      "source_data_lost": false
+    },
+    "native_exporter": {
+      "directory": "preview-data-tools/",
+      "ready_for_remote_preflight": true,
+      "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
+      "offline_tests_passed": 49,
+      "independently_verified": true,
+      "scopes": 56,
+      "collections": 55,
+      "source_contract_sha256": "2d82e8cd81515f2cea82575b1765076d3374f9995081ecb75700577f92f62db5",
+      "exporter_sha256": "dce03398b07be43529baf84298c17786d159de6bbee2f4a200db2d913a6b5643",
+      "projection_module_sha256": "d0f4117c97cc63b7ca81e1e2e8d9f512718ac7244cc33449a589933e372b18e8",
+      "bundle_manifest_sha256": "aee30b963d1f687e1513032ab7840df1910747084613f4559c41fb8b4a366462",
+      "genuine_source_connection_performed": false,
+      "live_capture_verified": false,
+      "permission_delta": "Canonical denied_permissions retained for owner and team; exact original movements denial regression passes.",
+      "remote_verification": "Final 49 tests passed remotely at 2026-11-25T15:52:44.028523Z as part of the 67-test combined gate.",
+      "installed_evidence_commit": "70e3d9b0b2675794faebc9a784151811e430fe21",
+      "hidden_prompt_waiting": true,
+      "hidden_prompt_label": "Source MongoDB URI (hidden; not saved):",
+      "input_policy": "User enters credential directly into the controlling-terminal hidden prompt via manual takeover; never chat, model-visible tools, browser credential extraction, CLI argument or environment.",
+      "private_output_path_disclosure": "Excluded from public evidence; inspect task-owned directory only after user returns. Partial captures are not reusable."
+    },
+    "storage_recovery": {
+      "working_root": "/var/tmp/mezan-pr2095-preview-20261125",
+      "persistent_pointer": "/root/mezan-pr2095-preview-20261125/RECOVERY-PATH.json",
+      "persistent_partition_mib": 9979,
+      "observed_persistent_free_after_own_cleanup_mib": 413,
+      "working_partition_free_observed_mib": 260815,
+      "changed_foreign_files": false,
+      "cleanup": "Only task-created generated node/yarn caches were removed; own source/tooling/receipts moved. All source/evidence remains git-backed. /var/tmp runtime still requires reconstruction after host reset.",
+      "foreign_status_correlation": "Foreign public record reports its initial Git status preflight failed for disk space at15:14:59Z during our own persistent-partition bootstrap; no original verify ran then. Our own cache cleanup restored413MiB, and foreign retry began15:16:47Z. No foreign files were deleted or reset."
+    },
+    "factory_preflight": {
+      "file": "preview-integration-tools/factory_preflight.py",
+      "sha256": "ed1a277d31ff028dbc13ec6d202c4a6561883265e9d9ad4113f7faca6d159abc",
+      "expected_mounted_method_paths": 41,
+      "requires_exact_source_and_runtime_manifest": true,
+      "mode": "construct only; installed runtime guard plus denial of all network and filesystem mutation; no lifespan/requests",
+      "run": true,
+      "passed": true,
+      "observed": {
+        "auth_routes": 4,
+        "demand_release_routes": 1,
+        "fee_get_routes": 2,
+        "gate": "factory_construction_only",
+        "io_attempts": {
+          "filesystem_mutation": 0,
+          "network": 0
+        },
+        "lifespan_started": false,
+        "mounted_routes": 41,
+        "ok": true,
+        "product_get_routes": 34,
+        "served_requests": 0,
+        "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41"
+      },
+      "completed_at_utc": "2026-11-25T15:52:44.028523+00:00"
+    }
+  },
+  "release": {
+    "guard_active_observed": true,
+    "owner": null,
+    "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "owner_state": "Foreign protocol-v5 release lease active; untouched. No task service restart, /app edit or release action performed.",
+    "this_task_prepared": false,
+    "this_task_merged": false,
+    "this_task_published": false,
+    "production_changed_by_this_task": false,
+    "latest_guard_probe": "Most recent original status command timed out after20seconds. Last completed status remains foreignactive:true at source6d4aa546259e9cad1cc379d4a464e245af6cfa91/deploymentf3d8ee39e60ed087f0a4d6debf844d128e92a758. Do not infer closure or start another verifier.",
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "latest_probe_completed": false,
+    "latest_probe_timeout_seconds": 20,
+    "foreign_public_record": {
+      "checkpoint": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486",
+      "status": "E12_PLATFORM_PUBLISHED_ORIGINAL_VERIFY_IN_PROGRESS",
+      "recorded_at_utc": "2026-11-25T15:24:07Z",
+      "platform_completed_observed_at_utc": "2026-11-25T15:13:57.582Z",
+      "original_verifier_started_at_utc": "2026-11-25T15:16:47.037626Z",
+      "closure_observed": false,
+      "action": "Do not republish, start another verifier, close or modify foreign lease.",
+      "rechecked_at_utc": "2026-11-25T15:56:37Z",
+      "latest_branch_still": "0f13ed70c2edd56017840f9fcdc5ff51ab00b486"
+    }
+  },
+  "acceptance": {
+    "source_and_regression_checks": "confirmed",
+    "real_preview_identity_and_api": "Earlier frontend-only identity verification is historical; candidate runtime restore and canonical data/current API remain pending.",
+    "cold_warm_route_interactivity_p50_p95": "unverified",
+    "all_accounting_sections_and_twelve_tabs_real_data": "unverified",
+    "backend_queue_build_mongo_timings": "unverified",
+    "production_performance_fix": "unverified",
+    "measurement_cohort": "Eight operational views, twelve report tabs and eight listed operational specialized destinations. Additional settings/inventory/legacy links are not covered. Specialized data-readiness and inner-view commitment need separate evidence; observer shell timing alone is insufficient."
+  },
+  "privacy": "Sanitized technical evidence only. No credentials, owner identifiers, financial records or raw private snapshot contents."
+}
