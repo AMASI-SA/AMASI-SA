@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:06:32.792Z",
+  "recorded_at": "2026-11-25T00:17:25.213Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "PR2123 merged normally as D6323017fbf9ba160c536a94f408507435786412a. Exact parents/tree/intent-only lineage PASS. Required exact-D push CI running; actual host rehearsal and publication pending. Prior PR2120 verification/closure complete.",
+  "status": "D6323017fbf9ba160c536a94f408507435786412a merged and all11 exact-D checks PASS. Final current-host helper/envelope and single-launch supervisor independently reviewed. Approved for one host rehearsal subject to the original fresh guards; no own lease or publication yet.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -210,8 +210,27 @@
       "cancelled_note": "Ready event superseded two scoped Snapchat workflows; replacement scope jobs pass and their out-of-scope dependent jobs skip. Never treat historical cancelled records as pass."
     },
     "deployment_D": {
-      "status": "RUNNING",
-      "scope": "Exact-D push workflows; independent review in progress. B tests are preserved separately."
+      "status": "PASS",
+      "head": "6323017fbf9ba160c536a94f408507435786412a",
+      "checks": 11,
+      "success": 11,
+      "failed": 0,
+      "pending": 0,
+      "attempt": 1,
+      "review": "pr2123-d-ci-review.json",
+      "rehearsal_review": "pr2123-d-ci-rehearsal-review.json",
+      "root_final_read": "pr2123-d-root-final-ci.json",
+      "host_steps_success_each": 21,
+      "HTTP_cases_each": 8,
+      "generated_files_equal": 387,
+      "public_files": 381,
+      "archive": {
+        "path": "PR2123-D-CI-EVIDENCE.zip",
+        "bytes": 139945,
+        "base64_length": 186596,
+        "blob": "932b4c63cbdff7ab2e09d07902e076b74f2e101a",
+        "sha256": "19db4f3424f080491fc175048095e4b463699058d234c8c7cd6ee390992a6f90"
+      }
     }
   },
   "pr": {
@@ -282,7 +301,7 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Complete exact-D CI and finalized helper/envelope independent review; hash-pin durable files and freshly revalidate original inactive guard, J checkout and bound live-process identities, then run one protected owned-clone/canonical rehearsal. No prepare or publish until rehearsal PASS.",
+  "next_safe_action": "Download immutable hash-pinned supervisor, invoke once with this exact evidence commit, retain bootstrap/worker/stage paths and inspect receipt. Original helper must freshly verify inactive guard, exact J/branch/clean state, bound live process/root/log identities,432 entries, required capacity and full clone/canonical original adapter proofs. Only complete PASS permits own prepare/prepublish and one publication.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -393,5 +412,37 @@
   "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
   "production_git_changed_by_this_candidate": true,
   "production_runtime_changed_by_this_candidate": false,
-  "final_host_observation": "pr2123-final-host-observation.json"
+  "final_host_observation": "pr2123-final-host-observation.json",
+  "operator_final": {
+    "status": "APPROVED_FOR_ONE_ATTEMPT_SUBJECT_TO_INTERNAL_FRESH_CHECKS",
+    "operator": {
+      "file": "pr2123_guarded_rehearsal.py",
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008"
+    },
+    "envelope": {
+      "file": "pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1"
+    },
+    "independent_review": "pr2123-final-pair-independent-review.json",
+    "supervisor": {
+      "file": "pr2123_rehearsal_supervisor.py",
+      "bytes": 6945,
+      "sha256": "4654a6c91c8deca9f080f4b6b5d4f1a629a440568db0df6966f4e4643d802823",
+      "independent_review": "pr2123-supervisor-independent-review.json"
+    },
+    "fresh_host_record": "pr2123-final-host-observation.json",
+    "external_gates_satisfied": true,
+    "run_started": false,
+    "lease_created": false,
+    "published": false,
+    "no_automatic_retry": true
+  },
+  "platform_baseline": {
+    "provider_version": "7191418",
+    "latest_finished_label_riyadh": "Nov25,01:42AM",
+    "republish_button_enabled_observed": true,
+    "scope": "Manage Overview read only; no paid chat or publication click."
+  }
 }

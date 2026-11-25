@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-11-25T00:16:10.946037+00:00",
+  "reviewer": "code_review",
+  "result": "PASS_STATIC_SUPERVISOR_NO_CODE_BLOCKER",
+  "scope": "Narrow local source and AST review of the thin supervisor only; no import, execution, tests, network, host access, or re-review of the original operator.",
+  "target": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123_rehearsal_supervisor.py",
+    "bytes": 6945,
+    "sha256": "4654a6c91c8deca9f080f4b6b5d4f1a629a440568db0df6966f4e4643d802823",
+    "git_blob": "2fccd66f4b08871faa49cf6a46f1c1c6c3e5d179"
+  },
+  "method": {
+    "full_source_read": true,
+    "ast_parse_pass": true,
+    "top_level_functions": 10,
+    "top_level_classes": 1,
+    "subprocess_popen_sites": 2,
+    "helper_popen_sites": 1,
+    "target_imported": false,
+    "target_executed": false,
+    "tests_run": false,
+    "network_used": false,
+    "host_accessed": false
+  },
+  "checks": [
+    {
+      "check": "immutable_download_scope",
+      "result": "PASS",
+      "lines": "20-28,123-139",
+      "detail": "Repository and operations path are fixed; commit accepts exactly 40 lowercase hex characters. Only the two literal pinned filenames are fetched. Redirects are rejected; no alternate URL or retry exists."
+    },
+    {
+      "check": "bounded_exact_inputs",
+      "result": "PASS",
+      "lines": "46-59,130-140",
+      "detail": "Each download reads at most expected length plus one, requires HTTP 200, and validates exact size and SHA256 before exclusive write. Worker repeats the pinned read with O_NOFOLLOW and regular-file check. Socket timeout is 30 seconds per network operation."
+    },
+    {
+      "check": "private_stage_and_names",
+      "result": "PASS",
+      "lines": "20-23,35-43,87-95,126,142,161-162",
+      "detail": "mkdtemp uses /tmp with task prefix and umask 077. Worker requires a real, current-euid-owned directory at a direct /tmp child with mode 0700 and canonical path. Writes are exclusive; helper retains its task-specific filename, so no operator.py shadow is created. Exclusive worker-start receipt prevents another worker invocation in the same stage."
+    },
+    {
+      "check": "compile_and_single_helper",
+      "result": "PASS",
+      "lines": "98-108,140,147-152",
+      "detail": "Pinned helper is compiled without execution before background launch and again before the sole helper Popen. Helper command is an argv list, uses current Python with -B, cwd /app, DEVNULL stdin and close_fds. No shell is invoked."
+    },
+    {
+      "check": "python_environment",
+      "result": "PASS",
+      "lines": "62-67,103-106,148-152,163-164",
+      "detail": "Both children remove PYTHONOPTIMIZE, PYTHONHOME and PYTHONPATH, set PYTHONDONTWRITEBYTECODE=1 and use -B. main rejects optimized Python. This is the stated Python-variable sanitization, not a claim of a complete environment allowlist."
+    },
+    {
+      "check": "background_evidence",
+      "result": "PASS",
+      "lines": "93-120,143-158",
+      "detail": "Background worker starts a new session and captures supervisor.log. Helper stdout/stderr are separate exclusive files, flushed and fsynced. Normal completion or a caught Exception records helper PID, actual return code, worker error and log sizes/hashes. Parent explicitly reports STARTED_NOT_RESULT."
+    },
+    {
+      "check": "no_extra_lifecycle",
+      "result": "PASS",
+      "lines": "1-173",
+      "detail": "Only background-worker Popen and one helper Popen exist. There is no automatic retry, cleanup, rollback, kill, service restart, guard/lease creation, publish, or foreign deletion performed by this wrapper."
+    }
+  ],
+  "pinned_pair": [
+    {
+      "file": "pr2123_guarded_rehearsal.py",
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008",
+      "matches_local_final_pair": true
+    },
+    {
+      "file": "pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1",
+      "matches_local_final_pair": true
+    }
+  ],
+  "blockers": [],
+  "limits": [
+    "Static review only; successful download, launch, rehearsal, or publication is not established.",
+    "The 30-second urllib timeout is a socket-operation timeout, not an independent whole-download wall-clock deadline; byte consumption is strictly capped.",
+    "No exit receipt is guaranteed after abrupt worker kill, host loss, or failure to persist evidence. A launch receipt is not a rehearsal result; the original helper receipt remains required.",
+    "One-helper property is per private stage. A new manual launcher invocation creates another attempt; no automatic repeat is present.",
+    "Exact-D CI and final operator/envelope review are external prerequisites. Root reports D CI 11/11 PASS; this review did not independently query CI. Fresh host/foreign/lock/lease and original guard checks remain in the pinned helper."
+  ],
+  "gate_owner": "root; this review changes no release state or authorization"
+}

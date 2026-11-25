@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "task": "PR2123 final helper and envelope preparation",
+  "prepared_at_utc": "2026-11-25T00:06:09.658757+00:00",
+  "prepared_by": "rehearsal_refresh",
+  "result": "PASS_STATIC_EQUIVALENCE_EXECUTION_BLOCKED_PENDING_GATES",
+  "execution_allowed": false,
+  "scope": "Local preparation and full text/AST equivalence only. Target was neither imported nor executed; root remains sole executor after final independent review and gates.",
+  "references": [
+    {
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT.py",
+      "bytes": 43593,
+      "sha256": "951c1758d0d13a45c2cbf9d1a4c51498dc9adbb5dfa104afcc240215a64dc1ba",
+      "git_blob": "40b9582958aa2bae536845872320c4c59fdc12e3"
+    },
+    {
+      "file": "pr2123-envelope-LIVE-REFRESHED-DRAFT.json",
+      "bytes": 1360,
+      "sha256": "e784d5fc1840714fd702f99c8d870b15349b96b24c0ccf3b6c739a987a1c4ff9",
+      "git_blob": "630e5d847ea322c7a9f470b5a40c8e87868e4e2a"
+    },
+    {
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT-independent-review.json",
+      "bytes": 8469,
+      "sha256": "8d58c64aafc9b11e4ca942c644928089765b8e70a80c289e56a09242b46d8195",
+      "git_blob": "672bed709851cc73b473e64e3167a405f836a146"
+    },
+    {
+      "file": "pr2123-final-host-observation.json",
+      "bytes": 1792,
+      "sha256": "7cb5935956798d118e57bb01120214e33e510e9df156798136467428b5fda9da",
+      "git_blob": "4414919acf7dc2a7ad7aa657a21587f1bbe35756"
+    }
+  ],
+  "final_pair": [
+    {
+      "file": "pr2123_guarded_rehearsal.py",
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008",
+      "git_blob": "77f1ea7100f5f5dbc49eab6c848c340ed31cff99"
+    },
+    {
+      "file": "pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1",
+      "git_blob": "77c9580e586064198b2342d20ddce9a1d7aeb312"
+    }
+  ],
+  "diffs": [
+    {
+      "file": "pr2123_guarded_rehearsal.diff",
+      "bytes": 597,
+      "sha256": "24ab44909feae975f62417ab4146015972473e3b7eb0845678cc18f7395b7e07",
+      "git_blob": "516b9ff6eb6afaf31bc4e5fb0a42000937b7667d"
+    },
+    {
+      "file": "pr2123-reviewed-envelope.diff",
+      "bytes": 618,
+      "sha256": "49ab0660f7ae122e3c181f9a2b40ac2d80a3a7c4f239ef2ad99eefa4f988cafd",
+      "git_blob": "4896c37f7f89e231d95dd0f06dfe224daeea500a"
+    }
+  ],
+  "source_changes": {
+    "operator": "Module docstring title and explicit execution-pending sentence only; no other byte changed.",
+    "old_title": "PR2123 LIVE REFRESHED DRAFT (DO NOT EXECUTE): owned clone rehearsal, then guarded /app FF and adapter.",
+    "new_title": "PR2123 final guarded rehearsal: owned clone rehearsal, then guarded /app FF and adapter.\nExecution pending fresh live identities, exact-D CI, and independent final-pair review.",
+    "envelope_field": "deployment_sha",
+    "old_deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
+    "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "deployment_provenance": "Root reports actual normal PR2123 merge. This preparer did not access GitHub or independently prove its parents, tree or CI."
+  },
+  "static_checks": {
+    "ast_parse": "PASS",
+    "all_non_docstring_AST_nodes_identical": true,
+    "all_36_top_level_functions_AST_identical": true,
+    "reverse_title_substitution_recovers_complete_source_exactly": true,
+    "reverse_D_substitution_recovers_complete_envelope_exactly": true,
+    "envelope_only_deployment_sha_changed": true,
+    "all_runtime_identity_pins_unchanged": true,
+    "live_DB_and_log_paths_policies_and_functions_unchanged": true,
+    "expected_nonignored_count_432_unchanged": true,
+    "draft_warning_removed_from_module_docstring": true,
+    "final_pair_modes": "0600",
+    "historical_inputs_preserved": true,
+    "fresh_saved_root_observation_matches_all_existing_live_pins": true,
+    "fresh_saved_root_premerge_observation_matches_HEAD_count_and_inactive_lease_expectations": true
+  },
+  "root_reported_host_checkpoint": {
+    "source": "Root-provided exact saved observation; this preparer made no host calls.",
+    "premerge": {
+      "branch": "hotfix/prod-snap-meta-final",
+      "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "lease_directory_absent": true,
+      "nonignored_untracked_count": 432,
+      "observed_at": "2026-11-25T00:03:26.208616+00:00",
+      "original_status": {
+        "active": false
+      },
+      "status_exit_code": 0,
+      "status_stdout_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+      "tracked_clean": true
+    },
+    "live_observed_at": "2026-11-25T00:05:01.352578+00:00",
+    "live_process_executable_directories_and_log_identities_match_existing_pins": true,
+    "explicit_dbpath_and_real_directories_verified_in_root_record": true,
+    "log_bytes_observed": 19419714,
+    "log_size_limit": "Observation only; the unchanged helper establishes a fresh full log-prefix baseline at actual execution.",
+    "runtime_identity_revalidation": "Still required by unchanged helper; any replacement blocks, without automatic rebinding."
+  },
+  "execution_blockers": [
+    "Applicable exact-D CI must pass for 6323017fbf9ba160c536a94f408507435786412a.",
+    "Independent final-pair review must approve these exact helper/envelope bytes and fresh binding evidence."
+  ],
+  "actions": {
+    "helper_import": false,
+    "helper_execution": false,
+    "tests": false,
+    "host_calls": false,
+    "github_mutations": false,
+    "lease_actions": false,
+    "merge": false,
+    "publish": false,
+    "historical_file_changes": false
+  },
+  "execution_runtime_preconditions": [
+    "Every reviewed live process/root/executable/log identity must still match at execution. Any mismatch blocks; no automatic rebind.",
+    "Root must preserve canonical release gates, fresh inactive/absent-lease state, exact source/branch/count, capacity and receipts; exact downloaded bytes must match before a single invocation."
+  ]
+}

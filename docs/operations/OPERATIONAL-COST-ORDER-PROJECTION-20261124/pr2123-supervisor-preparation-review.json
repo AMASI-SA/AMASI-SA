@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "prepared_at_utc": "2026-11-25T00:13:28.586534+00:00",
+  "prepared_by": "rehearsal_refresh",
+  "source": {
+    "file": "pr2123_rehearsal_supervisor.py",
+    "bytes": 6945,
+    "sha256": "4654a6c91c8deca9f080f4b6b5d4f1a629a440568db0df6966f4e4643d802823",
+    "git_blob": "2fccd66f4b08871faa49cf6a46f1c1c6c3e5d179",
+    "mode": "0600"
+  },
+  "status": "STATIC_COMPILE_PASS_PENDING_INDEPENDENT_SUPERVISOR_REVIEW",
+  "scope": "Local source preparation and AST/compile only; source was not imported or executed.",
+  "external_gates": {
+    "at_request": "Exact-D CI and final-pair review were pending.",
+    "latest_root_update": "Exact-D CI PASS11/11 and independent final-pair PASS reported by root; this preparer did not query them.",
+    "remaining": "Independent review and retention of this exact supervisor before root invokes it once with the actual immutable evidence commit."
+  },
+  "contract": {
+    "argument": "One lowercase 40-hex immutable evidence commit.",
+    "downloads": "Only the two hardcoded raw.githubusercontent.com/AMASI-SA/AMASI-SA/<commit>/docs/operations/OPERATIONAL-COST-ORDER-PROJECTION-20261124 paths; redirects rejected, no retries.",
+    "bounds": "30-second urllib socket timeout per download; each read limited to its expected length + 1, with exact length and SHA256 required.",
+    "helper_pin": {
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008"
+    },
+    "envelope_pin": {
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1"
+    },
+    "stage": "Unique owned /tmp/mezan-pr2123-supervisor-* directory, mode0700, private files under umask0077.",
+    "execution": "One detached worker per launcher invocation; exclusive worker-start receipt refuses a second worker in that stage. Worker rechecks pinned inputs and compile only before one helper subprocess.",
+    "environment": "Helper cwd=/app, -B and PYTHONDONTWRITEBYTECODE=1; PYTHONOPTIMIZE/PYTHONHOME/PYTHONPATH absent from child environment.",
+    "receipts": "Launch worker PID/path, verified input hashes, worker start/exit, helper returncode, stdout/stderr files with bytes/SHA256; supervisor.log captures worker-level exceptions.",
+    "lifecycle": "No additional status/prepare/publish, no global timeout, no retry/cleanup/rollback/kill-other operation."
+  },
+  "independent_review_plan": [
+    "Read the exact full source and confirm the only downloaded URLs and exact final-pair pins.",
+    "Confirm detached single helper invocation, cwd/environment, private stage and exclusive worker-start receipt.",
+    "Confirm receipt/output capture does not reinterpret start as success, and no extra lifecycle or process termination is added."
+  ],
+  "verification": {
+    "ast_parse": "PASS",
+    "compile_only": "PASS",
+    "import": false,
+    "execution": false,
+    "tests": false,
+    "host_access": false,
+    "api_access": false,
+    "remote_mutations": false
+  },
+  "limits": "No live download, detachment or helper run was performed. External gates remain caller responsibility; absence of an exit receipt is not success and does not authorize retry."
+}

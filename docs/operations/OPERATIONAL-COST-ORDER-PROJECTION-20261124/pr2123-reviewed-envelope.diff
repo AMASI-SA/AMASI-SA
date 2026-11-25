@@ -1,0 +1,11 @@
+--- pr2123-envelope-LIVE-REFRESHED-DRAFT.json
++++ pr2123-reviewed-envelope.json
+@@ -2,7 +2,7 @@
+   "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+   "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+   "intent_sha": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+-  "deployment_sha": "DRAFT_UNSET_DEPLOYMENT_SHA_FOR_PR2123",
++  "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+   "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+   "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+   "initial_head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",

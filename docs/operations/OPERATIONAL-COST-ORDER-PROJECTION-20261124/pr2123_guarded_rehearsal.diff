@@ -1,0 +1,10 @@
+--- pr2123-operator-LIVE-REFRESHED-DRAFT.py
++++ pr2123_guarded_rehearsal.py
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env python3
+-"""PR2123 LIVE REFRESHED DRAFT (DO NOT EXECUTE): owned clone rehearsal, then guarded /app FF and adapter.
++"""PR2123 final guarded rehearsal: owned clone rehearsal, then guarded /app FF and adapter.
++Execution pending fresh live identities, exact-D CI, and independent final-pair review.
+ 
+ External prerequisite: root has reviewed this helper, its exact envelope, and successful exact-D CI.
+ All logs, clone, cache and generated-output backups stay in a unique owned /tmp stage.

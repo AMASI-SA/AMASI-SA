@@ -1,0 +1,27 @@
+{
+  "result": "PASS",
+  "archive": "/workspace/scratch/39c6dec7c37f/release-preparation/PR2123-D-CI-EVIDENCE.zip",
+  "bytes": 139945,
+  "sha256": "19db4f3424f080491fc175048095e4b463699058d234c8c7cd6ee390992a6f90",
+  "git_blob_sha1": "932b4c63cbdff7ab2e09d07902e076b74f2e101a",
+  "member_count": 7,
+  "members": [
+    "MANIFEST.json",
+    "pr2123-d-ci-review.json",
+    "pr2123-d-ci-rehearsal-review.json",
+    "pr2123-d-root-final-ci.json",
+    "pr2123-d-ci-host-downloads.json",
+    "pr2123-d-ci-host20-evidence.zip",
+    "pr2123-d-ci-host24-evidence.zip"
+  ],
+  "manifest_local_path": "/workspace/scratch/39c6dec7c37f/release-preparation/PR2123-D-CI-MANIFEST.json",
+  "manifest_bytes": 5357,
+  "manifest_sha256": "fad38f9c154af87d4eb48126e388c0315109f3dc0663b853c45c85abf3a186d3",
+  "verification": {
+    "outer_CRC": "PASS",
+    "all_manifest_member_sizes_and_SHA256": "PASS",
+    "source_file_byte_identity": "PASS",
+    "both_original_nested_ZIP_CRC": "PASS",
+    "generated_build_tree_ZIPs_excluded": true
+  }
+}

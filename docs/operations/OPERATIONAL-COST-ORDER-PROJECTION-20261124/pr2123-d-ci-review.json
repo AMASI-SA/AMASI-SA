@@ -1,0 +1,454 @@
+{
+  "schema_version": 1,
+  "kind": "pr2123_exact_merged_D_ci_independent_review",
+  "result": "PASS",
+  "observed_at_utc": "2026-11-25 00:11:53 UTC",
+  "completed_at_utc": "2026-11-25T00:12:58.648843+00:00",
+  "scope": "Read-only review of exact-D GitHub push check runs, original workflow job records/logs and original downloaded CI artifacts; no workflow trigger/rerun, source edit, host action, merge, publish, release-helper execution or financial write.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2123,
+  "identities": {
+    "A2": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "B": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "J": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "D": "6323017fbf9ba160c536a94f408507435786412a",
+    "D_and_B_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "reviewed_intent_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+    "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+    "build_proof_sha256": "dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e"
+  },
+  "lineage": {
+    "result": "PASS",
+    "ordered_D_parents": [
+      "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "c71a0ba71e36a2306a0c4bce1822f39073e6984f"
+    ],
+    "D_tree_equals_frozen_B_tree": true,
+    "A2_is_merge_base": true,
+    "compare_status": "ahead",
+    "ahead_by": 2,
+    "behind_by": 0,
+    "compare_commits": [
+      "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+      "6323017fbf9ba160c536a94f408507435786412a"
+    ],
+    "changed_files": [
+      {
+        "path": "release/release-intent-v5.json",
+        "status": "modified",
+        "blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6"
+      }
+    ],
+    "A2_to_D_intent_only": true,
+    "source_urls": [
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/6323017fbf9ba160c536a94f408507435786412a",
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/e0726036bbfaa524d55f80dfea9f2a8f9facdbfe...6323017fbf9ba160c536a94f408507435786412a"
+    ]
+  },
+  "ci": {
+    "result": "PASS",
+    "exact_D_check_count": 11,
+    "completed_success": 11,
+    "pending": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "check_level_skipped": 0,
+    "actual_push_workflow_count": 3,
+    "workflow_attempts": [
+      1,
+      1,
+      1
+    ],
+    "workflow_runs": [
+      {
+        "id": 45515074202,
+        "name": "Mezan Release Readiness",
+        "event": "push",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-25T00:03:51Z",
+        "updated_at": "2026-11-25T00:07:21Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202"
+      },
+      {
+        "id": 45515074204,
+        "name": "Security Gate",
+        "event": "push",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-25T00:03:51Z",
+        "updated_at": "2026-11-25T00:08:06Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074204"
+      },
+      {
+        "id": 45515074198,
+        "name": "CodeQL",
+        "event": "push",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-25T00:03:51Z",
+        "updated_at": "2026-11-25T00:10:33Z",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074198"
+      }
+    ],
+    "checks": [
+      {
+        "id": 138873910040,
+        "name": "Emergent manual redeploy required",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:07:18Z",
+        "completed_at": "2026-11-25T00:07:21Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138873910040"
+      },
+      {
+        "id": 138872756166,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:04:53Z",
+        "completed_at": "2026-11-25T00:07:08Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138872756166"
+      },
+      {
+        "id": 138872756039,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:04:53Z",
+        "completed_at": "2026-11-25T00:07:16Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138872756039"
+      },
+      {
+        "id": 138872291040,
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:53Z",
+        "completed_at": "2026-11-25T00:04:10Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138872291040"
+      },
+      {
+        "id": 138872291030,
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:53Z",
+        "completed_at": "2026-11-25T00:04:06Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138872291030"
+      },
+      {
+        "id": 138872290956,
+        "name": "Backend preflight",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:53Z",
+        "completed_at": "2026-11-25T00:04:16Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138872290956"
+      },
+      {
+        "id": 138872290840,
+        "name": "Frontend dependency and CSP checks",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:53Z",
+        "completed_at": "2026-11-25T00:08:05Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074204/job/138872290840"
+      },
+      {
+        "id": 138872290729,
+        "name": "CodeQL (javascript-typescript)",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:53Z",
+        "completed_at": "2026-11-25T00:06:55Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074198/job/138872290729"
+      },
+      {
+        "id": 138872290726,
+        "name": "Frontend build",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:53Z",
+        "completed_at": "2026-11-25T00:04:50Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074202/job/138872290726"
+      },
+      {
+        "id": 138872290468,
+        "name": "Backend security contracts",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:54Z",
+        "completed_at": "2026-11-25T00:05:40Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074204/job/138872290468"
+      },
+      {
+        "id": 138872290368,
+        "name": "CodeQL (python)",
+        "head_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-25T00:03:54Z",
+        "completed_at": "2026-11-25T00:10:33Z",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45515074198/job/138872290368"
+      }
+    ],
+    "conditional_step_skips": {
+      "job": "Frontend build",
+      "job_id": 138872290726,
+      "step_names": [
+        "Freeze a candidate reviewed intent from the source commit",
+        "Retain the candidate reviewed intent"
+      ],
+      "reason": "Candidate-intent creation/retention steps are not applicable to a reviewed-intent push; full build/review validation and both Host rehearsals actually executed successfully."
+    },
+    "manual_redeploy_handoff": {
+      "job_id": 138873910040,
+      "status": "completed",
+      "conclusion": "success",
+      "meaning": "CI handoff completed; this job is not proof of a production publish."
+    }
+  },
+  "original_host_rehearsals": {
+    "result": "PASS",
+    "run_id": 45515074202,
+    "run_attempt": 1,
+    "event": "push",
+    "checkout_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "hosts": [
+      {
+        "host_node": "20.20.2",
+        "job_id": 138872756039,
+        "actual_checkout_D_logged": true,
+        "all_recorded_steps_executed_successfully": true,
+        "recorded_step_count": 21,
+        "adapter_git_metadata_absent": true,
+        "environment_file_timing": "Standalone environment file is captured before removing Git; during-adapter log proves git_directory_present=false.",
+        "host_yarn": "1.22.22",
+        "governed_toolchain": {
+          "node": "22.23.2",
+          "vite": "8.2.4",
+          "yarn": "1.22.22"
+        },
+        "two_clean_builds_match_reviewed_intent": true,
+        "http_cases_executed": 8,
+        "http_scope": [
+          "Canonical and cache-busted metadata, each Accept application/json and */*",
+          "Production Host and preview Host exact JSON metadata",
+          "Hashed asset immutable one-year cache",
+          "SPA shell exact HTML with no-store"
+        ],
+        "backend_isolated_health_identity_pass": true,
+        "generated_file_count": 387,
+        "public_frontend_file_bytes_verified": 381,
+        "nonpublic_headers_verified": [
+          "_headers",
+          "_headers.json"
+        ],
+        "generated_intent_identity_proof_exact": true,
+        "canonical_frontend_tree_exact": true,
+        "generated_tar_sha256": "e8db6f9fa59f6e91206ca2f153483de36efadaa0dd7a02292bc10deb0d80eb0f"
+      },
+      {
+        "host_node": "24.19.0",
+        "job_id": 138872756166,
+        "actual_checkout_D_logged": true,
+        "all_recorded_steps_executed_successfully": true,
+        "recorded_step_count": 21,
+        "adapter_git_metadata_absent": true,
+        "environment_file_timing": "Standalone environment file is captured before removing Git; during-adapter log proves git_directory_present=false.",
+        "host_yarn": "1.22.22",
+        "governed_toolchain": {
+          "node": "22.23.2",
+          "vite": "8.2.4",
+          "yarn": "1.22.22"
+        },
+        "two_clean_builds_match_reviewed_intent": true,
+        "http_cases_executed": 8,
+        "http_scope": [
+          "Canonical and cache-busted metadata, each Accept application/json and */*",
+          "Production Host and preview Host exact JSON metadata",
+          "Hashed asset immutable one-year cache",
+          "SPA shell exact HTML with no-store"
+        ],
+        "backend_isolated_health_identity_pass": true,
+        "generated_file_count": 387,
+        "public_frontend_file_bytes_verified": 381,
+        "nonpublic_headers_verified": [
+          "_headers",
+          "_headers.json"
+        ],
+        "generated_intent_identity_proof_exact": true,
+        "canonical_frontend_tree_exact": true,
+        "generated_tar_sha256": "84bd984095b0e9b5435dbb24472de9b9bd6744d6f54227bd80f3c418bdbd2328"
+      }
+    ],
+    "both_host_387_file_hash_maps_identical": true,
+    "original_artifacts": [
+      {
+        "label": "host20-evidence",
+        "artifact_id": 14977348935,
+        "name": "release-v5-clean-clone-evidence-host-20.20.2",
+        "zip_bytes": 63793,
+        "zip_sha256": "49c67c1f3d5b12baa5a9c6ab4427fdba83ca872744b4070251a44a4d8dfccce6",
+        "github_digest_matches": true,
+        "CRC_pass": true,
+        "workflow_run": {
+          "id": 45515074202,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "hotfix/prod-snap-meta-final",
+          "head_sha": "6323017fbf9ba160c536a94f408507435786412a"
+        },
+        "created_at": "2026-11-25T00:07:09Z",
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14977348935"
+      },
+      {
+        "label": "host24-evidence",
+        "artifact_id": 14977378747,
+        "name": "release-v5-clean-clone-evidence-host-24.19.0",
+        "zip_bytes": 63800,
+        "zip_sha256": "2eaabe828a3b479b10ebfd39019f2a0f0f005576119feb0e5ba7a9836ff3f42d",
+        "github_digest_matches": true,
+        "CRC_pass": true,
+        "workflow_run": {
+          "id": 45515074202,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "hotfix/prod-snap-meta-final",
+          "head_sha": "6323017fbf9ba160c536a94f408507435786412a"
+        },
+        "created_at": "2026-11-25T00:07:03Z",
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14977378747"
+      },
+      {
+        "label": "host20-generated",
+        "artifact_id": 14975879448,
+        "name": "release-v5-generated-outputs-host-20.20.2",
+        "zip_bytes": 3889854,
+        "zip_sha256": "57a7f997c47bd15bce35a8a0182f0e5c5446adf9a43b4a7c29d2b5c18184fd9e",
+        "github_digest_matches": true,
+        "CRC_pass": true,
+        "workflow_run": {
+          "id": 45515074202,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "hotfix/prod-snap-meta-final",
+          "head_sha": "6323017fbf9ba160c536a94f408507435786412a"
+        },
+        "created_at": "2026-11-25T00:07:08Z",
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14975879448"
+      },
+      {
+        "label": "host24-generated",
+        "artifact_id": 14975789628,
+        "name": "release-v5-generated-outputs-host-24.19.0",
+        "zip_bytes": 3890673,
+        "zip_sha256": "bbdb0485f7e8f37df9cf55c8927615041caf47d5cdab445280d61e3d3df7d2f7",
+        "github_digest_matches": true,
+        "CRC_pass": true,
+        "workflow_run": {
+          "id": 45515074202,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "hotfix/prod-snap-meta-final",
+          "head_sha": "6323017fbf9ba160c536a94f408507435786412a"
+        },
+        "created_at": "2026-11-25T00:07:02Z",
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14975789628"
+      }
+    ],
+    "detailed_review": {
+      "path": "release-preparation/pr2123-d-ci-rehearsal-review.json",
+      "bytes": 18420,
+      "sha256": "6c66b33d095b7ca15bbde606efb4c862eb64450e481ca01f06abb04c6b4337d6"
+    }
+  },
+  "frontend_job_identity_evidence": {
+    "job_id": 138872290726,
+    "proof_sha256": "dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e",
+    "selected_original_log_lines": [
+      "2026-11-25T00:04:32.0593475Z   PUSH_BEFORE_SHA: f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "2026-11-25T00:04:35.6848322Z   SOURCE_GIT_SHA: e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "2026-11-25T00:04:35.6848952Z   DEPLOYMENT_GIT_SHA: 6323017fbf9ba160c536a94f408507435786412a",
+      "2026-11-25T00:04:47.8764000Z Frontend reproducibility proof: dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e",
+      "2026-11-25T00:04:47.9055226Z   SOURCE_GIT_SHA: e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "2026-11-25T00:04:47.9056057Z   DEPLOYMENT_GIT_SHA: 6323017fbf9ba160c536a94f408507435786412a",
+      "2026-11-25T00:04:48.1379482Z       \"sha256\": \"dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e\"",
+      "2026-11-25T00:04:48.1450503Z   SOURCE_GIT_SHA: e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "2026-11-25T00:04:48.1451139Z   DEPLOYMENT_GIT_SHA: 6323017fbf9ba160c536a94f408507435786412a"
+    ],
+    "original_log": {
+      "path": "release-preparation/pr2123-d-ci-frontend.log",
+      "bytes": 785812,
+      "sha256": "f1c8d8844d22d489bc8098c76cfcaf015bfdaf45af3c9a02b5395231a2cdd8f0"
+    }
+  },
+  "evidence_files": [
+    {
+      "path": "release-preparation/pr2123-d-ci-first-observation.json",
+      "bytes": 206587,
+      "sha256": "1e6b84572c59b11401423ea8a2ad63db578ed27c5d6bef37f9cb03e5b0d88236"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-final-raw.json",
+      "bytes": 111441,
+      "sha256": "8d34ff20d7b025ef7773f631bdde5152426a4385dae567e10021e23e010be451"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-rehearsal-jobs.json",
+      "bytes": 11147,
+      "sha256": "f5ab3006e9c11180fb2242d521ca25480bb1bc479dee2f2f692d7a8705f036e6"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-host-downloads.json",
+      "bytes": 4713,
+      "sha256": "5fd81149afd699065a65db2da1da678221fb1153fb9eac435c1cca66fe53ad40"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-rehearsal-audit.py",
+      "bytes": 9151,
+      "sha256": "47d86e8ae6227faf2c30b1f4b8744c97870dffef7e522588bafaafe14d880b0a"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-rehearsal-review.json",
+      "bytes": 18420,
+      "sha256": "6c66b33d095b7ca15bbde606efb4c862eb64450e481ca01f06abb04c6b4337d6"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-host20-evidence.zip",
+      "bytes": 63793,
+      "sha256": "49c67c1f3d5b12baa5a9c6ab4427fdba83ca872744b4070251a44a4d8dfccce6"
+    },
+    {
+      "path": "release-preparation/pr2123-d-ci-host24-evidence.zip",
+      "bytes": 63800,
+      "sha256": "2eaabe828a3b479b10ebfd39019f2a0f0f005576119feb0e5ba7a9836ff3f42d"
+    }
+  ],
+  "retention_note": "Original generated-output ZIPs remain local CI evidence for byte verification. They are not written into canonical repository generated-output paths or added to the release source. Evidence-only ZIPs and reviews may be retained independently.",
+  "limitations": [
+    "This proves exact-D merge lineage and CI/rehearsal success; it does not assert D is deployed publicly.",
+    "The current 11 checks are push-scope checks. Previously reviewed B Backend/Stock original JUnit execution remains separate evidence and was not rerun or represented as D JUnit execution."
+  ]
+}

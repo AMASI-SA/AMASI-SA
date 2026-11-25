@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "reviewer": "code_review",
+  "reviewed_at_utc": "2026-11-25T00:08:47.126980+00:00",
+  "result": "PASS_STATIC_FINAL_PAIR_NO_CODE_BLOCKER_EXECUTION_PENDING_GATES",
+  "execution_allowed": false,
+  "scope": "Independent local final-pair delta/AST/identity and saved-observation review only. No repeat of original audit or tests; no helper import/execution or host/API access.",
+  "files": [
+    {
+      "file": "pr2123_guarded_rehearsal.py",
+      "bytes": 43667,
+      "sha256": "0e19197c46ca81293bdad2658ca03b039488afc24eb6dce0112b9ff36281b008"
+    },
+    {
+      "file": "pr2123-reviewed-envelope.json",
+      "bytes": 1363,
+      "sha256": "d7e18b6704d659d3a8fd82f9422255607d1cb16db33fc519f407bbc88b1d5db1"
+    },
+    {
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT.py",
+      "bytes": 43593,
+      "sha256": "951c1758d0d13a45c2cbf9d1a4c51498dc9adbb5dfa104afcc240215a64dc1ba"
+    },
+    {
+      "file": "pr2123-envelope-LIVE-REFRESHED-DRAFT.json",
+      "bytes": 1360,
+      "sha256": "e784d5fc1840714fd702f99c8d870b15349b96b24c0ccf3b6c739a987a1c4ff9"
+    },
+    {
+      "file": "pr2123-operator-LIVE-REFRESHED-DRAFT-independent-review.json",
+      "bytes": 8469,
+      "sha256": "8d58c64aafc9b11e4ca942c644928089765b8e70a80c289e56a09242b46d8195"
+    },
+    {
+      "file": "pr2123-final-host-observation.json",
+      "bytes": 1792,
+      "sha256": "7cb5935956798d118e57bb01120214e33e510e9df156798136467428b5fda9da"
+    }
+  ],
+  "author_review": {
+    "file": "pr2123-final-pair-preparation-review.json",
+    "bytes": 5992,
+    "sha256": "f7832359705a81e8d84346f797006ddc7783dddf5b4d65c274ffdfcb86f443cc",
+    "claims_independently_confirmed": true
+  },
+  "identities": {
+    "J": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "A": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "B": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "TREE": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+    "RELEASE_ID": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "D": "6323017fbf9ba160c536a94f408507435786412a"
+  },
+  "checks": {
+    "operator_only_module_docstring_changed": true,
+    "reverse_title_substitution_restores_complete_source_bytes": true,
+    "all_non_docstring_AST_exact": true,
+    "top_level_function_count": 36,
+    "all_36_function_ASTs_exact": true,
+    "envelope_only_deployment_sha_changed": true,
+    "reverse_D_substitution_restores_complete_envelope_bytes": true,
+    "both_saved_diffs_match_actual_delta": true,
+    "all_pins_and_envelope_match": true,
+    "LIVE_SCOPE_and_policies_unchanged": true,
+    "final_pair_mode_0600": true
+  },
+  "saved_host_binding": {
+    "source": "pr2123-final-host-observation.json; root-provided saved evidence, no independent current host read",
+    "live_observed_at": "2026-11-25T00:05:01.352578+00:00",
+    "all_process_executable_directory_log_identity_values_match": true,
+    "explicit_dbpath_and_real_directories_reported_verified": true,
+    "premerge_observed_at": "2026-11-25T00:03:26.208616+00:00",
+    "initial_head_and_branch_match": true,
+    "original_guard_inactive_exit0_and_no_lease_directory": true,
+    "tracked_clean": true,
+    "nonignored_git_entries": 432,
+    "log_bytes_observed_only": 19419714,
+    "log_prefix_baseline": "The unchanged helper establishes a new full prefix baseline during actual execution; this observation is not a pinned future length."
+  },
+  "blockers": [],
+  "execution_conditions": [
+    "Applicable exact-D CI/gates must PASS for 6323017fbf9ba160c536a94f408507435786412a; handled separately by release_gate/root and not asserted by this review.",
+    "Root must hash-check these exact final bytes, then rely on fresh unchanged helper checks of original status/lock, absent lease, J/branch/clean state,432 count, live identities, lineage, backups and capacity before each governed phase.",
+    "Any live identity, source, foreign scope or release-state mismatch blocks; no automatic rebinding or bypass."
+  ],
+  "limitations": [
+    "D is the root-provided normal merge identity; this local review binds it and preserves original lineage validation but does not re-query GitHub parents/tree or CI.",
+    "432 counts nonignored Git entries, not every protected path. Live DB descendants remain excluded from content/path equality; the independent log is append-only."
+  ],
+  "actions": {
+    "helper_import": false,
+    "helper_execution": false,
+    "tests": false,
+    "build": false,
+    "host_calls": false,
+    "api_calls": false,
+    "github_writes": false,
+    "lease_actions": false,
+    "merge": false,
+    "publish": false,
+    "input_changes": false
+  }
+}

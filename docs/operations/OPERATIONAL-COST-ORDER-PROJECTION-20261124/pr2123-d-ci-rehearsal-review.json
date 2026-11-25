@@ -1,0 +1,482 @@
+{
+  "schema_version": 1,
+  "result": "PASS",
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+  "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+  "both_host_generated_file_maps_exactly_equal": true,
+  "reviewed_intent_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+  "hosts": [
+    {
+      "host": "20.20.2",
+      "job_id": 138872756039,
+      "job_conclusion": "success",
+      "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+      "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+      "actual_checkout_d_logged": true,
+      "all_steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35
+        }
+      ],
+      "adapter_saw_git_absent": true,
+      "environment_file_scope": "Standalone environment file is captured before removing Git; during-adapter log proves git_directory_present=false.",
+      "host_yarn": "1.22.22",
+      "governed_toolchain": {
+        "node": "22.23.2",
+        "vite": "8.2.4",
+        "yarn": "1.22.22"
+      },
+      "two_clean_builds_match_reviewed_intent": true,
+      "package_boundary": {
+        "backend": {
+          "file_count": 1359,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 504390,
+            "path": "release_identity.json",
+            "sha256": "215eab0f74c5c11f76263126d27eaf3be4191205d53841b8434c12fbdb042c49"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "66efc6f0847831b94560a15e2d0bf0e3aa69d8d28988eda659b5b8fd7a24e9c6",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "0572d2565f69292f34314c48e54496801ae69d04ac9d69e3fef9943810f4a1f0",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+        "schema_version": 1,
+        "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+      },
+      "actual_http_step_pass": true,
+      "http_cases_executed_by_successful_step": 8,
+      "http_case_scope": [
+        "Canonical and cache-busted metadata, each Accept application/json and */*",
+        "Production Host and preview Host exact JSON metadata",
+        "Hashed asset immutable one-year cache",
+        "SPA shell exact HTML with no-store"
+      ],
+      "tracked_worktree_clean_step_pass": true,
+      "generated_tar_sha256": "e8db6f9fa59f6e91206ca2f153483de36efadaa0dd7a02292bc10deb0d80eb0f",
+      "generated_file_count": 387,
+      "frontend_public_files_verified": 381,
+      "non_public_header_files_verified_against_source_and_build_tree": [
+        "_headers",
+        "_headers.json"
+      ],
+      "all_frontend_bytes_and_manifest_tree_exact": true,
+      "generated_proof_bytes_exact": true,
+      "generated_runtime_identity_exact": true,
+      "generated_intent_bytes_exact": true,
+      "log_excerpts": [
+        "2026-11-25T00:05:03.4747623Z HEAD is now at 6323017fb Merge pull request #2123 from AMASI-SA/codex/operational-cost-order-projection-20261124",
+        "2026-11-25T00:05:12.1447245Z HEAD is now at 6323017fb Merge pull request #2123 from AMASI-SA/codex/operational-cost-order-projection-20261124",
+        "2026-11-25T00:05:12.1515311Z \u001b[36;1mworktree_status=\"$(git -C \"$REHEARSAL_REPO\" status --short)\"\u001b[0m",
+        "2026-11-25T00:05:53.2992716Z \u001b[36;1mtest ! -e \"$REHEARSAL_REPO/.git\"\u001b[0m",
+        "2026-11-25T00:06:53.4664133Z Frontend reproducibility proof: dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e",
+        "2026-11-25T00:07:00.5600361Z \u001b[36;1mworktree_status=\"$(git status --short)\"\u001b[0m",
+        "2026-11-25T00:07:08.1986282Z Artifact release-v5-generated-outputs-host-20.20.2.zip successfully finalized. Artifact ID 14975879448",
+        "2026-11-25T00:07:08.1988396Z Artifact release-v5-generated-outputs-host-20.20.2 has been successfully uploaded! Final size is 3889854 bytes. Artifact ID is 14975879448",
+        "2026-11-25T00:07:09.7455540Z Artifact release-v5-clean-clone-evidence-host-20.20.2.zip successfully finalized. Artifact ID 14977348935",
+        "2026-11-25T00:07:09.7456766Z Artifact release-v5-clean-clone-evidence-host-20.20.2 has been successfully uploaded! Final size is 63793 bytes. Artifact ID is 14977348935"
+      ]
+    },
+    {
+      "host": "24.19.0",
+      "job_id": 138872756166,
+      "job_conclusion": "success",
+      "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "deployment_sha": "6323017fbf9ba160c536a94f408507435786412a",
+      "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+      "actual_checkout_d_logged": true,
+      "all_steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35
+        }
+      ],
+      "adapter_saw_git_absent": true,
+      "environment_file_scope": "Standalone environment file is captured before removing Git; during-adapter log proves git_directory_present=false.",
+      "host_yarn": "1.22.22",
+      "governed_toolchain": {
+        "node": "22.23.2",
+        "vite": "8.2.4",
+        "yarn": "1.22.22"
+      },
+      "two_clean_builds_match_reviewed_intent": true,
+      "package_boundary": {
+        "backend": {
+          "file_count": 1359,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 504390,
+            "path": "release_identity.json",
+            "sha256": "215eab0f74c5c11f76263126d27eaf3be4191205d53841b8434c12fbdb042c49"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "66efc6f0847831b94560a15e2d0bf0e3aa69d8d28988eda659b5b8fd7a24e9c6",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "0572d2565f69292f34314c48e54496801ae69d04ac9d69e3fef9943810f4a1f0",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+        "schema_version": 1,
+        "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+      },
+      "actual_http_step_pass": true,
+      "http_cases_executed_by_successful_step": 8,
+      "http_case_scope": [
+        "Canonical and cache-busted metadata, each Accept application/json and */*",
+        "Production Host and preview Host exact JSON metadata",
+        "Hashed asset immutable one-year cache",
+        "SPA shell exact HTML with no-store"
+      ],
+      "tracked_worktree_clean_step_pass": true,
+      "generated_tar_sha256": "84bd984095b0e9b5435dbb24472de9b9bd6744d6f54227bd80f3c418bdbd2328",
+      "generated_file_count": 387,
+      "frontend_public_files_verified": 381,
+      "non_public_header_files_verified_against_source_and_build_tree": [
+        "_headers",
+        "_headers.json"
+      ],
+      "all_frontend_bytes_and_manifest_tree_exact": true,
+      "generated_proof_bytes_exact": true,
+      "generated_runtime_identity_exact": true,
+      "generated_intent_bytes_exact": true,
+      "log_excerpts": [
+        "2026-11-25T00:05:02.1609885Z HEAD is now at 6323017fb Merge pull request #2123 from AMASI-SA/codex/operational-cost-order-projection-20261124",
+        "2026-11-25T00:05:10.2203530Z HEAD is now at 6323017fb Merge pull request #2123 from AMASI-SA/codex/operational-cost-order-projection-20261124",
+        "2026-11-25T00:05:10.2272821Z \u001b[36;1mworktree_status=\"$(git -C \"$REHEARSAL_REPO\" status --short)\"\u001b[0m",
+        "2026-11-25T00:05:48.7123408Z \u001b[36;1mtest ! -e \"$REHEARSAL_REPO/.git\"\u001b[0m",
+        "2026-11-25T00:06:48.0258382Z Frontend reproducibility proof: dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e",
+        "2026-11-25T00:06:55.1127754Z \u001b[36;1mworktree_status=\"$(git status --short)\"\u001b[0m",
+        "2026-11-25T00:07:02.1999622Z Artifact release-v5-generated-outputs-host-24.19.0.zip successfully finalized. Artifact ID 14975789628",
+        "2026-11-25T00:07:02.2001744Z Artifact release-v5-generated-outputs-host-24.19.0 has been successfully uploaded! Final size is 3890673 bytes. Artifact ID is 14975789628",
+        "2026-11-25T00:07:03.3019381Z Artifact release-v5-clean-clone-evidence-host-24.19.0.zip successfully finalized. Artifact ID 14977378747",
+        "2026-11-25T00:07:03.3021376Z Artifact release-v5-clean-clone-evidence-host-24.19.0 has been successfully uploaded! Final size is 63800 bytes. Artifact ID is 14977378747"
+      ]
+    }
+  ],
+  "artifact_provenance": [
+    {
+      "label": "host20-evidence",
+      "artifact_id": 14977348935,
+      "zip_bytes": 63793,
+      "zip_sha256": "49c67c1f3d5b12baa5a9c6ab4427fdba83ca872744b4070251a44a4d8dfccce6",
+      "members": [
+        "mezan-adapter-environment-v5.json",
+        "mezan-adapter-build-v5.log",
+        "mezan-package-boundary-v5.json",
+        "mezan-governed-runtime.log"
+      ]
+    },
+    {
+      "label": "host24-evidence",
+      "artifact_id": 14977378747,
+      "zip_bytes": 63800,
+      "zip_sha256": "2eaabe828a3b479b10ebfd39019f2a0f0f005576119feb0e5ba7a9836ff3f42d",
+      "members": [
+        "mezan-adapter-environment-v5.json",
+        "mezan-adapter-build-v5.log",
+        "mezan-package-boundary-v5.json",
+        "mezan-governed-runtime.log"
+      ]
+    },
+    {
+      "label": "host20-generated",
+      "artifact_id": 14975879448,
+      "zip_bytes": 3889854,
+      "zip_sha256": "57a7f997c47bd15bce35a8a0182f0e5c5446adf9a43b4a7c29d2b5c18184fd9e",
+      "members": [
+        "mezan-generated-release-v5.tar.gz",
+        "mezan-generated-release-v5.sha256"
+      ]
+    },
+    {
+      "label": "host24-generated",
+      "artifact_id": 14975789628,
+      "zip_bytes": 3890673,
+      "zip_sha256": "bbdb0485f7e8f37df9cf55c8927615041caf47d5cdab445280d61e3d3df7d2f7",
+      "members": [
+        "mezan-generated-release-v5.tar.gz",
+        "mezan-generated-release-v5.sha256"
+      ]
+    }
+  ],
+  "scope": "Audit of downloaded successful CI artifacts and logs; no local rehearsal, host action or tests executed."
+}
