@@ -1,46 +1,84 @@
 {
-  "observed_at_utc": "2026-11-25 12:59:50 UTC",
-  "kind": "sanitized_transcription_of_direct_terminal_observations",
-  "source_sha": "9a851854132bd71be922c4aae24b4cc20a546e41",
+  "schema": 1,
+  "task": "OPERATIONAL-ACCOUNTING-NAVIGATION-20261124",
+  "observed_at_utc": "2026-11-25T13:25:00Z",
+  "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
   "source_tree": "436199d239a75910d94d441e9eb47408aea80080",
-  "host_source_head": "6323017fbf9ba160c536a94f408507435786412a",
-  "guard": {
-    "active": false,
-    "exit": 0
-  },
-  "supervisor": {
-    "backend": "RUNNING",
-    "frontend": "FATAL"
-  },
-  "local_api": {
-    "live": {
-      "port": 8001,
-      "status": 200,
-      "mime": "application/json"
+  "frontend": {
+    "candidate_running_verified": true,
+    "real_latency_measured": false,
+    "known_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
+    "admin_saved_session": "Authenticated Emergent admin and independent cloud code-server terminal available.",
+    "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
+    "frontend_supervisor": "FATAL, exited too quickly",
+    "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
+    "known_failure": "Frontend startup failure resolved for task-owned process. Existing October backend returns404 for current workspace bootstrap; canonical real accounting dataset is absent from locally accessible source databases.",
+    "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
+    "candidate_source_prepared": true,
+    "source_preparation_attempt": "Independent clone and remote fetch succeeded; exact HEAD and tree verified; tracked-clean; no backend .env copied.",
+    "missing_runtime": "Resolved with candidate-owned pinned Node22.23.2 and Yarn1.22.22 under task cache; frozen dependency installation completed successfully.",
+    "local_backend_routing": {
+      "live": {
+        "status": 200,
+        "mime": "application/json"
+      },
+      "unauthenticated_auth_me": {
+        "status": 401,
+        "mime": "application/json"
+      },
+      "current_workspace_bootstrap": {
+        "status": 404,
+        "mime": "application/json"
+      }
     },
-    "unauthenticated_me": {
-      "port": 8001,
-      "status": 401,
-      "mime": "application/json"
+    "candidate_source_directory": "/tmp/mezan-pr2095-preview-20261125/source",
+    "existing_backend_isolation": "Existing October backend and P01 data untouched; loopback database, separate signing, role/password/attempt protections, external egress blocked and automatic workers disabled remain as inspected.",
+    "runtime_scope": "Exact candidate frontend renders its genuine login page; source-serving Vite with NODE_ENV=production, not an optimized governed release artifact. Current backend remains the existing October private service.",
+    "frontend_process": {
+      "pid_at_start": 17534,
+      "port": 3000,
+      "pid_file": "/tmp/mezan-pr2095-preview-20261125/frontend.pid",
+      "log": "/tmp/mezan-pr2095-preview-20261125/frontend.log",
+      "supervisor_changed": false,
+      "managed_by_supervisor": false,
+      "host_restart_survival": false
+    },
+    "data_feasibility": {
+      "p01": "Existing private fixture dataset is not representative; preserve it.",
+      "other_local_database": "Order volume exists but operational_balance_states_v1 is absent; do not manufacture state from projected report JSON.",
+      "production_browser": "Existing owner session permits protected read-only GETs; freshness confirms a real active saved state.",
+      "cross_origin_candidate_to_production": "Production does not allow Preview origin; no CORS, authentication or proxy change performed.",
+      "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
+      "official_admin_viewer": "Emergent database viewer reached via Manage/Database/View database. Preview connection available by app name. Production is disconnected and requires a MongoDB URL via the secure connection flow; no credential was read or entered."
+    },
+    "private_observer": {
+      "files": "preview-tools/",
+      "module_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
+      "prepared": true,
+      "installed_remotely": false,
+      "browser_verified": false,
+      "real_samples": 0,
+      "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group."
     }
   },
-  "candidate_checkout": {
-    "clone_exit": 0,
-    "fetch_exit": 0,
-    "exact_head": true,
-    "exact_tree": true,
-    "tracked_clean": true,
-    "backend_dotenv_copied": false
+  "release": {
+    "guard_active_observed": false,
+    "owner": null,
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "owner_state": "Historical PR2118 and PR2123 leases closed by their owners. Fresh unchanged original guard status returned active:false; /app tracked-clean.",
+    "this_task_prepared": false,
+    "this_task_merged": false,
+    "this_task_published": false,
+    "production_changed_by_this_task": false,
+    "latest_guard_probe": "2026-11-25 independent terminal: original status exit0 active:false, HEAD6323017fbf9ba160c536a94f408507435786412a."
   },
-  "runtime_bootstrap": {
-    "started": true,
-    "complete": false,
-    "cache_isolated": true
+  "acceptance": {
+    "source_and_regression_checks": "confirmed",
+    "real_preview_identity_and_api": "Exact frontend identity verified and login renders; current accounting API/dataset blocked.",
+    "cold_warm_route_interactivity_p50_p95": "unverified",
+    "all_accounting_sections_and_twelve_tabs_real_data": "unverified",
+    "backend_queue_build_mongo_timings": "unverified",
+    "production_performance_fix": "unverified"
   },
-  "source_data_count_probe": {
-    "outcome": "environment_error",
-    "reason": "system Python has no pymongo; use existing backend virtualenv for read-only probe"
-  },
-  "production_changed": false,
-  "real_performance_measured": false
+  "privacy": "Sanitized operational evidence only; no connection credentials, owner identifiers, financial records, raw runtime source or Mongo document values."
 }

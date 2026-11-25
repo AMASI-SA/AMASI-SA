@@ -1,0 +1,7 @@
+#mezan-pr2095-observer { position:fixed; z-index:2147483000; bottom:10px; left:10px; width:min(350px,calc(100vw - 20px)); max-height:42vh; overflow:auto; box-sizing:border-box; border:1px solid #74869b; border-radius:8px; padding:10px; color:#edf3fa; background:#172330; font:12px/1.55 system-ui,sans-serif; box-shadow:0 2px 12px #0004; text-align:right; }
+#mezan-pr2095-observer summary { cursor:pointer; font-weight:700; }
+#mezan-pr2095-observer p { margin:8px 0; }
+#mezan-pr2095-observer button,#mezan-pr2095-observer select { font:inherit; color:#172330; background:#f6f8fb; border:1px solid #c6d2df; border-radius:4px; padding:4px 7px; margin:3px; }
+#mezan-pr2095-observer output { display:block; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:8px; }
+#mezan-pr2095-observer textarea { width:100%; height:180px; box-sizing:border-box; font:11px/1.4 monospace; color:#172330; background:#fff; }
+#mezan-pr2095-observer textarea[hidden] { display:none; }

@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-25",
-  "state": "source_prepared_isolated_runtime_bootstrap_in_progress",
+  "state": "candidate_frontend_running_canonical_data_connection_required",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -62,21 +62,28 @@
     "synthetic_limits": "Fixture click to destination-heading visibility only. Three samples; no p95, no enforced 500ms budget, no real Preview or Production latency proof.",
     "browser_behavior": "Read demand released exactly once, no report polling after departure, no POST/PUT/PATCH during exit.",
     "codeql": "Both languages and aggregate succeeded; temporary missing-Python aggregate warning resolved.",
-    "excluded_release_gates": "Six conditional skips include governed clean-clone adapter rehearsal and manual redeployment. Dispatcher contract success does not prove a governed release rehearsal."
+    "excluded_release_gates": "Six conditional skips include governed clean-clone adapter rehearsal and manual redeployment. Dispatcher contract success does not prove a governed release rehearsal.",
+    "private_observer": {
+      "syntax_checks": "pass",
+      "pure_sanitization_percentile_tests": "pass",
+      "source_identity_origin_external_asset_checks": "pass",
+      "runtime_integration": "pending",
+      "measured_acceptance": false
+    }
   },
   "preview": {
-    "candidate_running_verified": false,
+    "candidate_running_verified": true,
     "real_latency_measured": false,
     "known_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
-    "admin_saved_session": "Read-only TinyFish attempt reached Emergent login wall; superseded as access blocker by existing native code-server terminal.",
+    "admin_saved_session": "Authenticated Emergent admin and independent cloud code-server terminal available.",
     "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
     "frontend_supervisor": "FATAL, exited too quickly",
     "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
-    "known_failure": "Old frontend launcher uses Vite from an older worktree and serves an October supplier bundle. Repairing that dependency alone cannot prove PR2095 is running.",
+    "known_failure": "Frontend startup failure resolved for task-owned process. Existing October backend returns404 for current workspace bootstrap; canonical real accounting dataset is absent from locally accessible source databases.",
     "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
     "candidate_source_prepared": true,
     "source_preparation_attempt": "Independent clone and remote fetch succeeded; exact HEAD and tree verified; tracked-clean; no backend .env copied.",
-    "missing_runtime": "Both previously recorded Node paths are now absent. Candidate-owned pinned toolchain bootstrap started under a separate task XDG cache; completion pending.",
+    "missing_runtime": "Resolved with candidate-owned pinned Node22.23.2 and Yarn1.22.22 under task cache; frozen dependency installation completed successfully.",
     "local_backend_routing": {
       "live": {
         "status": 200,
@@ -85,10 +92,41 @@
       "unauthenticated_auth_me": {
         "status": 401,
         "mime": "application/json"
+      },
+      "current_workspace_bootstrap": {
+        "status": 404,
+        "mime": "application/json"
       }
     },
     "candidate_source_directory": "/tmp/mezan-pr2095-preview-20261125/source",
-    "existing_backend_isolation": "Inspected private launcher: loopback-only database, separate Preview session signing, preserved roles/password/attempt guards, external network blocked and automatic startup workers disabled. October backend compatibility with current accounting remains unverified. Existing backend/P01 data unchanged."
+    "existing_backend_isolation": "Existing October backend and P01 data untouched; loopback database, separate signing, role/password/attempt protections, external egress blocked and automatic workers disabled remain as inspected.",
+    "runtime_scope": "Exact candidate frontend renders its genuine login page; source-serving Vite with NODE_ENV=production, not an optimized governed release artifact. Current backend remains the existing October private service.",
+    "frontend_process": {
+      "pid_at_start": 17534,
+      "port": 3000,
+      "pid_file": "/tmp/mezan-pr2095-preview-20261125/frontend.pid",
+      "log": "/tmp/mezan-pr2095-preview-20261125/frontend.log",
+      "supervisor_changed": false,
+      "managed_by_supervisor": false,
+      "host_restart_survival": false
+    },
+    "data_feasibility": {
+      "p01": "Existing private fixture dataset is not representative; preserve it.",
+      "other_local_database": "Order volume exists but operational_balance_states_v1 is absent; do not manufacture state from projected report JSON.",
+      "production_browser": "Existing owner session permits protected read-only GETs; freshness confirms a real active saved state.",
+      "cross_origin_candidate_to_production": "Production does not allow Preview origin; no CORS, authentication or proxy change performed.",
+      "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
+      "official_admin_viewer": "Emergent database viewer reached via Manage/Database/View database. Preview connection available by app name. Production is disconnected and requires a MongoDB URL via the secure connection flow; no credential was read or entered."
+    },
+    "private_observer": {
+      "files": "preview-tools/",
+      "module_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
+      "prepared": true,
+      "installed_remotely": false,
+      "browser_verified": false,
+      "real_samples": 0,
+      "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group."
+    }
   },
   "shared_release": {
     "guard_active_observed": false,
@@ -103,13 +141,13 @@
   },
   "acceptance": {
     "source_and_regression_checks": "confirmed",
-    "real_preview_identity_and_api": "unverified",
+    "real_preview_identity_and_api": "Exact frontend identity verified and login renders; current accounting API/dataset blocked.",
     "cold_warm_route_interactivity_p50_p95": "unverified",
     "all_accounting_sections_and_twelve_tabs_real_data": "unverified",
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Finish candidate-owned pinned toolchain and frozen dependencies; verify genuine isolated dataset sufficiency and current accounting API using existing Preview authentication. Serve exact candidate with private diagnostic overlay only if needed, measure cold/warm route URL/interactivity/long tasks and pending reads. No source merge or Production publication is authorized by this resumption.",
+  "next_safe_action": "Securely connect the official Emergent database viewer to Production without exposing the connection credential. Inspect authorized canonical owner-scoped BSON export/backup feasibility, then prepare a disposable current-backend data clone preserving raw BSON state/audit/source bindings. Do not change live data, P01, CORS or authentication. Finish private observer integration on candidate frontend; real timings remain unmeasured.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
   "evidence_branch_is_deployable": false,
   "history": [
@@ -117,6 +155,12 @@
       "checkpoint": "cfadf54f9a590d66ec126cf64e1b67374fc3b612",
       "state": "draft_ci_green_blocked_on_exclusive_host_control",
       "notes": "Historical shared native input collision and PR2118 lease blocker retained in prior immutable checkpoint."
+    },
+    {
+      "checkpoint": "3766cbe23fa6b97696971d62b02e4a82f877e2fc",
+      "state": "source_prepared_isolated_runtime_bootstrap_in_progress",
+      "notes": "Superseded runtime bootstrap milestone; independent terminal access restored."
     }
-  ]
+  ],
+  "checkpoint_at_utc": "2026-11-25T13:25:00Z"
 }

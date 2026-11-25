@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "purpose": "Private Preview diagnostic tooling; not runtime performance evidence",
+  "adapter_source_head": "9a851854132bd71be922c4aae24b4cc20a546e41",
+  "adapter_source_tree": "436199d239a75910d94d441e9eb47408aea80080",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 11725,
+      "sha256": "97355251e286049fe6a65cb66fb221b7c86513783aeb36adfb4550742241dd4d"
+    },
+    {
+      "path": "observer.css",
+      "bytes": 966,
+      "sha256": "3958e62d6ba71318fc10572f6f396533b00d4683dd38e1955c840ad32968f1d3"
+    },
+    {
+      "path": "observer.mjs",
+      "bytes": 23419,
+      "sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06"
+    },
+    {
+      "path": "observer.test.mjs",
+      "bytes": 2036,
+      "sha256": "2125c93a36c8d65be4eb30209c073920f1d4e7cd1832f4d3422493d641a7df28"
+    },
+    {
+      "path": "preview-observer-plugin.mjs",
+      "bytes": 3311,
+      "sha256": "8b53511be6bbfbdb4c75b708714219ead28e93a3e05fee42e818f54675433462"
+    },
+    {
+      "path": "runtime.config.mjs",
+      "bytes": 883,
+      "sha256": "0523888a3611fcbe33e60082cc8e56ed44e876684bdc09ba59448fa71fcf28e7"
+    }
+  ]
+}
