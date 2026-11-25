@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "checkpoint": "E11",
+  "observed_at": "2026-11-25T17:00:36.681398+00:00",
+  "evidence_parent": "34e8a1f566fc1e9a49a2ce8709ce191534cf3132",
+  "D": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+  "J": "30c970807c05e291e2f48b35c84155b271fb5f09",
+  "A": "0b39c456ea17d6e80f824f44b57563764441216c",
+  "B": "ebaae98290f25db5580d888601d236431961d104",
+  "tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8",
+  "release_id": "rg5-37ff4cc0a52caf321810a8dce1cb6c8f1c27dd8e2f9e5f0a57944ffc90efaf5a",
+  "merge": "normal ordered parents J,B; D tree equals B",
+  "exact_D_checks": {
+    "success": 11,
+    "other": 0
+  },
+  "workflows": {
+    "readiness": 45657345385,
+    "security": 45657345179,
+    "codeql": 45657345009,
+    "all_success": true
+  },
+  "predecessor": {
+    "PR": 2128,
+    "proof_commit": "1a06213567397bd3b4fa01001e25349c006e7572",
+    "original_verify_checks": 3,
+    "original_verify_exit": 0,
+    "closed": true
+  },
+  "actual_original_guard_before_merge": {
+    "observed_at": "2026-11-25T16:44:46.277834+00:00",
+    "active": false,
+    "exit_code": 0
+  },
+  "helper": {
+    "bytes": 43577,
+    "sha256": "900cbe56a5d40e304c8975e559d4d4f77c5f4d9b0a9b77168d349d30d83a1780",
+    "evidence_commit": "cc393bdd22db40ee49a4c9fbb010ade691d1642c"
+  },
+  "envelope": {
+    "bytes": 1589,
+    "sha256": "bbeb52d3573a8be9f1b7af30234e03121e9ac9dad1846616a5d8f5da517054a9",
+    "independent_and_root_static_review": "PASS"
+  },
+  "wrapper": {
+    "bytes": 3865,
+    "sha256": "acf6fab67c1611a0666566938e407790a7be30c506c8ff8f823470c01a089aa0",
+    "independent_review": "PASS",
+    "isolated_failure_recovery_groups": 3,
+    "prior_journal_gap_fixed_before_any_execution": true
+  },
+  "host_control": "/tmp/mezan-pr2129-operator-o1l3bv1c",
+  "fresh_metadata_at": "2026-11-25T16:47:12.172993+00:00",
+  "fresh_metadata_sha256": "279e677bac2da5af0f20af9816c154d647e6644adcc03488e54254d2b50f75c4",
+  "eligible_for_guarded_host_rehearsal": true,
+  "rehearsal_started": false,
+  "own_lease_created": false,
+  "own_publish_clicked": false,
+  "production_change": {
+    "git_branch": true,
+    "live_runtime_by_this_task": false
+  },
+  "archive": {
+    "file": "E11-D-host-handoff.zip",
+    "bytes": 43373,
+    "sha256": "b73fafdcc2848a1a1ee0504eeca912f108c8016a154151f848405cae31be4405",
+    "members": 24
+  },
+  "members": [
+    {
+      "path": "pr2129-release/D-host-envelope/README.md",
+      "bytes": 6022,
+      "sha256": "c4b1a14dca2e2d643a4d11ed1bc1f36a4ce5f81854fdd7749b62bfa475512608"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/execution-envelope.json",
+      "bytes": 1589,
+      "sha256": "bbeb52d3573a8be9f1b7af30234e03121e9ac9dad1846616a5d8f5da517054a9"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/github-lineage-evidence.json",
+      "bytes": 10533,
+      "sha256": "81109e2030959b034b7cf3e2d90f7f50ed10a7d3fa87b84bfaff7130451b2b15"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/hash-manifest.json",
+      "bytes": 1028,
+      "sha256": "e71456c8585758288948b5c35cfb4f805d6a6927ff52cadeff3f437d6d2c677d"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/host-observation-164712Z.json",
+      "bytes": 1955,
+      "sha256": "279e677bac2da5af0f20af9816c154d647e6644adcc03488e54254d2b50f75c4"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/review.json",
+      "bytes": 7448,
+      "sha256": "2537ad797d5a03ae95a7fcc175daf545bfabb87f11ca4a2c65334b69b8bc5cbb"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/root-envelope-review.json",
+      "bytes": 753,
+      "sha256": "e2766c15791df7546f93b9d267e1cbd4940be29fa172a0dcacdf797c93e982da"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/run-reviewed-rehearsal-independent-review.json",
+      "bytes": 4047,
+      "sha256": "7a835f9fad9dbd2f5b4d934f4b3fef0e15492c762fa28bcfa9ef04416b10e5a4"
+    },
+    {
+      "path": "pr2129-release/D-host-envelope/run-reviewed-rehearsal.py",
+      "bytes": 3865,
+      "sha256": "acf6fab67c1611a0666566938e407790a7be30c506c8ff8f823470c01a089aa0"
+    },
+    {
+      "path": "pr2129-release/D-merge-receipt.json",
+      "bytes": 919,
+      "sha256": "09bd241e0d0d39aec5f409b96bee6b6fdbc2f535d35bc4e3b55d92ed2228741c"
+    },
+    {
+      "path": "pr2129-release/D-root-checks.json",
+      "bytes": 33840,
+      "sha256": "17671b1651ca17163948cd592667be878dae8f6112ef325d52b22a50fcfd0b6e"
+    },
+    {
+      "path": "pr2129-release/D-root-codeql.json",
+      "bytes": 12216,
+      "sha256": "335d216382e2a75f9ade9b5827a2a39e999e6d3963f70491262420c0d3856fb5"
+    },
+    {
+      "path": "pr2129-release/host-helper-stage.json",
+      "bytes": 395,
+      "sha256": "2c29e308254e60c7e51179250cd2c57bbe0dae499190bb733b7702a62c7f76ef"
+    },
+    {
+      "path": "pr2129-release/host-metadata-20261125T164712Z.json",
+      "bytes": 1955,
+      "sha256": "279e677bac2da5af0f20af9816c154d647e6644adcc03488e54254d2b50f75c4"
+    },
+    {
+      "path": "pr2129-release/predecessor-closure/STATUS.json",
+      "bytes": 4944,
+      "sha256": "e52278f03767dd4236c7a6a9f062ceebb2728ce9ecc92e1a79ce6d79172c0fe6"
+    },
+    {
+      "path": "pr2129-release/predecessor-closure/final-status.json",
+      "bytes": 22,
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+    },
+    {
+      "path": "pr2129-release/predecessor-closure/verify.json",
+      "bytes": 43129,
+      "sha256": "9675ce1242583f1964d6e88a6e97f4b688ce0a7f13c4a23fc180673da92b4560"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-ci-monitor.json",
+      "bytes": 31427,
+      "sha256": "da3b52d93522248f15befba957ece94ce4e9e9f4bb9f4ca5d8e5680be76ee1c2"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-ci-snapshot-20261125164617.json",
+      "bytes": 3802,
+      "sha256": "540a0125dda93bab12f950e6cb8328160b89321539c63446439404c1068654bf"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-ci-snapshot-20261125164850.json",
+      "bytes": 6655,
+      "sha256": "c6f09427e5eb1239c13b8cf22c75968d7e60d65773b8ed797a74ee59e02417fe"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-ci-snapshot-20261125165103.json",
+      "bytes": 5116,
+      "sha256": "962dbf989136045b3ece7ffe1f8c700aa17882ce8290ae3e5f41d32343f0a246"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-ci-snapshot-20261125165257.json",
+      "bytes": 4807,
+      "sha256": "2b669adeeca5707a0bf60ca568e384809859c7f7be8f16879a58e2568c8332aa"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-ci-snapshot-20261125165505.json",
+      "bytes": 5081,
+      "sha256": "5adfaf808ebbdb7caeea3deee5bc2665bac04f880155528999a652a04ef4a33f"
+    },
+    {
+      "path": "profit-backend-verification-20261125/ci-d/d-readiness-jobs-artifacts.json",
+      "bytes": 19956,
+      "sha256": "21e3d32225fae3188bd388a4d6008b1c32c10e55a0983024486dfe49a516dc73"
+    }
+  ],
+  "next_safe_action": "Recheck production ref D, transfer and verify exact envelope/runner into the existing private control directory, invoke reviewed runner once. Original helper must recheck guard inactive, source/branch/cleanliness/pins/count and take original operation lock, then pass preservation, backups, capacity, original clone and canonical-app adapters. Do not call another status while the helper owns the lock. Preserve its original exit/stdout/receipt. Prepare/prepublish/publication remain later gates.",
+  "limits": [
+    "D CI artifacts are bound by metadata and passing original CI; full independent generated-byte review was performed on identical-tree B and is retained in E10.",
+    "No hostile concurrent same-UID replacement is modeled in the reviewed private control directory.",
+    "A wrapper failure does not prove a spawned helper stopped; inspect the existing PID and receipt before recovery.",
+    "Actual Emergent Cloud transcript and live dashboard acceptance remain unobserved for this release."
+  ]
+}
