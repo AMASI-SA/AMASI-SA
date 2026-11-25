@@ -25,7 +25,8 @@ from operational_financial_activity_runtime import preparation_checkpoint, prepa
 from operational_financial_position_core import position_balance
 from operational_party_projection_state import party_projection_state
 from operational_visible_report_read import run_visible_report_read
-from operational_workspace_projection import balance_note, projected_balance_status, signed_current_balance
+from operational_workspace_projection import balance_note, projected_balance_status, row_order, signed_current_balance
+from typing import Literal
 
 
 ENTRY_ID = re.compile(r"^em_[a-f0-9]{64}$")
@@ -143,8 +144,23 @@ def _public(row, bound, *, detail=False):
     return value
 
 
-async def employee_balance_read(db, user, *, page=1, snapshot=None, identity=None):
-    if page > 1 and snapshot is None:
+def _salary_view(rows, view):
+    """Compact only proven automatic salary entries; retain original daily values and IDs."""
+    salaries = sorted(
+        (row for row in rows if row.get("automatic_history") == "salary"),
+        key=row_order, reverse=True)
+    if view == "salary_history":
+        return salaries
+    if view == "compact_salary" and salaries:
+        latest = {**salaries[0], "salary_history_count": len(salaries)}
+        return sorted(
+            [row for row in rows if row.get("automatic_history") != "salary"] + [latest],
+            key=row_order, reverse=True)
+    return rows
+
+
+async def employee_balance_read(db, user, *, page=1, snapshot=None, identity=None, view="all"):
+    if (page > 1 or view == "salary_history") and snapshot is None:
         fail("employee_balance_snapshot_required", "أعد فتح الصفحة الأولى لعرض الحركات", 422)
     if identity is not None and not ENTRY_ID.fullmatch(identity):
         fail("employee_balance_movement_not_found", "القيد غير متاح", 404)
@@ -165,10 +181,19 @@ async def employee_balance_read(db, user, *, page=1, snapshot=None, identity=Non
             fail("employee_balance_movement_not_found", "القيد غير متاح", 404)
         result = {"employee": result["employee"], "snapshot": result["snapshot"], "item": matches[0]}
     else:
+        rows = _salary_view(rows, view)
         total_pages = max(1, (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE)
         page = min(page, total_pages)
-        result.update(items=[_public(row, bound) for row in rows[(page-1)*PAGE_SIZE:page*PAGE_SIZE]],
+        items = []
+        for row in rows[(page-1)*PAGE_SIZE:page*PAGE_SIZE]:
+            item = _public(row, bound)
+            if view == "compact_salary" and row.get("salary_history_count"):
+                item.update(kind_label="استحقاق راتب", salary_history_count=row["salary_history_count"])
+            items.append(item)
+        result.update(items=items,
             pagination={"page": page, "page_size": PAGE_SIZE, "total": len(rows), "total_pages": total_pages})
+        if view != "all":
+            result["view"] = view
     # A logout, disabled account, changed employee link or tenant switch during
     # preparation cannot deliver financial rows under the old binding.
     current = await financial_actor_context(db, user, required_permission=EMPLOYEE_BALANCE_PERMISSION)
@@ -191,9 +216,11 @@ def install_employee_balance_routes(router, db, current_user):
     @router.get("/me/statement")
     async def statement(request: Request, response: Response, page: int = Query(default=1, ge=1, le=100000),
                         page_size: int = Query(default=10, ge=10, le=10),
-                        snapshot: str | None = Query(default=None, pattern=r"^[a-f0-9]{64}$"), user=Depends(current_user)):
+                        snapshot: str | None = Query(default=None, pattern=r"^[a-f0-9]{64}$"),
+                        view: Literal["all", "compact_salary", "salary_history"] = Query(default="all"),
+                        user=Depends(current_user)):
         response.headers["Cache-Control"] = "no-store"
-        return await read(request, user, page=page, snapshot=snapshot)
+        return await read(request, user, page=page, snapshot=snapshot, view=view)
 
     @router.get("/me/movements/{identity}")
     async def detail(identity: str, request: Request, response: Response,
