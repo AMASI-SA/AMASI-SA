@@ -9,7 +9,7 @@
   "production_base": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
   "evidence_branch": "codex/operational-accounting-navigation-evidence-20261124",
   "checkpoint_date": "2026-11-25",
-  "state": "native_tooling_preparation_remote_ephemeral_runtime_lost_foreign_release_active",
+  "state": "native_exporter_reviewed_restored_source_importer_runtime_review_pending",
   "changes": [
     "Interruptible publication of completed read-only results in shared and specialized accounting readers, preserving existing scope and cancellation checks.",
     "Delivery labels computed only for the visible twelve-row page.",
@@ -80,10 +80,10 @@
     "direct_host_access": "Independent authenticated cloud code-server tab and its own terminal now work; no global native keyboard used for commands.",
     "frontend_supervisor": "FATAL, exited too quickly",
     "backend_supervisor": "RUNNING; private October supplier Preview launcher, not current candidate backend proof",
-    "known_failure": "Fresh reconnection found task /tmp root absent, candidate frontend3000 closed and task Mongo27019 closed. Existing8001/27018 remain reachable. Full source capture/import/runtime tooling is under local review; no actual dataset or route samples obtained.",
+    "known_failure": "No running candidate frontend/current API or actual dataset yet. Foreignv5lease remains active. Earlier /tmp runtime was lost; restored own source/observer and preparing dependencies on roomy /var/tmp.",
     "data_preservation": "Existing P01 Mongo on port 27018 and its WiredTiger files remain owned by another isolated workflow. Do not delete, reset, repoint or stop it.",
-    "candidate_source_prepared": false,
-    "source_preparation_attempt": "Prior exact clone and frozen dependencies were verified but are no longer present remotely. Restore into task-private /root/mezan-pr2095-preview-20261125; do not edit /app.",
+    "candidate_source_prepared": true,
+    "source_preparation_attempt": "Exact source restored on2026-11-25T15:08:46Z, sameHEAD/tree, tracked-clean, no backend.env. Moved only task files to /var/tmp after persistent /root-/app partition ENOSPC.",
     "missing_runtime": "Prior own /tmp toolchain/cache was lost; exact pinned candidate runtime must be restored.",
     "local_backend_routing": {
       "live": {
@@ -99,7 +99,7 @@
         "mime": "application/json"
       }
     },
-    "candidate_source_directory": "/root/mezan-pr2095-preview-20261125/source",
+    "candidate_source_directory": "/var/tmp/mezan-pr2095-preview-20261125/source",
     "existing_backend_isolation": "Existing October backend and P01 data untouched; loopback database, separate signing, role/password/attempt protections, external egress blocked and automatic workers disabled remain as inspected.",
     "runtime_scope": "No current task-owned frontend or database process. Earlier source-serving Vite browser integration remains historical evidence only.",
     "frontend_process": {
@@ -122,13 +122,13 @@
       "canonical_http_export": "Exact candidate source review found no raw operational snapshot export endpoint.",
       "official_admin_viewer": "User completed secure browserAuth; Production connection succeeded and canonical state/audit collections are present. Selecting the state collection returnedHTTP500; one normal refresh also failed and old collection rows remained visible. No stale rows copied. Advanced options expose new-document only, not export; no WebMCP tools. Connection credential was never exposed to the assistant.",
       "existing_bson_backup": "Bounded read-only search of known prior task directories found no BSON/mongodump/archive copy. Exact repository/checkpoint search also found no canonical export artifact.",
-      "native_capture": "Task-private direct read-only BSON exporter is being prepared. Hidden TTY-only credential input, raw BSON/hash/owner validation, one read-only snapshot session and current-primary head recheck. Core offline checks pass; full forecast/directory/source coverage implementation and independent review still pending. No source credential or production data has entered this helper."
+      "native_capture": "Full exporter frozen and independently reviewed: 48offline tests passed; 56named scopes/55collections including27forecast sources. Single snapshot, unchanged primary head, BSON hashes and exact source/contract pins. No sourceURI/capture yet; importer/runtime contract enforcement stillunderreview."
     },
     "private_observer": {
       "files": "preview-tools/",
       "module_sha256": "522e35bed8174b5aac71a5570c4f4aca33d6be3f990e57a0e39ec14b3dc1ec06",
       "prepared": true,
-      "installed_remotely": false,
+      "installed_remotely": true,
       "browser_verified": false,
       "real_samples": 0,
       "limitations": "Trusted clicks, DOM response/readiness proxies, Long Tasks and retrospective resource overlap only. No HTTP method/cancellation/financial-write proof; p95 withheld below20 valid per route/cache group.",
@@ -145,16 +145,18 @@
         "resource_supported": true
       },
       "runtime_integration_limit": "Earlier login/panel/empty-export verification is historical only after remote reset. Authenticated accounting selectors and real timings remain unmeasured.",
-      "browser_verified_historical": true
+      "browser_verified_historical": true,
+      "restored_source_package_verified": true
     },
     "toolchain": {
       "node": "22.23.2",
       "yarn": "1.22.22",
       "platform": "linux-arm64",
-      "cache": "/root/mezan-pr2095-preview-20261125/cache",
-      "receipt": "/root/mezan-pr2095-preview-20261125/toolchain.json",
+      "cache": "/var/tmp/mezan-pr2095-preview-20261125/cache",
+      "receipt": "/var/tmp/mezan-pr2095-preview-20261125/toolchain.json",
       "frozen_install_completed": false,
-      "frozen_install_completed_historical": true
+      "frozen_install_completed_historical": true,
+      "restore_state": "Own cache/frozen install restarted after bounded recovery from persistent-partition ENOSPC; result pending."
     },
     "existing_owner_identity_match": true,
     "private_mongo": {
@@ -194,6 +196,30 @@
       },
       "cause": "Not established. Terminal connection expired and state/files changed; do not infer which external operation removed them.",
       "source_data_lost": false
+    },
+    "native_exporter": {
+      "directory": "preview-data-tools/",
+      "ready_for_remote_preflight": true,
+      "source_commit": "9a851854132bd71be922c4aae24b4cc20a546e41",
+      "offline_tests_passed": 48,
+      "independently_verified": true,
+      "scopes": 56,
+      "collections": 55,
+      "source_contract_sha256": "d86111f994cd391a8e918cdc64a1c0b285b9fbcdcc9d6fc41d4370f070055cfe",
+      "exporter_sha256": "3bcc13452d0fffca98876f836b013c6efe7fcf9b9aa4eb4a07716762e5dec12b",
+      "projection_module_sha256": "d0f4117c97cc63b7ca81e1e2e8d9f512718ac7244cc33449a589933e372b18e8",
+      "bundle_manifest_sha256": "cf2a661c328c00187de7c683513361d2b374b003f24846a800d68b5c50965037",
+      "genuine_source_connection_performed": false,
+      "live_capture_verified": false
+    },
+    "storage_recovery": {
+      "working_root": "/var/tmp/mezan-pr2095-preview-20261125",
+      "persistent_pointer": "/root/mezan-pr2095-preview-20261125/RECOVERY-PATH.json",
+      "persistent_partition_mib": 9979,
+      "observed_persistent_free_after_own_cleanup_mib": 413,
+      "working_partition_free_observed_mib": 260815,
+      "changed_foreign_files": false,
+      "cleanup": "Only task-created generated node/yarn caches were removed; own source/tooling/receipts moved. All source/evidence remains git-backed. /var/tmp runtime still requires reconstruction after host reset."
     }
   },
   "shared_release": {
@@ -216,7 +242,7 @@
     "backend_queue_build_mongo_timings": "unverified",
     "production_performance_fix": "unverified"
   },
-  "next_safe_action": "Complete/review/persist full native BSON capture, exact semantic coverage and private importer/runtime. Restore exact candidate/tooling into task-private /root directory without touching /app or foreign services. Check original release guard again before starting own Preview services. Only then prepare user-controlled hidden source-URI prompt; never extract browser credentials. No real latency acceptance yet.",
+  "next_safe_action": "Deploy the reviewed exporter from this immutable checkpoint and verify pinned dependencies/offline tests on the remote task path. Finish independent importer/runtime contract/shape/hash review and persist that package. Keep foreign lease/sharedservices untouched. Recheck original guard and ports before own Preview activation; complete all tooling before user-controlled hidden sourceURIprompt.",
   "continuity": "Evidence-only branch; no financial/provider data, credentials or raw private runtime source are included. Keep candidate unmerged/undeployed pending measured Preview and explicit user release acceptance.",
   "evidence_branch_is_deployable": false,
   "history": [
@@ -244,7 +270,12 @@
       "checkpoint": "2bc4347d035045b76921eb055f93260ceb8895b8",
       "state": "secure_viewer_connected_native_bson_capture_and_read_runtime_in_preparation",
       "notes": "Historical frontend and Mongo readiness expired: fresh terminal reconnect found the entire task /tmp directory absent and own ports3000/27019 closed. No real capture or measurement occurred before the loss."
+    },
+    {
+      "checkpoint": "b89675c2b0aef445daf4fcb255cb73db6427d251",
+      "state": "native_tooling_preparation_remote_ephemeral_runtime_lost_foreign_release_active",
+      "notes": "Records expired old /tmp runtime and active foreign lease. Source was subsequently restored; /root space failure recovered by moving only own files to /var/tmp."
     }
   ],
-  "checkpoint_at_utc": "2026-11-25T15:04:27Z"
+  "checkpoint_at_utc": "2026-11-25T15:20:03Z"
 }

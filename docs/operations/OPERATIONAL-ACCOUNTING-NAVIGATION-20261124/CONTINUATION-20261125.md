@@ -1,71 +1,49 @@
 # PR2095 continuation — 25 November 2026
 
-## Latest state — remote runtime must be restored
+## Current state
 
-At2026-11-25T15:04:27Z a fresh code-server reconnect found `/tmp/mezan-pr2095-preview-20261125` entirely absent. Candidate frontend3000 and own Mongo27019 are not listening; old backend8001 and P01Mongo27018 remain reachable. The reason for loss is not established. No actual financial snapshot had been captured or imported, and no real navigation samples existed.
+Candidate source remains `9a851854132bd71be922c4aae24b4cc20a546e41`, tree `436199d239a75910d94d441e9eb47408aea80080`, PR2095 Draft/unmerged/undeployed. Exact-source CI remains18success/6expected conditional skips. There are **zero representative navigation samples**.
 
-The original release guard now reports **active:true** for a foreign protocol-v5 lease, source `6d4aa546259e9cad1cc379d4a464e245af6cfa91`, deployment `/app` HEAD `f3d8ee39e60ed087f0a4d6debf844d128e92a758`. This task did not modify/close that lease or edit `/app`. Do not restart task Preview services until the original guard and ports have been checked again. Independent source/tooling preparation may continue in `/root/mezan-pr2095-preview-20261125`, without shared source changes or release rehearsal.
+The earlier task `/tmp` runtime disappeared during an external environment change. Its former frontendPID25822/MongoPID49277 and browser readiness are historical only. No real snapshot had been captured/imported before that loss. Source was restored and verified at2026-11-25T15:08:46Z without copying backend.env.
 
-The native snapshot exporter, exact financial-source closure and private importer/runtime are being implemented and reviewed locally. The user securely connected the official Viewer, but stateGET500 still prevents viewer-based export; no browser credential extraction is allowed. Prepare all concrete tooling before a hidden terminal input handoff. The complete current state is in STATUS.json.
+Current work root is `/var/tmp/mezan-pr2095-preview-20261125`, with exact source in `source/`. The `/root` and `/app` persistent partition has only10GB and filled during own dependency preparation. Only this task's generated node/yarn caches were removed, own files were moved to the roomy working partition, and413MiB persistent headroom was recovered. A small pointer remains at `/root/mezan-pr2095-preview-20261125/RECOVERY-PATH.json`. No foreign file/data was changed. Pinned dependency restoration is running; verify its exit receipt before launch.
 
-**All ready/running statements and /tmp process identities below are historical observations and must not be used as current runtime evidence.** The observer source and exact candidate remain remotely recoverable on their evidence/source branches.
+The original guard's latest read remains **active:true** for a foreignv5lease: source`6d4aa546259e9cad1cc379d4a464e245af6cfa91`, deployment`f3d8ee39e60ed087f0a4d6debf844d128e92a758`. Never close/reuse that lease or change/app. Do not confuse this independent source preparation with a release rehearsal. No task frontend/Mongo/current API was restarted.
 
-## Result and boundary
+## Ready native exporter
 
-Exact candidate `9a851854132bd71be922c4aae24b4cc20a546e41` (tree `436199d239a75910d94d441e9eb47408aea80080`) now renders its real login page in the existing Preview. A private passive measurement panel is visible and its JSON export reports the exact source/module identities and zero samples. The shared native keyboard collision is no longer the blocker: an authenticated independent cloud code-server terminal is usable.
+`preview-data-tools/` contains reviewed code only. Its six-file bundle plus hash manifest is frozen:48offline tests passed and independently repeated;56named source scopes/55collections cover the defined owner navigation8views/12reports plus finite reviewed drilldowns. The contract includes27forecast collections, required supplier-invoice detail, source metadata and provider fees.
 
-This is source-serving Vite with `NODE_ENV=production` and HMR disabled, not an optimized governed release artifact. No real accounting-route measurements or p95 acceptance have been collected. The existing backend is still the older isolated supplier backend and returns404 for the current workspace bootstrap.
+It reads canonical state, only the manifest-referenced audit pages, unchanged financial proof BSON and positive metadata/order-financial projections in one read-only snapshot session. Unsupported snapshots/shapes, truncation/bounds, secrets, concurrent state-head changes, duplicate MongoIDs or corrupted packets/pages fail closed. User input is controlling-TTY-only getpass; no secret CLI argument/environment/config/log. Output is new0700directory/files0600 with capacity preflight, exact hash/contract receipts and COMPLETEwritten last. No genuine source connection/capture has run.
 
-## Ready runtime
+- Exporter:`3bcc13452d0fffca98876f836b013c6efe7fcf9b9aa4eb4a07716762e5dec12b`
+- Projection module:`d0f4117c97cc63b7ca81e1e2e8d9f512718ac7244cc33449a589933e372b18e8`
+- Source contract:`d86111f994cd391a8e918cdc64a1c0b285b9fbcdcc9d6fc41d4370f070055cfe`
+- Bundle manifest:`cf2a661c328c00187de7c683513361d2b374b003f24846a800d68b5c50965037`
 
-- Task directory: `/tmp/mezan-pr2095-preview-20261125`.
-- Exact source: `source/`, tracked-clean when prepared and before initial task launch. No backend .env was copied.
-- Own toolchain: Node22.23.2/Yarn1.22.22, linux-arm64; receipt `toolchain.json`; all caches/dependencies are scoped to the task directory.
-- Current task-owned frontend PID at observation:25822; use `frontend.pid` and verify current process identity before any stop.
-- Current config: `preview-tools/runtime.config.mjs`; observer package checkpoint `887e67e8b62bcbe9e86cd7f102451fbb19b7acc1`.
-- Log: `frontend.log`; runtime receipt: `frontend-runtime.json`.
-- Browser Preview: https://salla-analytics.preview.emergentagent.com/login
-- Supervisor configuration and old backend were not changed. This task-owned process is not supervisor-managed and does not survive a host restart.
+The user already connected Production through the official secure database viewer. StateGET500 and one failed normal refresh prevented document export; stale prior rows were not copied. No native export/WebMCP/previous BSON copy was found. Never extract or replay that browser-entered credential. After all preparation is concrete, the user must enter the source URI themselves into the hidden native prompt.
 
-The original release guard returned active:false immediately before the final restart. Shared /app source remained6323017fbf9ba160c536a94f408507435786412a. Historical PR2118/2123 release owners had already completed and closed their own leases. No lease was cleared by this task.
+## Import/runtime review still pending
 
-## Observer integration evidence
+A separate importer/current read runtime is being reviewed locally. It must accept no source URI, verify exact exporter/module/semantic-contract bindings and all files/owners/shapes/pages before writes, and target only a new task DB on literal127.0.0.1:27019 with replica`mezan_pr2095_private`. Only after complete raw-byte verification may it publish the private binding/config.
 
-The first public asset request was rejected by the diagnostic middleware because the platform forwarded a cluster Preview hostname. A bounded four-entry maximum diagnostic recorded only fixed asset path, normalized method, parsed hostname and allow decision. It identified `salla-analytics.cluster-9.preview.emergentcf.cloud`. The final external config permits exactly that additional static-asset host and disables diagnostic logging. The browser-origin check remains exactly the public Preview hostname; no forwarded header grants access. Product CSP, authentication, backend origin and allowed-host configuration are unchanged.
+The current router and dedicated demand-only worker must use that verified copy. Original private backend8001/authentication and P01Mongo27018 remain intact. No full server startup, provider scheduler, financial refresh, credential copying, CORS relaxation or live-data write. The old private owner ID/role matched the actual owner in the earlier read, without promotion/remapping; revalidate when needed after the environment change.
 
-The browser now displays the Arabic panel and its empty JSON export. LongTask and ResourceTiming support are present. Source and observer hashes match the package; samples0/groups0. This is an integration check, not a timing result.
+## Observer and measurement boundary
 
-Local syntax, redaction and percentile examples passed. Independent review also checked fixed asset paths, GET/HEAD only, wrong source/production/foreign/malformed-host rejection, bounded sanitized logging and external-only script/CSS injection. Source selectors have been reviewed but have not run against authenticated candidate accounting pages.
+The prior reviewed observer package`887e67e8b62bcbe9e86cd7f102451fbb19b7acc1` was restored and hash-verified, but no browser runtime is currently verified. It permits only the exact browser Preview origin and observed cluster9asset host, with temporary logging disabled. Product CSP/authentication stays unchanged.
 
-## Current data blocker — secure connection completed
+Source-serving Vite is not an optimized governed release. The passive panel records trusted clicks, fixed sanitized routes, URL/shell/data-readiness proxies and LongTasks/resources; it cannot establish actual interactivity, HTTPmethods, cancellation acknowledgement or financial-write absence by itself. p95is withheld below20valid route/cache samples.
 
-The old private P01 database has fixture data, not representative active accounting. The other locally accessible database has order volume but no canonical `operational_balance_states_v1`. Neither was changed. Existing authenticated Production GETs confirm the user's genuine active saved state, but those report/context/freshness routes do not export the raw canonical snapshot. Exact-source review found no raw operational-state HTTP export endpoint.
+Use the same frozen dataset/private backend/worker/Mongo, viewport, load and cache procedure for exact candidate versus parent frontend comparison. Copied production indexes/load are not replicated: backend timings are copy-only and cannot establish Production latency. Timeout/error/incomplete routes are failures, not accepted readiness samples.
 
-A faithful test copy requires owner-scoped canonical BSON state, referenced immutable audit pages, matching authorized identity and required catalog/source rows, preserving binary packets, revision, timestamps and archive bindings. Do not synthesize that state from projected report JSON. Production does not permit the Preview origin; no CORS relaxation or API proxy was introduced.
+## Next actions
 
-The user completed the official secure browser-auth connection in the Emergent database viewer. Production is now connected and the canonical state and audit-page collections are present. The state-document GET returnedHTTP500; one normal UI refresh also failed, with stale prior collection rows remaining visible. No stale rows were copied. The UI exposes document copy/new-document operations, no native export, and no WebMCP tool. HTTP500 alone does not identify the failure cause. The source uses binary BSON packets, but serialization/size/time failures remain hypotheses. The credential was entered securely by the user and never read by the assistant.
+1. Deploy/hash-check the frozen exporter and run its48tests with its pinned private dependencies on the restored task path.
+2. Finish/review/persist importer/runtime, then run guarded remote route-factory/preflight checks with no source credential.
+3. Check the original guard/ports before activating own Preview services; preserve every foreign process/lease/data directory.
+4. Prepare a new exclusive private output path and hidden-input command using include-navigation-sources, min-revision16947, require-active, max-mib1024, max-seconds900 and max-source-rows50000. Source database and unchanged owner remain private arguments, never public evidence. Human credential-entry time is outside the capture deadline.
+5. After genuine complete capture and verified isolated import, authenticate normally, verify owner/current routes and measure8views/12tabs/reviewed specialized navigation. No financial refresh/write for benchmarking.
+6. Keep PR2095 Draft and undeployed until actual acceptance and explicit user release acceptance. Evidence branches must never be deployed.
 
-A bounded search of known prior host task directories and the exact repository found no existing canonical BSON backup. A direct, bounded read-only BSON capture is now being prepared. It must preserve the canonical state, manifest-only audit pages and the complete reviewed source/projection graph in one supported snapshot session, with a separate current-primary head check. The temporary helper's core tests pass; the full source closure and independent review are still in progress. No native source connection/data export has run.
-
-A new task-owned Mongo7.0.45 single-node replica now runs only on127.0.0.1:27019, set mezan_pr2095_private, PID49277 at observation, data under the task's mongo/data. Snapshot reads plus a majority-journaled transaction commit passed using an own disposable probe record. The intended real clone database is still empty/absent. Existing P01 data/authentication and supervisor configuration are unchanged. The existing private auth identity matches the real owner ID and stored owner role; no role or identity was manufactured.
-
-## Resume safely
-
-1. Complete/review the native read-only BSON capture tool and full source coverage, then use a user-controlled hidden terminal prompt for the source credential. The existing browser-entered credential must not be extracted or replayed. Keep the old Preview backend/P01 and live database intact. No secrets go into chat, CLI arguments, environment files, frontend variables, public evidence or source.
-2. If an authorized faithful snapshot can be obtained, prepare a separate disposable database and reviewed current-accounting read runtime. Preserve the old P01 database and its service. Do not run full current server startup against Production or the P01 data, because startup can migrate/index/start workers.
-3. Verify normal Preview authentication, actor/owner scope and all current endpoint contracts. Keep financial refresh/recalculation and provider writes out of the benchmark.
-4. Measure cold/warm route observation and response proxy, Long Tasks, pending-read exit and actual data readiness separately across the eight main sections, all12 report tabs and specialized routes. Separate backend queue/build/Mongo diagnostics. The panel is passive and cannot prove request methods or cancellation acknowledgement; obtain those from an authorized network/log surface.
-5. Do not claim the p95<500ms target from fewer than20 valid route/cache observations or from the prior synthetic fixture timings. Compare like datasets, runtime types, viewport and cache procedure; label the source-serving runtime clearly.
-6. Keep PR2095 Draft, unmerged and undeployed until measured acceptance and explicit release acceptance. Evidence branches are never deployment inputs.
-
-## Restart or remove only this task's frontend
-
-Read the original `/app/scripts/production_release_guard.py status` first and proceed only with active:false. Read `frontend.pid`; verify its /proc cwd is exactly this task's `source/frontend`, its executable is the pinned node_path from `toolchain.json`, and argv is the candidate Vite launcher. Stop only that verified PID, then verify port3000 is free. Never stop an unfamiliar process or change supervisor to make a port available.
-
-To resume the same config, use the verified pinned Node directly (not a long-running toolchain-helper exec lock), cwd `source/frontend`, variables `NODE_ENV=production`, `MEZAN_PREVIEW_PERF_ENABLED=1`, `REACT_APP_BACKEND_URL=https://salla-analytics.preview.emergentagent.com`, and the private config path. Record the new PID/receipt and verify the browser. To remove only instrumentation, stop the same verified process and restart the unchanged candidate Vite config without the observer variable/external config. Preserve the old backend, P01 data and every foreign lease/service.
-
-## Release and continuity
-
-Source checks remain18success/6expected conditional skips/0failure or pending. Existing 1,845 frontend tests,7,605 backend tests and fixture browser scenarios passed at the exact candidate; these do not establish actual-data latency. This task changed Production: no.
-
-STATUS.json is the current structured continuation. Earlier immutable checkpoints preserve the historical blockers and each runtime/tooling milestone. No credentials, customer data or financial records are stored on this public evidence branch.
+All durable evidence is code and sanitized metadata only. Financial BSON, owner/source identity, runtime credentials and private manifests must never enter GitHub. Production changed by this task:no.
