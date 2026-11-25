@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "finalized_at_utc": "2026-11-25T00:38:59.409851+00:00",
+  "prepared_by": "rehearsal_refresh",
+  "result": "PASS_STATIC_FINALIZATION_PENDING_ACTUAL_LEASE_REVIEW_AND_PUBLICATION",
+  "execution_allowed": false,
+  "target": {
+    "file": "pr2123-original-verify.py",
+    "bytes": 6675,
+    "sha256": "d98db50bdc3059e8483bb9427ce53a6a95931be3279b5c34bfc3eba1cb8d1206",
+    "git_blob": "12b33227940d1bed5a7209562d99dbacf5f1f465"
+  },
+  "references": [
+    {
+      "file": "pr2123-original-verify-DRAFT.py",
+      "bytes": 6628,
+      "sha256": "87b04f5be1b00ed648ab636d56661b39875cd49e6c9005b6e8c4ee4b26723b10",
+      "git_blob": "4d1d66e2ccf256df55b9b9cde9e65ae05a0b5cc4"
+    },
+    {
+      "file": "pr2123-original-verify-DRAFT-independent-review.json",
+      "bytes": 7997,
+      "sha256": "992e39928085eedf34b836cb1d9201d0beda074a9c71bacfbb024825806fc75e",
+      "git_blob": "79b9b1ba62e76eed6241e34137cd4e36f4227d53"
+    }
+  ],
+  "restricted_diff": {
+    "file": "pr2123-original-verify-finalization.diff",
+    "bytes": 900,
+    "sha256": "5c15e8b382c9da5b7bdb6e9572a813bf642de5d538730352ab5ab7baa5d26bab",
+    "git_blob": "86dd7c88d780c49d29102f90f8be26c7768a99fe"
+  },
+  "exact_changes": [
+    {
+      "from": "\"\"\"DRAFT: capture one original PR2123 verification; lease binding is still unset.\"\"\"",
+      "to": "\"\"\"Final lease-bound capture of one original PR2123 verification after publication.\"\"\""
+    },
+    {
+      "from": "LEASE_SHA256 = 'DRAFT_UNBOUND_LEASE_SHA256'",
+      "to": "LEASE_SHA256 = '2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d'"
+    },
+    {
+      "from": "PREPARED_AT = 'DRAFT_UNBOUND_PREPARED_AT'",
+      "to": "PREPARED_AT = '2026-11-25T00:37:19.949259+00:00'"
+    }
+  ],
+  "actual_binding_reported_by_root": {
+    "lease_sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d",
+    "prepared_at": "2026-11-25T00:37:19.949259+00:00",
+    "lease_bytes": 668216,
+    "original_prepare_exit_code": 0,
+    "original_prepare_stdout_identical_to_raw_lease": true,
+    "original_prepare_host_stage": "/tmp/mezan-pr2123-release-preparation-lo04dsqr",
+    "provenance": "Root task message. This preparer has not accessed host or downloaded/independently read the actual lease archive."
+  },
+  "static_checks": {
+    "AST_parse": "PASS",
+    "compile_only": "PASS",
+    "declared_three_text_changes_only": true,
+    "reverse_all_replacements_recovers_complete_reviewed_DRAFT_bytes": true,
+    "normalizing_only_module_docstring_and_two_binding_literals_recovers_exact_original_AST": true,
+    "all_original_functions_AST_identical": true,
+    "early_unbound_sentinel_comparison_preserved": true,
+    "lease_digest_64_lowercase_hex": true,
+    "prepared_at_exact_timezone_aware_string": true,
+    "other_identity_actor_guard_and_request_derivation_code_unchanged": true,
+    "historical_DRAFT_and_independent_review_unchanged": true,
+    "new_file_modes": "0600"
+  },
+  "remaining_before_invocation": [
+    "Root independently verifies downloaded exact raw lease/prepare evidence against the 668216-byte digest and actual timestamp/actor/identities.",
+    "Independent restricted-diff final wrapper review must approve these exact bytes.",
+    "Root completes original prepublish and the one authorized platform publication before invoking verification.",
+    "Use a separate real owned mode0700 /tmp/mezan-pr2123-verify-* stage containing the exact original-lease-before.json; the existing release-preparation stage has a different prefix and is not accepted by the unchanged wrapper.",
+    "Invoke the final wrapper once without Python optimization; preserve receipts and use original controls for any failure, without automatic retry."
+  ],
+  "actions": {
+    "wrapper_import": false,
+    "wrapper_execution": false,
+    "tests": false,
+    "host_calls": false,
+    "api_calls": false,
+    "remote_writes": false,
+    "original_guard_changes": false,
+    "other_code_changes": false
+  },
+  "limit": "Static finalization only. This is not evidence of successful prepublish, publication, live verification or lease closure."
+}

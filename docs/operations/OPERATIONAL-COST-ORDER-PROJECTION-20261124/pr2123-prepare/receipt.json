@@ -1,0 +1,64 @@
+{
+  "started_at": "2026-11-25T00:37:17.872193+00:00",
+  "stage": "/tmp/mezan-pr2123-release-preparation-lo04dsqr",
+  "approved_evidence_commit": "dba035cedf2f4e5efa268b4fec906f37f06deef0",
+  "expected": {
+    "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "protocol_version": 5
+  },
+  "status": "PREPARED_NOT_PUBLISHED",
+  "commands": [
+    {
+      "stem": "original-status-before",
+      "argv": [
+        "/usr/local/bin/python",
+        "-B",
+        "scripts/production_release_guard.py",
+        "status"
+      ],
+      "started_at": "2026-11-25T00:37:17.892682+00:00",
+      "exit_code": 0,
+      "finished_at": "2026-11-25T00:37:18.007294+00:00",
+      "stdout": {
+        "bytes": 22,
+        "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+      },
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "stem": "original-prepare",
+      "argv": [
+        "/usr/local/bin/python",
+        "-B",
+        "scripts/production_release_guard.py",
+        "prepare",
+        "--actor",
+        "chatgpt-operational-cost-order-projection-20261124-pr2123"
+      ],
+      "started_at": "2026-11-25T00:37:18.007790+00:00",
+      "exit_code": 0,
+      "finished_at": "2026-11-25T00:37:21.078112+00:00",
+      "stdout": {
+        "bytes": 668216,
+        "sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d"
+      },
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  ],
+  "published": false,
+  "lease_sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d",
+  "lease_bytes": 668216,
+  "prepared_at": "2026-11-25T00:37:19.949259+00:00",
+  "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+  "finished_at": "2026-11-25T00:37:21.088808+00:00"
+}

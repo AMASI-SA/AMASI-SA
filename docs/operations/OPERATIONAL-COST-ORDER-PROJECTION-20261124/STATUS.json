@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-25T00:36:23.918Z",
+  "recorded_at": "2026-11-25T00:39:59.281Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "PR2123 exact-D CI and actual guarded host rehearsal independently PASS. All95 hoststeps PASS, workerexit0, both original adapter/fullproof paths, four verified backups and final preservation complete. Approved for original prepare/prepublish and one authorized publication; no ownlease or publication yet.",
+  "status": "PR2123 original prepare exit0 after independently PASS host rehearsal. Exact ownlease prepared2026-11-25T00:37:19.949259UTC, preserved complete original bytes/stdout. Not yetpublished; originalprepublish must runimmediatelybeforeoneplatformPublishchanges.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -301,7 +301,7 @@
     },
     "authorization": "Latest user explicitly transferred completion of the existing publication to root. Only original verify and sequential status ran; no second publication, prepare, abort, manual lease clear or cabinet business action."
   },
-  "next_safe_action": "Run fresh original status, then original prepare for actor chatgpt-operational-cost-order-projection-20261124-pr2123. Preserve actual lease bytes/digest/prepared_at. Original prepublish immediately before one free platform Publishchanges; afternewcompletedpublicationrunoriginalverifythreeprobes and matchingstatusclosure. Bind/finalreviewcapturewrapperfromactuallease beforeverify.",
+  "next_safe_action": "Run unchangedoriginalprepublishandrequirematchingPASS, thenoneauthorizedfreePublishchanges inalreadyopenManageconfirmation. Preservenewerprovidercompletion. Finalverifywrapperrequiresnarrowindependentreviewandactualnewpublicationcompletionbeforeoriginalverify3andstatus; noabortmanualclearorreprepare.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -435,7 +435,7 @@
     "fresh_host_record": "pr2123-final-host-observation.json",
     "external_gates_satisfied": true,
     "run_started": true,
-    "lease_created": false,
+    "lease_created": true,
     "published": false,
     "no_automatic_retry": true,
     "input_evidence_commit": "872606dcad34deb8261c7ba1b1993d976d26c892",
@@ -557,13 +557,43 @@
     ]
   },
   "publication": {
-    "state": "NOT_YET_SUBMITTED",
+    "state": "PREPARED_NOT_PUBLISHED",
     "platform_baseline": {
       "version": "7191418",
       "ordinal": 100
     },
     "confirmation_observed": "Free republishes / Publish changes",
-    "lease_created": false,
-    "published": false
+    "lease_created": true,
+    "published": false,
+    "preparation": {
+      "stage": "/tmp/mezan-pr2123-release-preparation-lo04dsqr",
+      "prepared_at": "2026-11-25T00:37:19.949259+00:00",
+      "lease_sha256": "2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d",
+      "lease_bytes": 668216,
+      "expected": {
+        "actor": "chatgpt-operational-cost-order-projection-20261124-pr2123",
+        "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+        "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "deployment_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+        "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+        "protocol_version": 5
+      },
+      "receipt": "pr2123-prepare/receipt.json",
+      "archive": {
+        "path": "PR2123-PREPARE.zip",
+        "bytes": 410774,
+        "sha256": "13414f495ccb2f1266c02669ab1834a02d9790f5fa8e2c640aed4978b8286fff",
+        "blob": "ded3961dc6aafcab7dddd5310c5ccb38642967c8"
+      }
+    }
+  },
+  "postpublish_capture_final": {
+    "file": "pr2123-original-verify.py",
+    "bytes": 6675,
+    "sha256": "d98db50bdc3059e8483bb9427ce53a6a95931be3279b5c34bfc3eba1cb8d1206",
+    "limited_diff": "pr2123-original-verify-finalization.diff",
+    "state": "BOUND_PENDING_INDEPENDENT_LIMITED_REVIEW",
+    "required_stage_prefix": "/tmp/mezan-pr2123-verify-",
+    "invoked": false
   }
 }

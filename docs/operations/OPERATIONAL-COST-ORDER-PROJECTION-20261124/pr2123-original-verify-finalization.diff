@@ -1,0 +1,19 @@
+--- pr2123-original-verify-DRAFT.py
++++ pr2123-original-verify.py
+@@ -1,4 +1,4 @@
+-"""DRAFT: capture one original PR2123 verification; lease binding is still unset."""
++"""Final lease-bound capture of one original PR2123 verification after publication."""
+ from datetime import datetime, timezone
+ from pathlib import Path
+ import hashlib
+@@ -22,8 +22,8 @@
+ }
+ INTENT_SHA = 'c71a0ba71e36a2306a0c4bce1822f39073e6984f'
+ GUARD_SHA256 = '4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a'
+-LEASE_SHA256 = 'DRAFT_UNBOUND_LEASE_SHA256'
+-PREPARED_AT = 'DRAFT_UNBOUND_PREPARED_AT'
++LEASE_SHA256 = '2e6824bc9a7140620e93761efd548bf77d1a09a9425bd0ccb7600394023f7f2d'
++PREPARED_AT = '2026-11-25T00:37:19.949259+00:00'
+ 
+ # Fail before any /app read, stage write or child process while unbound.
+ if re.fullmatch(r'[0-9a-f]{64}', LEASE_SHA256) is None or PREPARED_AT == 'DRAFT_UNBOUND_PREPARED_AT':
