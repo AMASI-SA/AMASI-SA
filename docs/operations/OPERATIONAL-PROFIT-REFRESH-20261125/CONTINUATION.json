@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 14:47:33 UTC",
-  "phase": "E9_HOST_RECONNECTED_APP_FAST_FORWARD_D_ORIGINAL_BUILD_NEXT",
+  "recorded_at": "2026-11-25 14:59:03 UTC",
+  "phase": "E10_ORIGINAL_APP_REHEARSAL_PASS_OWN_V5_LEASE_PREPARED",
   "repository": "AMASI-SA/AMASI-SA",
   "source_branch": "codex/operational-profit-refresh-20261125",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
@@ -129,7 +129,7 @@
   "release": {
     "intent_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
     "merge_D": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
-    "prepared": false,
+    "prepared": true,
     "publish_clicked": false,
     "production_changed": false,
     "intent_B_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
@@ -414,7 +414,11 @@
       "workflow_reruns": 0,
       "github_writes": 0,
       "host_actions": 0
-    }
+    },
+    "active": true,
+    "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
+    "prepared_at": "2026-11-25T14:57:47.368128+00:00",
+    "prepublish_passed": false
   },
   "other_work": {
     "pr2124": "Draft payment path, not merged; adds3different diagnostic names in the same file.",
@@ -433,9 +437,9 @@
     "known_comment_limit": 2500,
     "record": "Own source STATUS plus separate evidence branch; no saturated-ledger retry."
   },
-  "next_safe_action": "Run the original three governed commands in /app using fresh task-owned /tmp/mezan-pr2126-app-dy90mxg3 cache/temp and evidence directory. Recheck original /app guard inactive and exact D tracked-clean before starting. No lease during build. After all original checks pass and fresh source verification, prepare own v5 lease, prepublish immediately before one authorized publish, then verify and close only that lease.",
+  "next_safe_action": "Own v5 lease was created by this task at the recorded prepared_at and the full original prepare output exactly matched status. Confirm same own lease, run original prepublish immediately before one authorized Republish/Publish changes. Require a newer explicit Deployment Succeeded; run original verify --url https://mezansalla.com and then status to close only the matching lease. Production has not yet been published.",
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
-  "previous_evidence_commit": "0c391583e27293156921a9064c8b254d612916a3",
+  "previous_evidence_commit": "b1c8dd99b570ecc4725f0fb14176c45e5466a02d",
   "previous_A_CI": {
     "source_sha": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
     "known_failed_runs": [
@@ -864,5 +868,119 @@
       "read_elapsed includes owned join/close; duration beyond15seconds does not prove extra query work.",
       "Retained row count is stopped progress, not the full source cohort."
     ]
+  },
+  "app_original_rehearsal": {
+    "result": "PASS",
+    "started_at": "2026-11-25T14:48:00.536109+00:00",
+    "finished_at": "2026-11-25T14:49:35.487835+00:00",
+    "runner_pid": 5967,
+    "source": "/app",
+    "steps": [
+      {
+        "index": 1,
+        "cwd": "/app/frontend",
+        "argv": [
+          "yarn",
+          "build"
+        ],
+        "started_at": "2026-11-25T14:48:00.649546+00:00",
+        "log": "/tmp/mezan-pr2126-app-dy90mxg3/evidence/step-1.log",
+        "returncode": 0,
+        "elapsed_seconds": 90.803,
+        "finished_at": "2026-11-25T14:49:31.453040+00:00"
+      },
+      {
+        "index": 2,
+        "cwd": "/app",
+        "argv": [
+          "python",
+          "-B",
+          "scripts/verify_frontend_build.py",
+          "--expected-git-sha",
+          "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+          "--reviewed-intent-v5"
+        ],
+        "started_at": "2026-11-25T14:49:31.453440+00:00",
+        "log": "/tmp/mezan-pr2126-app-dy90mxg3/evidence/step-2.log",
+        "returncode": 0,
+        "elapsed_seconds": 1.441,
+        "finished_at": "2026-11-25T14:49:32.895089+00:00"
+      },
+      {
+        "index": 3,
+        "cwd": "/app",
+        "argv": [
+          "python",
+          "-B",
+          "scripts/emergent_deployment_adapter.py",
+          "verify-packages"
+        ],
+        "started_at": "2026-11-25T14:49:32.895558+00:00",
+        "log": "/tmp/mezan-pr2126-app-dy90mxg3/evidence/step-3.log",
+        "returncode": 0,
+        "elapsed_seconds": 2.485,
+        "finished_at": "2026-11-25T14:49:35.380925+00:00"
+      }
+    ],
+    "before": {
+      "at": "2026-11-25T14:48:00.536123+00:00",
+      "main_head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "main_tracked_changes": "",
+      "app_free_bytes": 438525952,
+      "tmp_free_bytes": 274937454592,
+      "guard_active": false
+    },
+    "after": {
+      "at": "2026-11-25T14:49:35.381384+00:00",
+      "main_head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "main_tracked_changes": "",
+      "app_free_bytes": 438456320,
+      "tmp_free_bytes": 273480454144,
+      "guard_active": false
+    },
+    "package_boundary": {
+      "kind": "mezan_release_package_boundary_proof_v1",
+      "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+      "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+      "backend": {
+        "runtime_root": "backend",
+        "file_count": 1359,
+        "package_tree_sha256": "d224a8b3027f270e881d6237e9a6683a2b6378e775b8aeb363fa8a5c638e21d9"
+      },
+      "frontend": {
+        "runtime_root": "frontend",
+        "file_count": 1834,
+        "package_tree_sha256": "b04b1c4cec13a2240a0b073b38947011277cae874ed48e442ad6cddee42443c1"
+      }
+    },
+    "log_sha256": {
+      "step-1.log": "c16a1198192e0906b1141aa4aedb831f4566b75c5b57856605d519e2eabb0e78",
+      "step-2.log": "8546375e5b6b2487054d160822edb0be431ab02c5f28e4bf0c7201101aacfc6a",
+      "step-3.log": "db138fb48550f7786736edf8ccb3bb7d82ff2724ccb45104c7bbffd014809e2b"
+    }
+  },
+  "original_prepare": {
+    "operation": "original_prepare",
+    "started_at": "2026-11-25T14:57:45.658181+00:00",
+    "finished_at": "2026-11-25T14:57:48.477848+00:00",
+    "returncode": 0,
+    "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
+    "protocol_version": 5,
+    "prepared_at": "2026-11-25T14:57:47.368128+00:00",
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "source_base_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+    "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+    "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "active": true,
+    "own_lease_exactly_matched": true,
+    "publish_clicked": false
+  },
+  "app_rehearsal_artifact": {
+    "path": "docs/operations/OPERATIONAL-PROFIT-REFRESH-20261125/PR2126-APP-ORIGINAL-REHEARSAL.zip",
+    "bytes": 117906,
+    "sha256": "48181465eb50f99cdee578c5f4d484c0237e463a7d0f5f8ac505dcc3823c141e",
+    "members": 7,
+    "root_crc_and_sha_verified": true,
+    "independent_review": "No material blocker reported; exact commands, source and identity match, tracked clean, guard inactive before/after build; credential-pattern scan found no matches. Final review record pending."
   }
 }

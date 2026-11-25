@@ -1,0 +1,16 @@
+{
+  "operation": "original_prepare",
+  "started_at": "2026-11-25T14:57:45.658181+00:00",
+  "finished_at": "2026-11-25T14:57:48.477848+00:00",
+  "returncode": 0,
+  "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
+  "protocol_version": 5,
+  "prepared_at": "2026-11-25T14:57:47.368128+00:00",
+  "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+  "source_base_git_sha": "6323017fbf9ba160c536a94f408507435786412a",
+  "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+  "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+  "active": true,
+  "own_lease_exactly_matched": true,
+  "publish_clicked": false
+}
