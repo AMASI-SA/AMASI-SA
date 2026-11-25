@@ -1,0 +1,57 @@
+{
+  "phase": "isolated_D",
+  "source": "/tmp/mezan-pr2126-D-ncq_d5ga/source",
+  "evidence": "/tmp/mezan-pr2126-D-ncq_d5ga/evidence",
+  "environment": {
+    "XDG_CACHE_HOME": "/tmp/mezan-pr2126-D-ncq_d5ga/cache",
+    "TMPDIR": "/tmp/mezan-pr2126-D-ncq_d5ga/tmp",
+    "TMP": "/tmp/mezan-pr2126-D-ncq_d5ga/tmp",
+    "TEMP": "/tmp/mezan-pr2126-D-ncq_d5ga/tmp",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "REACT_APP_BACKEND_URL": "https://mezansalla.com",
+    "CI": "false"
+  },
+  "unset": [
+    "GITHUB_ACTIONS",
+    "GITHUB_SHA",
+    "GITHUB_WORKSPACE"
+  ],
+  "commands": [
+    {
+      "cwd": "frontend",
+      "argv": [
+        "yarn",
+        "build"
+      ]
+    },
+    {
+      "cwd": ".",
+      "argv": [
+        "python",
+        "-B",
+        "scripts/verify_frontend_build.py",
+        "--expected-git-sha",
+        "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "--reviewed-intent-v5"
+      ]
+    },
+    {
+      "cwd": ".",
+      "argv": [
+        "python",
+        "-B",
+        "scripts/emergent_deployment_adapter.py",
+        "verify-packages"
+      ]
+    }
+  ],
+  "preconditions": [
+    "Original /app guard activefalse",
+    "/app still J clean",
+    "isolated source D clean",
+    "temporary cache is task-owned outside checkout"
+  ],
+  "no_lease_or_publication": true,
+  "no_output_copy_to_app": true,
+  "next_app_step": "After isolated rehearsal succeeds, update clean /app by controlled fast-forward to exact D and invoke its own original adapter with the task-owned external cache/temp. Do not copy build/node_modules/identity from isolated output. Root disk headroom must be observed; preserve all foreign work."
+}

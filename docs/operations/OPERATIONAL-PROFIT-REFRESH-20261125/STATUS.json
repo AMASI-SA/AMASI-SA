@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 14:16:43 UTC",
+  "recorded_at": "2026-11-25 14:27:09 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E6_B_IDENTITY_AND_CI_REHEARSALS_PASS_BACKEND_GATE_PENDING",
+  "status": "E7_NORMAL_MERGE_D_VERIFIED_ISOLATED_HOST_REHEARSAL_READY",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -76,100 +76,22 @@
       "production_scope_verified": false,
       "result": "Preview-host database had no uniquely matching receipt header; no packed snapshot was read. No production metadata conclusion."
     },
-    "original_B_validation": {
-      "observed_at": "2026-11-25T14:01:33.796853+00:00",
-      "original_B_validation": "PASS",
-      "worktree": "/tmp/mezan-pr2126-B-kupylbvf/source",
-      "deployment_git_sha": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
-      "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
-      "runtime_release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
+    "isolated_D_setup": {
+      "observed_at": "2026-11-25T14:24:03.105514+00:00",
+      "original_D_validation": "PASS",
+      "parent": "/tmp/mezan-pr2126-D-ncq_d5ga",
+      "source": "/tmp/mezan-pr2126-D-ncq_d5ga/source",
+      "evidence": "/tmp/mezan-pr2126-D-ncq_d5ga/evidence",
+      "cache": "/tmp/mezan-pr2126-D-ncq_d5ga/cache",
+      "tmp": "/tmp/mezan-pr2126-D-ncq_d5ga/tmp",
+      "head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+      "host_node": "v24.19.0",
+      "host_yarn": "1.22.22",
       "source_clean": true,
       "main_unchanged": true,
-      "guard_active": false
-    },
-    "latest_automatic_attempt": {
-      "observed_at": "2026-11-25T14:06:04.857Z",
-      "source": "Authenticated production scheduling UI; read-only observation",
-      "url": "https://mezansalla.com/operational-balances?view=tools",
-      "displayed_attempt_riyadh": "2026-11-25 17:00",
-      "displayed_next_attempt_riyadh": "2026-11-25 17:05",
-      "displayed_last_saved_riyadh": "2026-11-25 14:58",
-      "consecutive_failures": 1,
-      "error_code": "operational_source_setup_incomplete",
-      "manual_refresh_run": false,
-      "source_sync_run": false,
-      "production_changed_by_this_task": false,
-      "stages": [
-        {
-          "stage": "native_evidence",
-          "outcome": "complete",
-          "duration_ms": 10534.702
-        },
-        {
-          "stage": "snapshot_raw_read",
-          "outcome": "complete",
-          "duration_ms": 53.201
-        },
-        {
-          "stage": "snapshot_unpack",
-          "outcome": "complete",
-          "duration_ms": 9249.005
-        },
-        {
-          "stage": "snapshot_copy_prepare",
-          "outcome": "complete",
-          "duration_ms": 3522.781
-        },
-        {
-          "stage": "snapshot_load",
-          "outcome": "complete",
-          "duration_ms": 12825.818
-        },
-        {
-          "stage": "source_collision",
-          "outcome": "complete",
-          "duration_ms": 0.012
-        },
-        {
-          "stage": "orders_cursor_build",
-          "outcome": "complete",
-          "duration_ms": 0.221
-        },
-        {
-          "stage": "orders_cursor_read",
-          "outcome": "cancelled",
-          "duration_ms": 16042.127
-        },
-        {
-          "stage": "source_primary_reads",
-          "outcome": "failed",
-          "duration_ms": 16462.198
-        },
-        {
-          "stage": "source_collection",
-          "outcome": "failed",
-          "duration_ms": 16462.835
-        },
-        {
-          "stage": "aggregate",
-          "outcome": "failed",
-          "duration_ms": 29364.043
-        }
-      ],
-      "primary_orders_read": {
-        "queue_ms": 0.015,
-        "budget_ms": 15000,
-        "first_row_ms": 9.003,
-        "read_elapsed_ms": 16042.11,
-        "rows_seen": 17538
-      },
-      "interpretation_limits": [
-        "Timings overlap and are not additive.",
-        "UI row counts are observed delivery, not complete source coverage.",
-        "This attempt failed in primary orders before the profit stage appeared; it is not the earlier saved profit partial result.",
-        "The exact driver/network/CPU contribution is not yet proven.",
-        "No new successful saved receipt was observed."
-      ]
+      "guard_active": false,
+      "build_started": false
     }
   },
   "limits": [
@@ -369,13 +291,13 @@
     }
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Await exact-B Backend gate, recheck Production is unchangedJ and PR mergeability, then ordinary merge preserving A2/B. Verify D CI and original identity. Complete original governed host adapter rehearsal with fresh inactive guard and reviewed temporary-cache/resource plan; preserve foreign work. No lease until rehearsal passes. One prepublish/publish followed by explicit new Deployment Succeeded and original three-probe verify. Diagnose primary-order read latency separately from profit soft timeout.",
+  "next_safe_action": "Launch the preserved three original commands sequentially in isolated D using task-owned /tmp cache/temp, logging each result and verifying source/main state. Complete remaining D CodeQL gate. If isolated rehearsal passes, use only original adapter to materialize exact D in /app after fresh inactive guard and controlled fast-forward; do not transplant outputs. Prepare only after final rehearsal and identity pass, then prepublish immediately before one publish.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
+  "last_remote_checkpoint": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -451,7 +373,7 @@
   "previous_source_A": "3bbd1bb91538197db68a3f20c40cbf97cd49272b",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
-  "evidence_checkpoint": "05c23be11221a4d02c00be974ba969a5c7091c33",
+  "evidence_checkpoint": "7c4142dd217531c0579feaddb52f4cba40f6b738",
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
   "candidate": {
@@ -485,7 +407,7 @@
   },
   "release": {
     "intent_B": "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81",
-    "merge_D": null,
+    "merge_D": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
     "prepared": false,
     "publish_clicked": false,
     "production_changed": false,
@@ -496,11 +418,10 @@
     ],
     "intent_B_blob": "714c903b4264cc912c86df8bb2ee3caf2085fb65",
     "B_CI": {
-      "observed_at": "2026-11-25T14:15:02Z",
-      "total_checks": 43,
-      "success": 36,
+      "result": "complete",
+      "success": 37,
       "scoped_skips": 6,
-      "remaining_job": 139257131942
+      "pending": 0
     },
     "B_CI_readiness": {
       "repository": "AMASI-SA/AMASI-SA",
@@ -606,6 +527,85 @@
       "artifacts_downloaded_by_monitor": false,
       "monitoring_read_only": true,
       "reruns": 0
+    },
+    "merge_D_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
+    "merge_D_parents": [
+      "6323017fbf9ba160c536a94f408507435786412a",
+      "0fadef0fda5e2c11e1fb00b88723af1d9f6e0e81"
+    ],
+    "B_to_D_content_diff": [],
+    "production_branch_changed": true,
+    "production_runtime_changed": false,
+    "D_CI": {
+      "checks": [
+        {
+          "name": "Emergent manual redeploy required",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139271718157"
+        },
+        {
+          "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139270220908"
+        },
+        {
+          "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139270220824"
+        },
+        {
+          "name": "Host Node 24.19.0 engine and dispatcher contract",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269643607"
+        },
+        {
+          "name": "Backend preflight",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269643318"
+        },
+        {
+          "name": "Host Node 20.20.2 engine and dispatcher contract",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269643312"
+        },
+        {
+          "name": "Backend security contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640739/job/139269643309"
+        },
+        {
+          "name": "Frontend build",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640720/job/139269642841"
+        },
+        {
+          "name": "CodeQL (javascript-typescript)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640752/job/139269642572"
+        },
+        {
+          "name": "Frontend dependency and CSP checks",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640739/job/139269642430"
+        },
+        {
+          "name": "CodeQL (python)",
+          "status": "in_progress",
+          "conclusion": null,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45632640752/job/139269642138"
+        }
+      ],
+      "backend_stock_push_note": "These workflows do not trigger on Production push; both passed at exact B. D content tree equals B."
     }
   }
 }
