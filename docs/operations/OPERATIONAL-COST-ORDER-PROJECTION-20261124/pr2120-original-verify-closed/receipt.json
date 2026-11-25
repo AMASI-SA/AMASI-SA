@@ -1,0 +1,62 @@
+{
+  "started_at": "2026-11-24T23:43:25.783721+00:00",
+  "status": "PASS",
+  "command": [
+    "python",
+    "scripts/production_release_guard.py",
+    "verify",
+    "--url",
+    "https://mezansalla.com"
+  ],
+  "expected": {
+    "actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+    "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "protocol_version": 5
+  },
+  "new_publish": false,
+  "prepare": false,
+  "abort": false,
+  "manual_lease_clear": false,
+  "cabinet_mutation": false,
+  "original-verify_started_at": "2026-11-24T23:43:25.787063+00:00",
+  "original-verify_finished_at": "2026-11-24T23:58:27.328029+00:00",
+  "original-verify_exit_code": 0,
+  "original-verify.stdout": {
+    "bytes": 43090,
+    "sha256": "744772a109e509bd1d55c02cb3a5f466ef424bd7d963e8edf7c36a458256bbc9"
+  },
+  "original-verify.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "verification": {
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "protocol_version": 5,
+    "boot_started_at": "2026-11-24T22:41:44.652998+00:00",
+    "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b"
+  },
+  "frontend_checked_requests_count": 770,
+  "original-status_started_at": "2026-11-24T23:58:27.328624+00:00",
+  "original-status_finished_at": "2026-11-24T23:58:27.443478+00:00",
+  "original-status_exit_code": 0,
+  "original-status.stdout": {
+    "bytes": 22,
+    "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+  },
+  "original-status.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "original_status": {
+    "active": false
+  },
+  "finished_at": "2026-11-24T23:58:27.443955+00:00"
+}

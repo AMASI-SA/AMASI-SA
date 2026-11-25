@@ -1,0 +1,57 @@
+{
+  "created_at": "2026-11-24T23:59:22.288611+00:00",
+  "stage": "/tmp/mezan-prior-release-verify-fixed-zbh82lm5",
+  "lease_directory_absent": true,
+  "files": [
+    {
+      "name": "launch.json",
+      "bytes": 375,
+      "sha256": "8f54a1fb1bd9839d0ecb096acf3ddf01c29bb5ad7f3aa02daefe34348dae0991"
+    },
+    {
+      "name": "original-lease-before.json",
+      "bytes": 668210,
+      "sha256": "3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061"
+    },
+    {
+      "name": "original-status.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "original-status.stdout",
+      "bytes": 22,
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+    },
+    {
+      "name": "original-verify.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "original-verify.stdout",
+      "bytes": 43090,
+      "sha256": "744772a109e509bd1d55c02cb3a5f466ef424bd7d963e8edf7c36a458256bbc9"
+    },
+    {
+      "name": "receipt.json",
+      "bytes": 2308,
+      "sha256": "3fd42d6714b2aa9dded987fcc3d2035ac82625676fcc5474c6b2f6d92d78bafa"
+    },
+    {
+      "name": "runner.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "runner.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "verify_existing_release.py",
+      "bytes": 4223,
+      "sha256": "693bcdf4993b03b9f820e819989b953cc3d13719ca58b74c4d655007d2b96f31"
+    }
+  ]
+}

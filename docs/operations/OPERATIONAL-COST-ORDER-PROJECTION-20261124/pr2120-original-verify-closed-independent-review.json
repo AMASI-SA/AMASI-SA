@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "task": "Independent original PR2120 production verification and closed lease review",
+  "reviewer": "release_gate",
+  "reviewed_at_utc": "2026-11-25T00:02:15.414893+00:00",
+  "result": "PASS",
+  "findings": [],
+  "contract": {
+    "file": "pr2120-original-verify-receipt-review-contract.json",
+    "bytes": 8357,
+    "sha256": "088cc014e4a71f9b79064ebf2d2d5593c93a1f9d15e2f258dcff648d8512daea"
+  },
+  "archive": {
+    "file": "PR2120-ORIGINAL-VERIFY-CLOSED.zip",
+    "bytes": 217377,
+    "sha256": "1fd683fcf33ad62ed822e4203884199bc75204a7c1e45938ab6ea65a82ccc27d",
+    "crc": "PASS",
+    "members": 11,
+    "all_manifest_member_sizes_hashes_and_local_bytes_match": true,
+    "files": [
+      {
+        "name": "launch.json",
+        "bytes": 375,
+        "sha256": "8f54a1fb1bd9839d0ecb096acf3ddf01c29bb5ad7f3aa02daefe34348dae0991"
+      },
+      {
+        "name": "original-lease-before.json",
+        "bytes": 668210,
+        "sha256": "3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061"
+      },
+      {
+        "name": "original-status.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "original-status.stdout",
+        "bytes": 22,
+        "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+      },
+      {
+        "name": "original-verify.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "original-verify.stdout",
+        "bytes": 43090,
+        "sha256": "744772a109e509bd1d55c02cb3a5f466ef424bd7d963e8edf7c36a458256bbc9"
+      },
+      {
+        "name": "receipt.json",
+        "bytes": 2308,
+        "sha256": "3fd42d6714b2aa9dded987fcc3d2035ac82625676fcc5474c6b2f6d92d78bafa"
+      },
+      {
+        "name": "runner.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "runner.stdout",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "verify_existing_release.py",
+        "bytes": 4223,
+        "sha256": "693bcdf4993b03b9f820e819989b953cc3d13719ca58b74c4d655007d2b96f31"
+      }
+    ]
+  },
+  "release": {
+    "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "source_base_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "protocol_version": 5,
+    "url": "https://mezansalla.com",
+    "verified": true,
+    "checks": 3,
+    "frontend_artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b"
+  },
+  "lease_identity": {
+    "actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+    "prepared_at": "2026-11-24T22:29:50.804025+00:00",
+    "bytes": 668210,
+    "sha256": "3fbb8fa9e9be4fad154b15dbe9df88162da5ff6c6455641f3d807c4a833b7061",
+    "same_original_prepare_bytes": true,
+    "complete_runtime_identity_equals_reviewed_D_intent": true,
+    "all_mirrored_identity_fields_match": true
+  },
+  "original_execution": {
+    "command": [
+      "python",
+      "scripts/production_release_guard.py",
+      "verify",
+      "--url",
+      "https://mezansalla.com"
+    ],
+    "started_at": "2026-11-24T23:43:25.787063+00:00",
+    "finished_at": "2026-11-24T23:58:27.328029+00:00",
+    "duration_seconds": 901.540966,
+    "exit_code": 0,
+    "stdout": {
+      "bytes": 43090,
+      "sha256": "744772a109e509bd1d55c02cb3a5f466ef424bd7d963e8edf7c36a458256bbc9"
+    },
+    "stderr_bytes": 0,
+    "reviewed_runner_hash_exact": true,
+    "unoptimized_launch_recorded": true,
+    "no_prior_guard_process_recorded": true
+  },
+  "proof_checks": {
+    "exact_stdout_key_set_and_static_fields": true,
+    "backend_source_summary_exact": true,
+    "backend_runtime_file_count": 1358,
+    "release_control_source_summary_exact": true,
+    "release_control_file_count": 329,
+    "frontend_request_order_and_labels_exact": true,
+    "frontend_requests_per_probe": 770,
+    "frontend_request_list_canonical_sha256": "d1d54c198e8c551878ca7d8c9fee1c0c91a2a5e07a410c6fd330c279e3399967",
+    "public_file_count": 381,
+    "shell_cache_records": 3,
+    "service_worker_records": 2,
+    "cache_and_MIME_contracts_pass": true,
+    "boot_observations": [
+      "2026-11-24T22:41:44.652998+00:00"
+    ],
+    "boot_timing_and_original_clock_skew_pass": true,
+    "all_execution_times_ordered": true
+  },
+  "closure": {
+    "status_command_after_verify": true,
+    "started_at": "2026-11-24T23:58:27.328624+00:00",
+    "finished_at": "2026-11-24T23:58:27.443478+00:00",
+    "exit_code": 0,
+    "original_status": {
+      "active": false
+    },
+    "stdout": {
+      "bytes": 22,
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+    },
+    "stderr_bytes": 0,
+    "lease_directory_absent_recorded": true,
+    "closure_riyadh": "2026-11-25T02:58:27.443478+03:00"
+  },
+  "CAS_review": {
+    "preinvoke_full_lease_byte_hash_pinned": true,
+    "original_guard_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "original_verify_three_probe_loop_then_exact_full_lease_reread_under_same_mutex": true,
+    "closure_source": "Unchanged original verifier successful output and exit0; original _remove_active_lease comparison under mutex; subsequent original inactive status and retained manifest absence observation. No manual removal call exists in reviewed runner.",
+    "raw_three_health_payloads_retained": false,
+    "limit": "Original compact stdout retains three-probe success and first-probe frontend labels, plus distinct boot timestamps. It does not retain each raw health/HTTP response; do not describe it as such."
+  },
+  "scope": {
+    "no_second_publication": true,
+    "no_prepare": true,
+    "no_abort": true,
+    "no_manual_lease_clear": true,
+    "no_cabinet_action": true,
+    "no_host_calls_by_reviewer": true,
+    "no_API_mutation_by_reviewer": true,
+    "no_Git_changes_by_reviewer": true
+  },
+  "remaining_boundary": "This establishes closure of preceding release PR2120. It does not publish PR2123 or prove its live cost improvement; root must freshly confirm current production ref and inactive guard before PR2123 release actions."
+}
