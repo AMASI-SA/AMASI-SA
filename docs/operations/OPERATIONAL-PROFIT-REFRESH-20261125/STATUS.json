@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25T13:13:24.147422+00:00",
+  "recorded_at": "2026-11-25T13:19:30.525416+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "WIP_BACKEND_DIAGNOSTICS_VALIDATED_FRONTEND_WHITELIST_PENDING",
+  "status": "SOURCE_READY_LOCAL_VALIDATION_PASSED_EXACT_SOURCE_CI_PENDING",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -142,17 +142,39 @@
     "independent_ast_review": "Dashboard and profit source modules match baseline AST after removing diagnostic-only wrappers/imports/map.",
     "whitespace": "git diff --check exit0",
     "warning": "Existing Pydantic validator deprecation warnings only.",
-    "ci": "Not started for this WIP checkpoint.",
-    "frontend": "Manual error logger uses a separate whitelist; matching fixed labels and an HTTP-failure regression are in progress."
+    "ci": "Pending on source A; inherited intent is not a release for this change.",
+    "frontend": {
+      "red": {
+        "failed": 2,
+        "passed": 73,
+        "skipped": 0,
+        "seconds": 1.559,
+        "reason": "Existing filter dropped all profit stage labels; previous assertions and73existing cases passed."
+      },
+      "green": {
+        "passed": 75,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 1.634
+      },
+      "runner": "Isolated Jest27.5.1/Babel27.5.1/jsdom27.5.1; Node24.22.3 within repository engine range. Pinned release Node22.23.2 remains a separate CI/rehearsal gate.",
+      "source_parity": "Removing only the3added whitelist lines reproduces the baseline module bytes.",
+      "private_fields": "Actual refreshVisibleSnapshot 408/409 path strips unknown labels, fields and nonfinite timings; one request, no retry and unchanged warning."
+    },
+    "commands": {
+      "root_affected": "PYTHONPATH=backend:backend/tests python -m pytest -q backend/tests/test_operational_balance_profit_stage_diagnostics.py backend/tests/test_operational_balance_profit_product_stage_diagnostics.py backend/tests/test_operational_balance_profit_context_parallel.py backend/tests/test_operational_balance_refresh_stage_timing.py backend/tests/test_operational_balance_source_stage_timing.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_automation.py backend/tests/test_operational_balance_automation_routes.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_refresh_parallel_profit.py backend/tests/test_dashboard_demand_builders.py --tb=short",
+      "product_adjacent": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_profit_product_authority_parallel.py backend/tests/test_dashboard_bundle_cost_authority.py backend/tests/test_operational_balance_profit_sources.py --tb=short",
+      "frontend": "node isolated-jest27/bin/jest.js --config isolated-jest.config.cjs --runInBand --ci; actual module frontend/src/pages/operational/visibleOperationalRead.test.js; CI repository command still required."
+    }
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Finish the matching frontend fixed-label filter and failure-path regression, review the combined diff, then preserve a source-ready checkpoint and verify exact-source CI before any v5 intent or host preparation.",
+  "next_safe_action": "Create source A and PR against unchanged production6323017; inspect exact-source required CI and candidate artifact. Freeze only a matching v5 intent-only B. Preserve other work and require fresh inactive original guard before any host mutation/rehearsal.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "065d034f1f318a3b56957fa28ae9da14fbef20f3",
+  "last_remote_checkpoint": "45e047547f18fcde710adb2b062fd01c36f195c0",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -162,7 +184,8 @@
     "timeouts_changed": false,
     "financial_source_writes_added": false,
     "ordinary_calls": "No-op diagnostics outside the existing owned refresh context.",
-    "soft_failure_classification": "Observe the reader before the unchanged partial-result catches; deadline-cancelled reader is not classified as user cancellation."
+    "soft_failure_classification": "Observe the reader before the unchanged partial-result catches; deadline-cancelled reader is not classified as user cancellation.",
+    "frontend": "The existing manual 408/409 error logger retains the same fixed16new stage labels; no warning/retry/request flow change."
   },
   "files": [
     {
@@ -189,6 +212,27 @@
       "path": "backend/tests/test_operational_balance_profit_product_stage_diagnostics.py",
       "bytes": 8927,
       "sha256": "25886c1d1ffecd2ed20bebb5d4d9cb70d8ff903aafbd2dee06407dc38458d6c8"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.js",
+      "bytes": 21279,
+      "sha256": "ea66ebc1f93ae1389a4764f3aa4788e86495c4ef2cade9239ebf69c9d79cebcb"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "bytes": 32309,
+      "sha256": "7a03b4c86879c5f2c52ce0e2a867bb1974a46583290cd05edc7e12f82687475d"
     }
-  ]
+  ],
+  "review": {
+    "independent_source_review": "No blocking findings for combined backend/frontend diff.",
+    "ast_parity": "Full dashboard_v2_routes and operational_profit_sources modules match6323017after removing only diagnostic additions.",
+    "vocabulary": "Backend/frontend sets exactly50unique labels;16added. Existing64record tail unchanged.",
+    "remaining_limits": [
+      "Latest tail is bounded; repeatedCASattempts can evict earlier attempts.",
+      "A queued reader not admitted before budget expiry has no entered-stage record.",
+      "Source deadline cancellation is distinguished using source_errors, not stage outcome alone.",
+      "No production improvement or source-completeness claim."
+    ]
+  }
 }
