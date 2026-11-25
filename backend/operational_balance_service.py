@@ -693,7 +693,10 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp, *, ad_correct
                 _LOG.warning("operational_refresh_source_failure stage=source_collection outcome=failed "
                              "cause=%s source_collection=%s", detail["cause"], detail["source_collection"])
                 raise HTTPException(409, detail=detail) from None
-            fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
+            from operational_source_diagnostics import source_validation_failure_detail
+            detail = source_validation_failure_detail(exc)
+            _LOG.warning("operational_refresh_validation_failure cause=%s", detail["cause"])
+            raise HTTPException(409, detail=detail) from None
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
@@ -829,6 +832,12 @@ async def refresh(db, owner, *, clock=None, ad_correction=None):
         result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
         from operational_balance_recovery_proof import FIELD as PROOF_FIELD, build_recovery_proof
         result["engine"][PROOF_FIELD] = await run_calculation(build_recovery_proof, state, result, sources, stamp)
+        # Match previously staged, verified capture evidence against the
+        # canonical provider/refund facts that THIS refresh already computed.
+        # This updates proof status only: no new obligation or money movement.
+        from operational_payment_cas_reconciliation import reconcile_staged_payment_evidence
+        with refresh_stage("payment_evidence_link"):
+            await run_calculation(reconcile_staged_payment_evidence, result)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()

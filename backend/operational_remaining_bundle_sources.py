@@ -9,7 +9,7 @@ from copy import deepcopy
 from decimal import Decimal, ROUND_HALF_UP
 
 from operational_bundle_cost_projection import project_bundle_costs, _leaf_key, _number
-from operational_demand_refresh import calculation_checkpoint
+from operational_demand_refresh import calculation_checkpoint, refresh_stage
 from operational_financial_activity_runtime import prepare_in_thread
 
 READ_COLLECTIONS = frozenset({
@@ -245,11 +245,15 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
     from order_cost_authority import load_order_cost_authority, resolve_order_line_cost, line_id
     from bundle_fulfillment_v2 import selected_ids
     from stock_component_consumption_service import UNITS, RECEIPTS, PLANS
-    orders = normalized_orders(raw_orders)
+    # Observe pure normalization separately from authoritative DB reads.
+    # The same source cohort, full history and proofs are still processed.
+    with refresh_stage("bundle_order_normalization"):
+        orders = normalized_orders(raw_orders)
     if not orders:
         return {}
-    authority = await load_order_cost_authority(db, owner, orders, include_corrections=False,
-        include_frozen_metadata=True, parallel_reads=True)
+    with refresh_stage("bundle_cost_authority"):
+        authority = await load_order_cost_authority(db, owner, orders, include_corrections=False,
+            include_frozen_metadata=True, parallel_reads=True)
     selected, result = {}, {}
     for order in orders:
         for item in order['items']:
