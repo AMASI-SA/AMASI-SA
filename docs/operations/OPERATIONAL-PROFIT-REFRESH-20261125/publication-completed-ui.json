@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-25T15:13:57.582Z",
+  "source": "Emergent Manage Overview UI",
+  "publication_completed_display_Riyadh": "Nov 25, 06:12 PM",
+  "provider_revision": "97dc193",
+  "current_published_ordinal_display": "100th publish",
+  "previous_provider_revision_display": "e6113be",
+  "previous_ordinal_display": "99th publish",
+  "publish_changes_clicks": 1,
+  "submitted_at": "2026-11-25T15:01:50.364Z",
+  "signals": [
+    "Deployment finished",
+    "Published versions shows new 97dc193 as latest",
+    "Republish enabled"
+  ],
+  "runtime_identity_verify": "in_progress",
+  "ordinal_limit": "Ordinal strings are retained as observed, not used as stable release identifiers."
+}

@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25 15:02:52 UTC",
+  "recorded_at": "2026-11-25 15:24:07 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E11_PREPUBLISH_PASS_ONE_PUBLISH_ACCEPTED_IN_PROGRESS",
+  "status": "E12_PLATFORM_PUBLISHED_ORIGINAL_VERIFY_IN_PROGRESS",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -160,6 +160,24 @@
       "prior_provider_version": "e6113be",
       "prior_publish_ordinal": 100,
       "verified": false
+    },
+    "publication_completed_ui": {
+      "observed_at": "2026-11-25T15:13:57.582Z",
+      "source": "Emergent Manage Overview UI",
+      "publication_completed_display_Riyadh": "Nov 25, 06:12 PM",
+      "provider_revision": "97dc193",
+      "current_published_ordinal_display": "100th publish",
+      "previous_provider_revision_display": "e6113be",
+      "previous_ordinal_display": "99th publish",
+      "publish_changes_clicks": 1,
+      "submitted_at": "2026-11-25T15:01:50.364Z",
+      "signals": [
+        "Deployment finished",
+        "Published versions shows new 97dc193 as latest",
+        "Republish enabled"
+      ],
+      "runtime_identity_verify": "in_progress",
+      "ordinal_limit": "Ordinal strings are retained as observed, not used as stable release identifiers."
     }
   },
   "limits": [
@@ -575,16 +593,50 @@
       "deployment_git_sha": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
       "release_id": "rg5-ddf3455ed71fa8a5dd19073323ec8bebe166c868ad4d14215476fd492439a70a",
       "protocol_version": 5
+    },
+    "original_production_verification": {
+      "command": [
+        "python",
+        "-B",
+        "scripts/production_release_guard.py",
+        "verify",
+        "--url",
+        "https://mezansalla.com"
+      ],
+      "cwd": "/app",
+      "first_wrapper_attempt": {
+        "started_at": "2026-11-25T15:14:59.727496+00:00",
+        "finished_at": "2026-11-25T15:14:59.843807+00:00",
+        "original_verify_invoked": false,
+        "error": "git status optional index refresh failed: Out of diskspace",
+        "preserved_under": "/tmp/mezan-pr2126-app-dy90mxg3/evidence/preflight-attempt-1"
+      },
+      "recovery": {
+        "observed_at": "2026-11-25T15:16:47.006845+00:00",
+        "original_git_status_exit": 0,
+        "tracked_clean": true,
+        "app_free_bytes": 433778688,
+        "foreign_files_deleted": false,
+        "runner_changed": false
+      },
+      "second_wrapper_started_at": "2026-11-25T15:16:47.037626+00:00",
+      "full_lease_match": true,
+      "deployment_head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+      "phase": "verifying",
+      "last_observed_at": "2026-11-25T15:22:30.928907+00:00",
+      "success_not_yet_observed": true,
+      "closure_not_yet_observed": true,
+      "republish_again": false
     }
   },
-  "production_changed_by_this_task": "Publication accepted; actual runtime change not yet verified.",
-  "next_safe_action": "Do not click publish again. Wait for newer explicit Deployment Succeeded for the accepted publication. Then compare current /app lease with this task's own prepared payload and run original python -B scripts/production_release_guard.py verify --url https://mezansalla.com. It must pass all three probes and close matching lease; status must be activefalse. Preserve full original output and update evidence/report. No financial refresh or source sync was triggered.",
+  "production_changed_by_this_task": "Platform publication completed as97dc193; original runtime verification is running and has not yet returned.",
+  "next_safe_action": "Do not republish or start another verifier. Original verify is running in the task-owned Terminal 2 as child PID 17461 of wrapper 17443. Read /tmp/mezan-pr2126-app-dy90mxg3/evidence/production-verify-state.json and original stdout/stderr. Success must be verified=true, checks=3, exact A2/D/runtime ID, and original status active=false after matching lease closure. Preserve the full original archive, obtain independent review, update evidence and private report. No paid Emergent chat, foreign lease/file/process changes, manual financial refresh, or source synchronization.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+  "last_remote_checkpoint": "670a2ca59e89bbad0e5fb2aac0b2436b00003ef9",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -661,8 +713,8 @@
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
   "evidence_checkpoint": {
-    "previous_commit": "32e93c5d639e049aaa53f1499d785c576eef05e9",
-    "phase": "E11_PREPUBLISH_PASS_ONE_PUBLISH_ACCEPTED_IN_PROGRESS"
+    "previous_commit": "670a2ca59e89bbad0e5fb2aac0b2436b00003ef9",
+    "phase": "E12_PLATFORM_PUBLISHED_ORIGINAL_VERIFY_IN_PROGRESS"
   },
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
@@ -700,7 +752,7 @@
     "merge_D": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
     "prepared": true,
     "publish_clicked": true,
-    "production_changed": "not_yet_verified",
+    "production_changed": "platform_published_runtime_verify_pending",
     "intent_B_tree": "1adebf49b67b0de3ee3e2c671f61d2e9d092103e",
     "intent_B_parent": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
     "intent_B_changed_paths": [
@@ -987,6 +1039,11 @@
     "active": true,
     "actor": "chatgpt-operational-profit-refresh-20261125-pr2126-39c6dec7c37f",
     "prepared_at": "2026-11-25T14:57:47.368128+00:00",
-    "prepublish_passed": true
+    "prepublish_passed": true,
+    "platform_published": true,
+    "provider_version": "97dc193",
+    "verify_started": true,
+    "verified": false,
+    "closure_verified": false
   }
 }

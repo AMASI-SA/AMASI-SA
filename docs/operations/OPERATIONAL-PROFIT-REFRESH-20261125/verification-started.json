@@ -1,0 +1,34 @@
+{
+  "command": [
+    "python",
+    "-B",
+    "scripts/production_release_guard.py",
+    "verify",
+    "--url",
+    "https://mezansalla.com"
+  ],
+  "cwd": "/app",
+  "first_wrapper_attempt": {
+    "started_at": "2026-11-25T15:14:59.727496+00:00",
+    "finished_at": "2026-11-25T15:14:59.843807+00:00",
+    "original_verify_invoked": false,
+    "error": "git status optional index refresh failed: Out of diskspace",
+    "preserved_under": "/tmp/mezan-pr2126-app-dy90mxg3/evidence/preflight-attempt-1"
+  },
+  "recovery": {
+    "observed_at": "2026-11-25T15:16:47.006845+00:00",
+    "original_git_status_exit": 0,
+    "tracked_clean": true,
+    "app_free_bytes": 433778688,
+    "foreign_files_deleted": false,
+    "runner_changed": false
+  },
+  "second_wrapper_started_at": "2026-11-25T15:16:47.037626+00:00",
+  "full_lease_match": true,
+  "deployment_head": "f3d8ee39e60ed087f0a4d6debf844d128e92a758",
+  "phase": "verifying",
+  "last_observed_at": "2026-11-25T15:22:30.928907+00:00",
+  "success_not_yet_observed": true,
+  "closure_not_yet_observed": true,
+  "republish_again": false
+}
