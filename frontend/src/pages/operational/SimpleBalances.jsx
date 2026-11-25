@@ -199,17 +199,20 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const legacyGroup = usePaymentSourceGroup(context, sources, form.sourceKind, !demand && payout);
   const group = demand ? {rows:sources,onDemand:true} : legacyGroup;
   const source = group.rows.find(item => resourceKey(item) === form.source && (!payout || item.kind === form.sourceKind && !item.prepaid_shipping_cash));
+  const courierBankArrival = resource.kind === 'courier' && form.side === 'for_party'
+    && reason === 'collection' && source?.kind === 'bank';
+  const bankArrival = pos || courierBankArrival;
   const employee = employees.find(item => item.id === form.employee_id);
   const owner = owners.find(item => item.id === form.owner_id);
   const expense = expenses.find(item => item.id === form.expense_id);
   const canWrite = context.status === 'active' && resource.access?.use === true && operations.size > 0;
   const disabled = busy || Boolean(pending) || mutation.recovering || mutation.blocked || !canWrite;
   const change = patch => { if (!disabled) { setForm(value => ({ ...value, ...patch })); mutation.clearError(); } };
-  const resetConditional = { source: '', sourceKind: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' };
+  const resetConditional = { source: '', sourceKind: '', arrival: false, employee_id: '', owner_id: '', expense_id: '', charity_account: '' };
   const chooseSide = side => change({ ...resetConditional, side, reason: '' });
   const chooseResource = (field, item) => {
     setPicked(previous=>({...previous,[field]:item}));
-    change({[field]:item ? field==='source'?resourceKey(item):item.id : ''});
+    change({[field]:item ? field==='source'?resourceKey(item):item.id : '', ...(field === 'source' ? { arrival: false } : {})});
   };
   const optionOperation = reason==='charity' ? `external.charity_${form.charity_account}` : choice?.operation;
   const picker = (kind, field, value, label, role='recipient') => <WorkspaceResourcePicker
@@ -237,6 +240,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
         if (!amount) throw { localMessage: 'أدخل مبلغًا صحيحًا أكبر من صفر، وبحد أقصى منزلتين عشريتين.' };
         if (!/^\d{4}-\d{2}-\d{2}$/.test(form.business_date) || form.business_date > todaySA()) throw { localMessage: 'اختر تاريخًا صحيحًا حتى اليوم.' };
         if (needsSource && !source) throw { localMessage: 'اختر البنك أو الصندوق أو العهدة المتاحة لهذه الحركة.' };
+        if (bankArrival && (!form.arrival || !form.reference.trim())) throw { localMessage: 'طابق وصول التحويل واكتب مرجعه.' };
         if (payout && ((group.onDemand && sourceAvailability(source) !== true) || exceedsSource(source, amount))) throw { localMessage: insufficientSource };
         if (reason === 'adjustment' && !form.note.trim()) throw { localMessage: 'اكتب سبب الخصم لتوثيق الحركة.' };
         if (reason === 'salary_settlement') {
@@ -266,8 +270,8 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
           party_type: resource.kind, party_id: resource.id, side: form.side,
           amount: usd || amount, ...(funding ? { ad_bank_funding: funding } : {}), business_date: form.business_date, note: form.note.trim(),
           ...(reason ? { reason: reason === 'charity' ? `charity_${form.charity_account}` : reason } : {}),
-          ...((pos || account || ad) && form.reference.trim() ? { reference: form.reference.trim() } : {}),
-          ...(pos && form.arrival ? { bank_arrival_confirmed: true } : {}),
+          ...((bankArrival || account || ad) && form.reference.trim() ? { reference: form.reference.trim() } : {}),
+          ...(bankArrival && form.arrival ? { bank_arrival_confirmed: true } : {}),
           ...(pos && form.fee.trim() ? { actual_fee_amount: form.fee.trim(), fee_reference: form.feeReference.trim() } : {}),
           ...(needsSource ? { source_type: source.kind, source_id: source.id } : {}),
           ...(reason === 'salary_settlement' ? { employee_id: employee.id } : {}),
@@ -304,7 +308,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
         <Field label="مرجع العملية البنكية"><input maxLength={160} value={form.reference} disabled={disabled} onChange={e => change({ reference: e.target.value })} /></Field>
       </>}
       {needsSource && demand && <>
-        <Field label="نوع مصدر الدفع"><select value={form.sourceKind} required disabled={disabled} onChange={event=>change({sourceKind:event.target.value,source:''})}>
+        <Field label="نوع مصدر الدفع"><select value={form.sourceKind} required disabled={disabled} onChange={event=>change({sourceKind:event.target.value,source:'',arrival:false})}>
           <option value="">اختر نوع المصدر</option>{(pos||ad?['bank']:['bank','cash',...(payout&&globalOperations.has('custody.spend')&&['external_person','supplier','operating_expense'].includes(resource.kind)?['employee_custody']:[])])
             .map(kind=><option key={kind} value={kind}>{resourceLabels[kind]}</option>)}
         </select></Field>
@@ -313,13 +317,13 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
       {payout && !demand && <PaymentSourceFields sources={sources} group={group} kind={form.sourceKind} value={source ? form.source : ''} disabled={disabled}
         label="الدفع من" fieldClass="sb-field" onKind={sourceKind => change({ sourceKind, source: '' })}
         onSource={sourceId => change({ source: sourceId })} />}
-      {needsSource && !payout && !demand && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
-      {(pos || account) && <Field label="مرجع التحويل"><input maxLength={160} value={form.reference} required={pos || source?.kind === 'bank' && resource.prepaid_shipping_cash === true} disabled={disabled} onChange={event => change({ reference: event.target.value })} /></Field>}
+      {needsSource && !payout && !demand && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value, arrival: false })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
+      {(bankArrival || account) && <Field label="مرجع التحويل"><input maxLength={160} value={form.reference} required={bankArrival || source?.kind === 'bank' && resource.prepaid_shipping_cash === true} disabled={disabled} onChange={event => change({ reference: event.target.value })} /></Field>}
       {pos && <>
         <Field label="رسوم الشبكة الفعلية إن وجدت"><input inputMode="decimal" value={form.fee} disabled={disabled} onChange={event => change({ fee: event.target.value })} /></Field>
         {form.fee && <Field label="مرجع مستند الرسوم"><input required maxLength={160} value={form.feeReference} disabled={disabled} onChange={event => change({ feeReference: event.target.value })} /></Field>}
-        <label><input type="checkbox" required checked={form.arrival} disabled={disabled} onChange={event => change({ arrival: event.target.checked })} /> طابقت وصول صافي التحويل مع حساب البنك المحدد</label>
       </>}
+      {bankArrival && <label><input type="checkbox" required checked={form.arrival} disabled={disabled} onChange={event => change({ arrival: event.target.checked })} /> طابقت وصول صافي التحويل مع حساب البنك المحدد</label>}
       {reason === 'salary_settlement' && (demand ? picker('employee','employee_id',employee,'الموظف') : <Field label="الموظف"><select value={form.employee_id} disabled={disabled} onChange={event => change({ employee_id: event.target.value })} required><option value="">اختر الموظف</option>{employees.map(item => <option key={item.id} value={item.id}>{item.name}{item.access?.balance && item.balance ? ` · المستحق ${item.balance.side === 'for_party' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select></Field>)}
       {reason === 'charity' && <Field label="الصدقات على حساب"><select value={form.charity_account} disabled={disabled} onChange={event => change({ charity_account: event.target.value, owner_id: '', expense_id: '' })} required><option value="">اختر صاحب المصروف</option>{operations.has('external.charity_company') && <option value="company">المؤسسة</option>}{operations.has('external.charity_owner') && <option value="owner">المالك</option>}</select></Field>}
       {needsOwner && (demand ? picker('owner_withdrawal','owner_id',owner,'حساب المالك') : <Field label="حساب المالك"><select value={form.owner_id} disabled={disabled} onChange={event => change({ owner_id: event.target.value })} required><option value="">اختر حساب المالك</option>{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>)}

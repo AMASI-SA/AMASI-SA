@@ -394,11 +394,33 @@ test('carrier entry keeps receive and payment in one workflow with the exact cas
   await click('استلام تحصيل من أرامكس');
   expect(host.textContent).toContain('لا تخصم أجور الشحن تلقائيًا');
   await change('دخل المبلغ في',JSON.stringify(['bank','الإنماء']));
-  await change('المبلغ المستلم فعليًا (ريال)','7700');
+  await change('صافي المبلغ الوارد إلى البنك (ريال)','7700');
+  await act(async()=>host.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(host.textContent).toContain('طابق وصول التحويل واكتب مرجعه');
+  expect(api.registerPending).not.toHaveBeenCalled();
+  await change('مرجع العملية البنكية','TEST-COURIER-ARRIVAL');
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());
   await click('مراجعة الحركة');
   expect(api.entry).not.toHaveBeenCalled();
   await click('تأكيد وتسجيل الحركة');
   expect(api.entry).toHaveBeenCalledTimes(1);
-  expect(api.entry.mock.calls[0][0]).toMatchObject({party_type:'courier',party_id:'أرامكس',amount:'7700.00',reason:'collection',side:'for_party',source_type:'bank',source_id:'الإنماء'});
+  expect(api.entry.mock.calls[0][0]).toMatchObject({party_type:'courier',party_id:'أرامكس',amount:'7700.00',reason:'collection',side:'for_party',source_type:'bank',source_id:'الإنماء',bank_arrival_confirmed:true,reference:'TEST-COURIER-ARRIVAL'});
   expect(api.entry.mock.calls[0][0]).not.toHaveProperty('offset_amount');
+});
+
+test('courier cash receipt does not claim bank arrival and changing bank clears its confirmation',async()=>{
+  const ctx=context(),carrier=resource('courier','أرامكس');
+  ctx.operations.push('courier.receive');ctx.resources.push(carrier,resource('bank','الأهلي'),resource('cash','الصندوق'));
+  await render(<ApprovedEntry context={ctx} resource={carrier} mode="in" onBack={()=>{}} onSaved={saved}/>);
+  await change('دخل المبلغ في',JSON.stringify(['bank','الإنماء']));
+  await change('صافي المبلغ الوارد إلى البنك (ريال)','200');
+  await change('مرجع العملية البنكية','TEST-OLD-BANK');
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());
+  await change('دخل المبلغ في',JSON.stringify(['bank','الأهلي']));
+  expect(host.querySelector('input[type="checkbox"]').checked).toBe(false);
+  await change('دخل المبلغ في',JSON.stringify(['cash','الصندوق']));
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  await click('مراجعة الحركة');await click('تأكيد وتسجيل الحركة');
+  expect(api.entry.mock.calls[0][0]).toMatchObject({party_type:'courier',source_type:'cash',source_id:'الصندوق',amount:'200.00'});
+  expect(api.entry.mock.calls[0][0]).not.toHaveProperty('bank_arrival_confirmed');
 });

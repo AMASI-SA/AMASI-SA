@@ -27,7 +27,7 @@ jest.mock('./api', () => ({
     movements: jest.fn(),
     audit: jest.fn()
   },
-  entityKinds: [['supplier', 'موردين'], ['bank', 'بنوك وأجهزة الشبكة'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية']],
+  entityKinds: [['supplier', 'موردين'], ['bank', 'بنوك وأجهزة الشبكة'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية'],['courier','شركات شحن']],
   requestId: jest.fn(() => `request-${Math.random()}`),
   messageFor: () => 'تعذر إتمام العملية', feeIncomplete: issue => /fee/.test(issue?.code||'')
 }));
@@ -486,7 +486,30 @@ test('shipping collection card switches to incoming without a second financial c
  await render(<DailyMovements cards/>);await cardClick('شركات الشحن');await cardClick('جهة تجريبية');
  await input(host.querySelector('select'),'incoming');const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
  await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
- expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',direction:'incoming',kind:'collection',amount:'30'}));
+ expect(api.movement).not.toHaveBeenCalled();
+ expect(host.textContent).toContain('طابق وصول التحويل وحدد تاريخه واكتب مرجعه');
+ const reference=[...host.querySelectorAll('label')].find(label=>label.querySelector('span')?.textContent==='مرجع الحوالة البنكية').querySelector('input');
+ await input(reference,'TEST-DAILY-COURIER');
+ await act(async()=>host.querySelector('input[type="checkbox"]').click());
+ await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',direction:'incoming',kind:'collection',amount:'30',reference:'TEST-DAILY-COURIER',bank_arrival_confirmed:true}));
+ expect(api.movement.mock.calls[0][0]).not.toHaveProperty('arrival');
+});
+
+test('advanced courier bank receipt verifies arrival date and resets proof when the receiving bank changes',async()=>{
+ api.entities.mockImplementation(kind=>Promise.resolve({items:(kind==='bank'?['bank1','bank2']:[kind+'1']).map(id=>({id,name:id,currency:'SAR',kind}))}));
+ await render(<DailyMovements/>);await click('وارد');
+ await input(host.querySelectorAll('select')[0],'courier');await input(host.querySelectorAll('select')[1],'courier1');
+ await input(host.querySelectorAll('select')[2],'bank:bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');
+ await click('حفظ الحركة');expect(api.movement).not.toHaveBeenCalled();
+ expect(host.textContent).toContain('طابق وصول التحويل وحدد تاريخه واكتب مرجعه');
+ const reference=[...host.querySelectorAll('label')].find(label=>label.querySelector('span')?.textContent==='مرجع الحركة').querySelector('input');
+ await input(reference,'TEST-ADVANCED-COURIER');await input(host.querySelector('input[type="date"]'),'2026-11-20');
+ await act(async()=>host.querySelector('input[type="checkbox"]').click());
+ await input(host.querySelectorAll('select')[2],'bank:bank2');
+ expect(host.querySelector('input[type="checkbox"]').checked).toBe(false);
+ await act(async()=>host.querySelector('input[type="checkbox"]').click());await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',direction:'incoming',bank_id:'bank2',reference:'TEST-ADVANCED-COURIER',business_date:'2026-11-20',bank_arrival_confirmed:true}));
 });
 test('custody inventory navigation settles exact invoice only from selected custody',async()=>{
  api.inventoryPurchaseEntry.mockResolvedValue({id:'inv',obligation_id:'inventory-purchase:inv',supplier_id:'supplier1',supplier_name:'مورد',invoice_number:'INV',invoice_date:'2026-10-07',net:'10',tax:'0',gross:'10',outstanding:'10',settled:'0',lines:[]});

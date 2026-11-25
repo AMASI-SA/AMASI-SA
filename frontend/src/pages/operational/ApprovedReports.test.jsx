@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
-import ApprovedReports from './ApprovedReports';
+import { MemoryRouter, Link, Route, Routes } from 'react-router-dom';
+import ApprovedReports, { REPORT_TABS } from './ApprovedReports';
 import { operationalApi } from './api';
 
 jest.mock('react-router-dom',()=>{global.TextEncoder=require('util').TextEncoder;return jest.requireActual('react-router');});
@@ -295,4 +295,79 @@ it.each([false,true])('exposes forecast currencies absent from the original summ
   const select=host.querySelector('select');expect([...select.options].map(option=>option.value)).toContain('USD');
   await act(async()=>{select.value='USD';select.dispatchEvent(new Event('change',{bubbles:true}));});
   expect(host.textContent).toContain('125.55 USD');
+});
+
+
+it('renders a large delivery cohort one visible page at a time without triggering financial writes',async()=>{
+  const deliveries = Array.from({length: 36}, (_, index) => ({
+    id: 'courier:' + index, order_number: String(310000 + index),
+    party_type: 'courier', party_id: 'courier-fixture',
+    party_name: 'شركة الشحن', payment_method: 'cod',
+    collection_status: 'confirmed', collection_destination: 'courier_receivable',
+    collection_amount: '100.00', courier_responsibility: '100.00',
+    shipping_confirmed: '17.25', shipping_settled: '0.00',
+    shipping_outstanding: '17.25',
+  }));
+  operationalApi.financialPosition.mockImplementation(config => {
+    const result = snapshot(config.params.view);
+    if (config.params.view === 'couriers') {
+      result.currencies.SAR.deliveries = {complete: true, rows: deliveries, notes: []};
+    }
+    return Promise.resolve(result);
+  });
+  await show();
+  await tab('الشحن والتحصيل');
+  const section = host.querySelector('[data-testid=report-table-delivery_shipping]');
+  expect(section.querySelectorAll('tbody tr')).toHaveLength(12);
+  expect(section.textContent).toContain('310000');
+  expect(section.textContent).not.toContain('310024');
+  await act(async () => section.querySelector('[aria-label^="الصفحة التالية"]').click());
+  expect(section.querySelectorAll('tbody tr')).toHaveLength(12);
+  expect(section.textContent).toContain('310012');
+  expect(section.textContent).not.toContain('310024');
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
+
+it('leaves a pending financial report immediately and ignores its late response',async()=>{
+  let resolveRead;
+  operationalApi.financialPosition.mockImplementationOnce(() => new Promise(resolve => { resolveRead = resolve; }));
+  await act(async () => root.render(
+    <MemoryRouter initialEntries={['/operational-balances?view=reports']}>
+      <Link to="/exit-report">الخروج من التقرير</Link>
+      <Routes>
+        <Route path="/operational-balances" element={<ApprovedReports context={context} identity="owner"/>}/>
+        <Route path="/exit-report" element={<output>الصفحة التالية جاهزة</output>}/>
+      </Routes>
+    </MemoryRouter>
+  ));
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+  const pendingRequest = operationalApi.financialPosition.mock.calls[0][0];
+  expect(host.textContent).toContain('جارٍ قراءة التقرير');
+  await act(async()=>host.querySelector('a[href="/exit-report"]').click());
+  expect(host.textContent).toContain('الصفحة التالية جاهزة');
+  expect(host.textContent).not.toContain('جارٍ قراءة التقرير');
+  expect(pendingRequest.signal.aborted).toBe(true);
+  await act(async()=>resolveRead(snapshot('summary')));
+  expect(host.textContent).toContain('الصفحة التالية جاهزة');
+  expect(host.textContent).not.toContain('1,234.56');
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
+
+it('navigates all twelve report tabs without triggering source refresh or leaking stale rows',async()=>{
+  await show();
+  expect(REPORT_TABS).toHaveLength(12);
+  for(const [key,label,view] of REPORT_TABS){
+    await tab(label);
+    const active = host.querySelector('.report-tabs [aria-current=page]');
+    expect(active).not.toBeNull();
+    expect(active.textContent).toBe(label);
+    expect(host.querySelector('[role=alert]')).toBeNull();
+    // A report tab may reuse its already verified summary but must not
+    // start an operational source reconciliation or financial write.
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+    if(view !== 'summary') expect(host.querySelector('[data-testid=report-table-cod_expected]')).not.toBeNull();
+  }
+  expect(operationalApi.financialPosition.mock.calls.length).toBeGreaterThanOrEqual(9);
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
 });

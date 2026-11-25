@@ -471,6 +471,20 @@ async def sync_order_from_verified_webhook(
         )
         if result.get("blocked"):
             return {"attempted": True, "synced": False, "order_number": order_number, **result}
+        if event_name == "order.created":
+            # Initial electronically paid orders can arrive already awaiting
+            # review. The signed order.created event is a payment-evidence
+            # discovery trigger; its fulfillment status is NEVER payment proof.
+            # This queue is disabled by default and cannot post money.
+            from operational_payment_salla_event_capture import enabled as payment_evidence_enabled
+            if payment_evidence_enabled():
+                from .payment_update_inbox import enqueue_verified_payment
+                # Durable, idempotent enqueue for the source inbox. A failed
+                # write must retry the verified event rather than silently
+                # pretend the original payment proof was staged.
+                payment_key = await enqueue_verified_payment(db, event_body)
+                if not payment_key:
+                    raise ValueError("operational_initial_payment_evidence_enqueue_failed")
         if result.get("stale"):
             # A later cancellation can arrive before its earlier delivery webhook.
             # Retain the observed transition without rolling back canonical status.

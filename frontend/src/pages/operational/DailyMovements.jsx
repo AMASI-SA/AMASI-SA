@@ -25,13 +25,13 @@ const displayCents = value => `${value / 100n}.${String(value % 100n).padStart(2
 
 
 export default function DailyMovements({context,source='mezan2',canManage=false,storageScope=null,cards=false,canCreateCash=false,onScopeChanged=()=>{},onSaved=()=>{}}) {
-  const empty={external_operation:'',direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
+  const empty={external_operation:'',direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:'',arrival:false};
   const [recovery] = useState(() => {
     try { return {payload:readPendingMovement(storageScope),error:''}; }
     catch { return {payload:null,error:'تعذر استعادة سجل الحركة المحفوظة. تحقق من تسجيل الدخول وإتاحة التخزين قبل المتابعة.'}; }
   });
   const [pendingPayload,setPendingPayload]=useState(recovery.payload);
-  const restoredForm = payload => ({...Object.fromEntries(Object.entries(empty).map(([key,value])=>[key,payload?.[key] ?? value])),...(payload?.business_date?{business_date:payload.business_date}:{})});
+  const restoredForm = payload => ({...Object.fromEntries(Object.entries(empty).map(([key,value])=>[key,payload?.[key] ?? value])),arrival:payload?.bank_arrival_confirmed===true,...(payload?.business_date?{business_date:payload.business_date}:{})});
   const [form,setForm]=useState(()=>restoredForm(recovery.payload)),[accounts,setAccounts]=useState([]),[obligations,setObligations]=useState([]),[allocations,setAllocations]=useState(()=>Object.fromEntries((recovery.payload?.allocations||[]).map(a=>[a.obligation_id,a.amount]))),[busy,setBusy]=useState(false),[error,setError]=useState(recovery.error),[message,setMessage]=useState(''),[adding,setAdding]=useState(false),[entityVersion,setEntityVersion]=useState(0);
   const [externalResult,setExternalResult]=useState(null);
   const [stage,setStage]=useState(recovery.payload?'entry':'home'),[choices,setChoices]=useState([]),[choicesLoading,setChoicesLoading]=useState(false);
@@ -63,7 +63,10 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
       onData:r=>setObligations(r.items||[]),onError:e=>setError(messageFor(e)),
     },obligationsLane.current);
   },[form.party_type,form.party_id,form.kind,context?.session_scope]);
-  const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch}));pending.current=null;setError('');setMessage('');setExternalResult(null);};
+  const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch,...(['party_type','party_id','bank_id','source_account_type','direction'].some(key=>key in patch&&patch[key]!==f[key])?{arrival:false}:{})}));pending.current=null;setError('');setMessage('');setExternalResult(null);};
+  const courierBankArrival=form.party_type==='courier'&&form.direction==='incoming'&&form.kind!=='correction'&&form.bank_id
+    &&(form.source_account_type==='bank'||form.source_account_type==='bank_auto'&&accounts.some(a=>a.kind==='bank'&&a.id===form.bank_id));
+  const arrivalConfirmation=<label><input type="checkbox" checked={form.arrival} onChange={e=>change({arrival:e.target.checked})}/> طابقت وصول التحويل مع حساب البنك المحدد</label>;
   const expenseOrWithdrawal=['operating_expense','owner_withdrawal'].includes(form.party_type);
   const custody=form.party_type==='employee_custody';
   const external=form.party_type==='external_person';
@@ -84,6 +87,7 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
       if(external&&!form.external_operation){setError('حدد هل العملية إنشاء سلفة أو سداد مستحق أو حركة أخرى.');return;}
       if(!form.direction||!form.party_id||(form.kind!=='correction'&&!form.bank_id)||!form.currency||!/^\d+(\.\d{1,2})?$/.test(form.amount)||Number(form.amount)<=0){setError('أكمل الاتجاه والجهة والحساب والمبلغ.');return;}
       if(form.kind==='correction'&&!form.note.trim()){setError('أدخل سبب التصحيح.');return;}
+      if(courierBankArrival&&(!form.arrival||!form.reference.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(form.business_date||'')||form.business_date>today())){setError('طابق وصول التحويل وحدد تاريخه واكتب مرجعه.');return;}
     }
     const selected=(form.kind==='settlement'?eligible:[]).filter(o=>allocations[o.id]).map(o=>({obligation_id:o.id,amount:allocations[o.id]}));
     if(!payload&&selected.some(a=>!/^\d+(\.\d{1,2})?$/.test(a.amount)||Number(a.amount)<=0)){setError('أدخل مبلغ تسوية صحيحًا.');return;}
@@ -100,6 +104,8 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
 
         pending.current ||= requestId();
         payload={...form,bank_id:form.kind==='correction'?null:form.bank_id,source_account_type:form.kind==='correction'?'bank_auto':form.source_account_type,actual_fee_amount:form.kind==='settlement'&&form.party_type==='provider'?(form.actual_fee_amount||'0.00'):'0.00',request_id:pending.current,expected_session_scope:storageScope,source,receipt_id:null,order_number:form.order_number||null,allocations:selected};
+        delete payload.arrival;
+        if(courierBankArrival)payload.bank_arrival_confirmed=true;
         if(!external||!externalIntent)delete payload.external_operation;
         try {savePendingMovement(storageScope,payload);}
         catch {setError('تعذر حفظ الحركة بأمان على هذا الجهاز. لم تُرسل الحركة؛ أتح التخزين ثم أعد المحاولة.');return;}
@@ -155,7 +161,8 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
       {entryMode==='custody_cash'&&<p>تخفيض العهدة وزيادة الصندوق بنفس المبلغ، دون مصروف جديد.</p>}
       <Field label={form.source_account_type==='cash'?'الصندوق':form.source_account_type==='employee_custody'?'العهدة':'البنك'}><select disabled={entryMode==='cash'||entryMode==='custody_supplier'} value={form.bank_id} onChange={e=>change({bank_id:e.target.value})}><option value="">اختر الحساب</option>{availableAccounts.filter(a=>(form.source_account_type==='bank_auto'||a.kind===form.source_account_type)&&!(form.party_type===a.kind&&form.party_id===a.id)).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
       <Field label={form.party_type==='provider'?'المبلغ الوارد':'المبلغ'}><input inputMode="decimal" value={form.amount} onChange={e=>change({amount:e.target.value})}/></Field>
-      <Field label="التاريخ"><input type="date" value={form.business_date||''} onChange={e=>change({business_date:e.target.value})}/></Field>
+      <Field label={courierBankArrival?'تاريخ وصول الحوالة':'التاريخ'}><input type="date" max={courierBankArrival?today():undefined} value={form.business_date||''} onChange={e=>change({business_date:e.target.value})}/></Field>
+      {courierBankArrival&&<><Field label="مرجع الحوالة البنكية"><input maxLength={160} value={form.reference} onChange={e=>change({reference:e.target.value})}/></Field>{arrivalConfirmation}</>}
       <div className="op-entry-wide"><Field label="رسالة الإيصال (اختياري)"><textarea rows={5} value={form.note} placeholder="الصق رسالة البنك أو اكتب وصف العملية" onChange={e=>change({note:e.target.value})}/></Field></div>
       </fieldset><button className="op-primary" disabled={busy||!!recovery.error} onClick={submit}>{busy?'جارٍ الحفظ…':pendingPayload?'إعادة محاولة الحركة':'حفظ الحركة'}</button>
     </>}
@@ -175,6 +182,7 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
     {form.kind==='settlement'&&form.party_type==='provider'&&<Field label="العمولة الفعلية المقتطعة من التسوية"><input inputMode="decimal" value={form.actual_fee_amount} onChange={e=>change({actual_fee_amount:e.target.value})}/></Field>}
     <Field label="رقم الطلب (اختياري)"><input value={form.order_number} onChange={e=>change({order_number:e.target.value})}/></Field>
     <Field label="مرجع الحركة"><input value={form.reference} onChange={e=>change({reference:e.target.value})}/></Field>
+    {courierBankArrival&&<><Field label="تاريخ وصول الحوالة"><input type="date" max={today()} value={form.business_date||''} onChange={e=>change({business_date:e.target.value})}/></Field>{arrivalConfirmation}</>}
     <Field label="ملاحظة"><textarea value={form.note} onChange={e=>change({note:e.target.value})}/></Field>
   </fieldset><button className="op-primary" disabled={busy||Boolean(recovery.error)} onClick={submit}>{busy?'جارٍ الحفظ…':pendingPayload?'إعادة محاولة الحركة':'حفظ الحركة'}</button></section>;
 }

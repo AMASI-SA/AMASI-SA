@@ -111,6 +111,13 @@ class WorkspaceEntry(BaseModel):
     ad_bank_funding: AdBankFunding | None = None
     invoice: CreditInvoice | None = None
 
+    @field_validator("bank_arrival_confirmed", mode="before")
+    @classmethod
+    def explicit_bank_arrival_confirmation(cls, value):
+        if value is not None and value is not True:
+            raise ValueError("bank_arrival_confirmation_must_be_true")
+        return value
+
     def command(self):
         # Omit newly introduced fields from pre-existing pending-command hashes.
         exclude = {key for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference", "ad_bank_funding", "invoice")

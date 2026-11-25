@@ -72,6 +72,26 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
+test('legacy courier bank receipt requires matching arrival and reference before recording',async()=>{
+  const carrier=resource('courier','carrier','شركة الشحن',{operations:['courier.receive','courier.pay']});
+  const ctx=context();ctx.resources.push(carrier);ctx.operations.push({key:'courier.receive'},{key:'courier.pay'});
+  api.entry.mockResolvedValue({saved:true,movement_id:'courier-receipt',party_type:'courier',party_id:'carrier'});
+  await render(<EntryForm context={ctx} resource={carrier} onCancel={()=>{}} onSaved={saved}/>);
+  await act(async()=>host.querySelector('[data-side="for_party"][aria-pressed]').click());
+  await change('سبب المبلغ','collection');
+  await change('الإيداع في',JSON.stringify(['bank','bank']));
+  await change('المبلغ بالريال','150');
+  await submit();
+  expect(api.entry).not.toHaveBeenCalled();
+  expect(api.registerPending).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('طابق وصول التحويل واكتب مرجعه');
+  await change('مرجع التحويل','TEST-COURIER-LEGACY-BANK');
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());
+  await submit();
+  expect(api.entry.mock.calls[0][0]).toMatchObject({party_type:'courier',source_type:'bank',reference:'TEST-COURIER-LEGACY-BANK',bank_arrival_confirmed:true});
+  expect(saved).toHaveBeenCalledTimes(1);
+});
+
 test('the daily list renders five records, recorder names, and real pagination', async () => {
   await render(<SimpleBalances />);
   expect(host.querySelectorAll('[data-testid="simple-movement-row"]')).toHaveLength(5);

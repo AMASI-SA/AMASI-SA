@@ -36,6 +36,8 @@ def test_cod_native_remaining_or_cash_custody_settles_once_without_double_bank(m
         payment.update(party_type='store_driver' if method else 'courier',party_id='driver' if method else 'carrier',
             direction='incoming',kind='collection',amount='150',reference='native-cod-transfer',
             allocations=[{'obligation_id':key,'amount':'150'}])
+        if method is None:
+            payment.update(bank_arrival_confirmed=True, business_date=NOW[:10])
         first=await create_movement(db,'owner','owner',payment,clock=NOW)
         assert await create_movement(db,'owner','owner',payment,clock=NOW)==first
         final=report(await refresh(db,'owner',clock=NOW))
