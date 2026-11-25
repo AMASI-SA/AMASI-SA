@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-25T16:30:34.082Z",
+  "url": "https://mezansalla.com/operational-balances/financial-position?view=summary",
+  "read_mode": "Authenticated UI read of saved summary; no refresh or source synchronization invoked",
+  "displayed_saved_calculation": "25/11/2026, 19:07",
+  "product_cost_row": {
+    "label": "تكلفة منتجات مجموعة المبيعات",
+    "reason": "انتهت مهلة قراءة هذا المصدر عند احتساب الفترة.",
+    "availability": "غير متاح"
+  },
+  "raw_products_or_context_error_code_read": false,
+  "row_complete_boolean_read": false,
+  "binding": {
+    "candidate_receipt_revision": 16949,
+    "candidate_receipt_as_of": "2026-11-25T16:07:39.874796+00:00",
+    "basis": "Summary saved-calculation minute matches the separately downloaded receipt and the scheduling UI observed earlier. Receipt revision and precise as_of are not displayed on this row.",
+    "exact_API_revision_fence_used": false
+  },
+  "source_interpretation": {
+    "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+    "file": "backend/operational_profit_projection.py",
+    "function": "_read_issue",
+    "cost_reader": "products",
+    "fallback_reader": "context",
+    "reason_code_mapping": "operational_source_read_timeout",
+    "reason_mapping_root_code_read": true,
+    "raw_error_reader_distinguished": false,
+    "summary_view_recomputes_profit_snapshot": false
+  },
+  "conclusion": "The saved summary explicitly reports a source read timeout for product cost. Together with the stage durations, this corroborates shared profit-budget exhaustion, while neither the individual inner supplier query nor the raw products-versus-context error key is observed.",
+  "limits": [
+    "This is a rendered reason from a saved projection, not a raw API/DB error capture.",
+    "The legacy summary incomplete badge is section-level; this record does not treat it as a directly read row.complete boolean.",
+    "Saved-calculation minute association is weaker than an exact revision/as_of/owner API fence.",
+    "Product cost remains unavailable; successful saving does not prove complete profit components.",
+    "No new calculation or performance fix was triggered by this read."
+  ],
+  "private_financial_values_included": false
+}

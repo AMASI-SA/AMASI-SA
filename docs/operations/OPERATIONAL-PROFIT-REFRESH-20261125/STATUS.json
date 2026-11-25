@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25T16:26:53.541Z",
+  "recorded_at": "2026-11-25T16:32:31.506Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "E14_POSTPUBLICATION_SAVED_ATTEMPT_DIAGNOSED_LEASE_CLOSED",
+  "status": "E15_SAVED_PRODUCT_COST_TIMEOUT_DISPLAY_CONFIRMED_LEASE_CLOSED",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -19,7 +19,7 @@
       "Focused regression and affected boundary verification for any runtime patch.",
       "Fresh release protocol v5 and separate receipt review if a new publication is warranted."
     ],
-    "current_outcome": "Publication and original own-lease closure complete; a new saved calculation and private financial comparison verified. Diagnostic observation narrows the shared-profit budget bottleneck, but source completeness and a causal performance fix are not yet established."
+    "current_outcome": "Publication and original own-lease closure complete; new saved calculation and private financial comparison verified. Saved product-cost read timeout is explicit in the rendered summary. Source completeness, exact inner-query cause and causal performance improvement are still unestablished."
   },
   "observations": {
     "prior_release": {
@@ -489,6 +489,46 @@
       "source_sync_run": false,
       "new_source_patch_applied": false,
       "own_lease_reopened": false
+    },
+    "saved_product_cost_timeout_display": {
+      "schema_version": 1,
+      "observed_at_utc": "2026-11-25T16:30:34.082Z",
+      "url": "https://mezansalla.com/operational-balances/financial-position?view=summary",
+      "read_mode": "Authenticated UI read of saved summary; no refresh or source synchronization invoked",
+      "displayed_saved_calculation": "25/11/2026, 19:07",
+      "product_cost_row": {
+        "label": "تكلفة منتجات مجموعة المبيعات",
+        "reason": "انتهت مهلة قراءة هذا المصدر عند احتساب الفترة.",
+        "availability": "غير متاح"
+      },
+      "raw_products_or_context_error_code_read": false,
+      "row_complete_boolean_read": false,
+      "binding": {
+        "candidate_receipt_revision": 16949,
+        "candidate_receipt_as_of": "2026-11-25T16:07:39.874796+00:00",
+        "basis": "Summary saved-calculation minute matches the separately downloaded receipt and the scheduling UI observed earlier. Receipt revision and precise as_of are not displayed on this row.",
+        "exact_API_revision_fence_used": false
+      },
+      "source_interpretation": {
+        "source_git_sha": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
+        "file": "backend/operational_profit_projection.py",
+        "function": "_read_issue",
+        "cost_reader": "products",
+        "fallback_reader": "context",
+        "reason_code_mapping": "operational_source_read_timeout",
+        "reason_mapping_root_code_read": true,
+        "raw_error_reader_distinguished": false,
+        "summary_view_recomputes_profit_snapshot": false
+      },
+      "conclusion": "The saved summary explicitly reports a source read timeout for product cost. Together with the stage durations, this corroborates shared profit-budget exhaustion, while neither the individual inner supplier query nor the raw products-versus-context error key is observed.",
+      "limits": [
+        "This is a rendered reason from a saved projection, not a raw API/DB error capture.",
+        "The legacy summary incomplete badge is section-level; this record does not treat it as a directly read row.complete boolean.",
+        "Saved-calculation minute association is weaker than an exact revision/as_of/owner API fence.",
+        "Product cost remains unavailable; successful saving does not prove complete profit components.",
+        "No new calculation or performance fix was triggered by this read."
+      ],
+      "private_financial_values_included": false
     }
   },
   "limits": [
@@ -965,13 +1005,13 @@
     }
   },
   "production_changed_by_this_task": "PR2126 published as97dc193; original verify passed3cycles for exactA2/D/runtime identity; matching task lease closed and original status returned activefalse.",
-  "next_safe_action": "PR2126 is published, originally verified and its own matching lease closed. Post-publication r16949 saved successfully and its private receipt comparison passed. Bounded timing strongly supports shared25-second profit-budget exhaustion while supplier phase was active; the exact inner query is not established. Read saved r16949 products error/quality metadata only through an authorized production-scoped surface with revision/as_of/owner binding, then use already-retained inner-phase evidence if available before choosing a behavior-preserving performance patch. The preview-host DB has not been shown to contain the production snapshot. Do not republish/reopen/abort this completed release, increase timeouts, discard financial evidence or alter another conversation's source/process/lease. No paid Emergent agent chat. Private reports retain receipt chain and evidence limits.",
+  "next_safe_action": "PR2126 publication and original own-lease closure are complete. A subsequent scheduled calculation saved and its private receipt comparison passed. The saved summary explicitly reports a source-read timeout for product cost; stage timings strongly support shared25-second profit-budget exhaustion while supplier work was active. The raw products-versus-context key and specific inner supplier query remain unobserved. Select a further behavior-preserving performance patch only with distinguishing inner-phase/cohort evidence; preserve owner/date/version checks, financial evidence, cancellation and current timeout limits. Do not reopen, republish or abort this completed release or touch other conversations' leases/work. Current private report and receipt chain document the financial result independently.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
   },
-  "last_remote_checkpoint": "b48a097594b26f58a8c67a12564ba149ff368913",
+  "last_remote_checkpoint": "6c2a472f11da1a06fe1e0b9bfb2bd8c0710f026e",
   "change": {
     "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
     "fixed_stages_added": 16,
@@ -1063,8 +1103,8 @@
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2126",
   "evidence_branch": "codex/operational-profit-refresh-evidence-20261125",
   "evidence_checkpoint": {
-    "previous_commit": "b48a097594b26f58a8c67a12564ba149ff368913",
-    "phase": "E14_POSTPUBLICATION_SAVED_ATTEMPT_DIAGNOSED_LEASE_CLOSED"
+    "previous_commit": "6c2a472f11da1a06fe1e0b9bfb2bd8c0710f026e",
+    "phase": "E15_SAVED_PRODUCT_COST_TIMEOUT_DISPLAY_CONFIRMED_LEASE_CLOSED"
   },
   "source_A": "6d4aa546259e9cad1cc379d4a464e245af6cfa91",
   "source_A_tree": "2722716cb78a3c635e7a44d7d2362200dabbcea8",
