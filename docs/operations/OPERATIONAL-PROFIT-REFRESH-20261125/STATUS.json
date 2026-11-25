@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-PROFIT-REFRESH-20261125",
-  "recorded_at": "2026-11-25T12:46:56Z",
+  "recorded_at": "2026-11-25T13:13:24.147422+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-profit-refresh-20261125",
   "source_base": "6323017fbf9ba160c536a94f408507435786412a",
-  "status": "WIP_READ_ONLY_DIAGNOSIS_NO_RUNTIME_PATCH",
+  "status": "WIP_BACKEND_DIAGNOSTICS_VALIDATED_FRONTEND_WHITELIST_PENDING",
   "scope": "Diagnose the saved operational-profit source timeout and intermittent scheduled-refresh timeout; preserve all financial evidence and prior publication.",
   "acceptance": {
     "outcome": "Identify a measured bottleneck, apply a minimal behavior-preserving fix, and verify a new saved calculation and component quality separately.",
@@ -67,6 +67,14 @@
       "concurrency": 4,
       "profit_context_before_components": true,
       "primary_order_telemetry_is_not_profit_context_telemetry": true
+    },
+    "host_metadata_attempt": {
+      "observed_at": "2026-11-25T12:53:11.176617+00:00",
+      "receipt_revision": 16947,
+      "matching_headers": 0,
+      "receipt_binding_matches": false,
+      "production_scope_verified": false,
+      "result": "Preview-host database had no uniquely matching receipt header; no packed snapshot was read. No production metadata conclusion."
     }
   },
   "limits": [
@@ -75,7 +83,10 @@
     "The failed attempt cannot be attributed to a previously saved receipt.",
     "The later automatic success does not prove removal of intermittent timeouts or complete sources.",
     "Private original receipts and financial values are excluded from Git.",
-    "No code-level bottleneck is yet established; no runtime change or performance claim."
+    "No actual production inner-phase bottleneck is yet established. This diagnostics patch is not a performance fix.",
+    "Trace retains at most64 latest completed/unwound phases; it does not retain every CAS retry.",
+    "Logical timings exclude semaphore wait before reader entry and include scheduling and cleanup; they are not exclusive Mongo query timings.",
+    "The raw context phase can complete without a database read for an empty order cohort."
   ],
   "other_work": {
     "pr": 2122,
@@ -85,16 +96,99 @@
     "preserved": true
   },
   "verification": {
-    "source_review": "Root and independent agents reviewed the exact production source.",
-    "tests_run": 0,
-    "reason": "No runtime patch exists.",
-    "private_receipt_audit": "r16946 and r16947 independently reviewed; direct chain verified. No total across missing r16944/r16945."
+    "root_red": {
+      "exit_code": 1,
+      "failed": 14,
+      "seconds": 3.92,
+      "reason": "Only new timing assertions fail on unchanged operational_profit_sources and demand whitelist; prior output/error/cleanup assertions passed."
+    },
+    "root_focused": {
+      "exit_code": 0,
+      "passed": 14,
+      "skipped": 0,
+      "seconds": 1.72
+    },
+    "root_affected": {
+      "exit_code": 0,
+      "passed": 231,
+      "skipped": 0,
+      "failed": 0,
+      "seconds": 21.39,
+      "modules": [
+        "test_operational_balance_profit_stage_diagnostics",
+        "test_operational_balance_profit_product_stage_diagnostics",
+        "test_operational_balance_profit_context_parallel",
+        "test_operational_balance_refresh_stage_timing",
+        "test_operational_balance_source_stage_timing",
+        "test_operational_balance_demand_refresh",
+        "test_operational_balance_automation",
+        "test_operational_balance_automation_routes",
+        "test_operational_read_runtime",
+        "test_operational_refresh_parallel_profit",
+        "test_dashboard_demand_builders"
+      ]
+    },
+    "product_agent": {
+      "red_failed": 9,
+      "green_passed": 9,
+      "adjacent_passed": 76,
+      "skipped": 0,
+      "adjacent_modules": [
+        "test_operational_balance_profit_product_authority_parallel",
+        "test_dashboard_bundle_cost_authority",
+        "test_operational_balance_profit_sources"
+      ]
+    },
+    "independent_ast_review": "Dashboard and profit source modules match baseline AST after removing diagnostic-only wrappers/imports/map.",
+    "whitespace": "git diff --check exit0",
+    "warning": "Existing Pydantic validator deprecation warnings only.",
+    "ci": "Not started for this WIP checkpoint.",
+    "frontend": "Manual error logger uses a separate whitelist; matching fixed labels and an HTTP-failure regression are in progress."
   },
   "production_changed_by_this_task": false,
-  "next_safe_action": "Read bounded saved-profit metadata through the authorized host, bind it to the downloaded receipt, and distinguish context from products before selecting a fix.",
+  "next_safe_action": "Finish the matching frontend fixed-label filter and failure-path regression, review the combined diff, then preserve a source-ready checkpoint and verify exact-source CI before any v5 intent or host preparation.",
   "continuity": {
     "issue": 1006,
     "comment_limit_observed": 2500,
     "checkpoint_strategy": "Dedicated task STATUS and branch; do not retry saturated ledger comments or overwrite another task's comment."
-  }
+  },
+  "last_remote_checkpoint": "065d034f1f318a3b56957fa28ae9da14fbef20f3",
+  "change": {
+    "purpose": "Expose bounded source/subphase timings before selecting a performance fix.",
+    "fixed_stages_added": 16,
+    "timing_limit_unchanged": 64,
+    "financial_formulas_changed": false,
+    "query_order_limits_changed": false,
+    "timeouts_changed": false,
+    "financial_source_writes_added": false,
+    "ordinary_calls": "No-op diagnostics outside the existing owned refresh context.",
+    "soft_failure_classification": "Observe the reader before the unchanged partial-result catches; deadline-cancelled reader is not classified as user cancellation."
+  },
+  "files": [
+    {
+      "path": "backend/dashboard_v2_routes.py",
+      "bytes": 126650,
+      "sha256": "10201c91f1d95c0c48e0ba08f072988e6e9b777b43e60bfb92a969716e0c7719"
+    },
+    {
+      "path": "backend/operational_demand_refresh.py",
+      "bytes": 22956,
+      "sha256": "f9456fdb68a44414c408413afd9fb470ae1068b0adc7e208354fb5bef1ac4828"
+    },
+    {
+      "path": "backend/operational_profit_sources.py",
+      "bytes": 22345,
+      "sha256": "12ce4f2983b347098fd41d25c4f00b3a6b9b7280fe4aadc0e76205106383c87a"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_profit_stage_diagnostics.py",
+      "bytes": 12126,
+      "sha256": "a5c6b165352415a6a53b4041cc818a06e60d843b014089aaa1978fed4fd55ad6"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_profit_product_stage_diagnostics.py",
+      "bytes": 8927,
+      "sha256": "25886c1d1ffecd2ed20bebb5d4d9cb70d8ff903aafbd2dee06407dc38458d6c8"
+    }
+  ]
 }

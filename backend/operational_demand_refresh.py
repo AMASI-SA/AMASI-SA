@@ -46,6 +46,11 @@ TIMING_STAGES = frozenset({
     "source_orders", "source_order_indexes", "source_bank_catalog",
     "source_invoices", "source_other_sources", "source_native_overlaps",
     "source_finalize",
+    "profit_context", "profit_sales", "profit_products", "profit_order_costs",
+    "profit_ads", "profit_payroll", "profit_recurring",
+    "profit_context_settings", "profit_context_orders", "profit_context_raw",
+    "profit_context_prepare", "profit_product_catalog", "profit_product_inputs",
+    "profit_product_authority", "profit_product_supplier", "profit_product_reduce",
 })
 TIMING_OUTCOMES = frozenset({"complete", "cancelled", "failed"})
 TIMING_LIMIT = 64
