@@ -850,3 +850,30 @@ Production publication: **no**. Current release readiness: **BLOCKED pending act
 - `execution-envelope.json`: 1592 bytes, SHA256 `a5bc2caf6faea02550877efa0c73320d1ee83366241a44fb399d4d222819f5a7`.
 
 Independent review: `APPROVED_FOR_ONE_FRESH_CURRENT_HOST_REHEARSAL`; root review: `PASS_STATIC_REVIEW_ONLY`; three focused synthetic groups passed. These are static approvals for one current-host attempt, not host completion.
+
+## E15 — Successor PR2130 retained the fix; its owner holds the active lease
+
+Parent evidence checkpoint E14 is durable at `bba42a4e3655a4d87da5058afe2052669d9a0bfa`, tree `70cf8c1daa6d6cf35848c67bca05315d317b56c3`. This section preserves the complete E14 STATUS prefix and records the later successor boundary. The earlier E14 execution sequence is superseded by this observation; its inputs bind prior D and must not run over the successor checkout.
+
+### Staging stopped before writes
+
+Root's original-guard status observation at 19:18:48 UTC on 2026-11-25 returned exit 0, empty stderr and an active release lease. The shared `/app` HEAD and production branch had advanced to PR2130 deployment `17a0c8c58a71962d1733e7888eeac31d20bc40c0`. The E14 inactive-lease assertion therefore refused staging before writes: the host2 control directory was absent, no inputs were staged, and neither the helper nor the capture runner executed. E14 remains **NOT STAGED / NOT RUN**. This task created no lease and clicked no publication.
+
+At 19:20:44 UTC, root read the successor receipt and lease. Their recorded owner is `operational-payment-20261125`, source base is prior dashboard deployment `b651eacf5ded173c4f3224d195ef874b8bcea312`, source is `ca426cee9e4ed4fa730dece2409f916003249f83`, intent is `66ac128fd6c9c25b86f1e8cdb7c5ccb929310636`, and deployment is `17a0c8c58a71962d1733e7888eeac31d20bc40c0`. The successor release ID is `rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7`. The observed receipt phase was `guard_prepared`; the adapter had exit 0 and its frontend/package verifications were recorded as passed. These are compact time-specific observations of that owner's evidence, not a new execution or independent runtime verification by this task.
+
+The management UI observed at approximately 19:19 UTC still showed 100th publish `bbaba13`, last finished 2026-11-25 at 19:21 Riyadh. No successor publication, original three-round verification or lease closure had been observed in these records. They do not establish the state after their observation times.
+
+Root supplied a later read-only observation at 19:25:20.350673 UTC: public `/api/health` returned `ok: true` but still reported prior runtime source `a7c2a26dda1195beae3b6b5e3be6a9a504c5fa2a` and release ID `rg5-ddd03995594cfbe4c05415b1cfb58f972ec434a2f62ef4315512f4357a6eeb38`, with boot time 16:20:47.945921 UTC. `verified_identity_available`, `critical_file_hashes_match`, `frontend_build_verified` and `backend_runtime_source_verified` were all true for that reported prior identity. The successor receipt still read `guard_prepared`, the lease existed, and no prepublish or verify files were present. A fresh normal dashboard inspection for exactly 2026-11-24 through 2026-11-24 still showed net profit and payment fees as incomplete. These later observations are attributed to root's read-only report and are not additional claims made by the earlier frozen JSON records. The user's live dashboard acceptance remains unresolved; no private amounts are recorded here.
+
+### Exact source continuity is retained
+
+The independent read-only review at 19:23:58 UTC verified successor ancestry, complete untruncated Git trees, identical intent/deployment tree `039cacf3578f645fb2a0172cb5a2e2e15112a3c5`, and exact retention of all 11 PR2129 source/status paths (10 application/test/workflow paths plus the production-branch STATUS file). Their Git blob IDs, types and modes are identical. Nine release protocol/control paths are also unchanged. All 86 successor changed paths are disjoint from those 11 PR2129 paths. This proves the reviewed dashboard fix remains in the successor source; it does not assert broader behavioral equivalence, new-release CI validation, production adoption or numeric dashboard acceptance.
+
+Evidence: `checkpoints/E15-successor-host-observation.json` (3066 bytes, SHA256 `5905da89355360ed4873214756b7bf778f932eea9ba77358ed1759f2516ae25a`) and `checkpoints/E15-successor-readonly-review.json` (11410 bytes, SHA256 `b98fa82d012007774f242ae30247e37d9b003194c144280c848e3a8d93de9e00`). Both are exact copies of the frozen root observation and independent review. This small checkpoint adds those two JSON files and this append-only STATUS update; it adds no executable operator or archive.
+
+### Preserve ownership and historical limits
+
+The active lease belongs to the existing successor actor. Do not reuse, clear or duplicate it, execute stale E14 inputs, reset the successor checkout to prior D, or launch another rebuild while that release is active. Follow the owner's publication evidence, require its original three-round verification and final inactive guard status, then perform the authorized Nov24 dashboard acceptance through the normal demand-refresh UI against the actually verified successor runtime.
+
+The original first attempt remains **BLOCKED**. The interrupted bounded recovery's last observed state remains **RUNNING** and its final outcome remains **UNKNOWN**. Historical final foreign continuity remains **not proved**. The successor source review changes none of those earlier outcomes. E14 host2 remains **NOT STAGED / NOT RUN**; this task's own lease and publication remain **none**. No new rebuild, business-data write or live dashboard acceptance is claimed by E15. Private business values, customer records, full foreign inventories, backup bodies, bytecode and environment values are excluded.
+

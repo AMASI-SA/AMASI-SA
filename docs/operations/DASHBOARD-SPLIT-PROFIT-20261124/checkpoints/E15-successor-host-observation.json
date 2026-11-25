@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-11-25T19:20:44.669478+00:00",
+  "observations": [
+    {
+      "at": "2026-11-25T19:18:48.534056+00:00",
+      "source": "Original production_release_guard.py status read via existing code-server Terminal 2",
+      "exit_code": 0,
+      "active": true,
+      "stderr_bytes": 0
+    },
+    {
+      "at": "2026-11-25T19:20:44.669478+00:00",
+      "source": "Read-only exact successor receipt and lease JSON",
+      "lease_exists": true,
+      "receipt_phase": "guard_prepared",
+      "adapter_exit_code": 0,
+      "adapter_started_at": "2026-11-25T19:05:47.700261+00:00",
+      "adapter_finished_at": "2026-11-25T19:07:22.640289+00:00",
+      "frontend_verification": "passed",
+      "package_verification": "passed",
+      "guard_prepared_at": "2026-11-25T19:10:48.049184+00:00"
+    }
+  ],
+  "successor": {
+    "pr": 2130,
+    "merged_at": "2026-11-25T19:00:13Z",
+    "actor": "operational-payment-20261125",
+    "prepared_at": "2026-11-25T19:10:46.715461+00:00",
+    "source_base_git_sha": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+    "source_git_sha": "ca426cee9e4ed4fa730dece2409f916003249f83",
+    "intent_git_sha": "66ac128fd6c9c25b86f1e8cdb7c5ccb929310636",
+    "deployment_git_sha": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "release_id": "rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7",
+    "protocol_version": 5,
+    "branch": "hotfix/prod-snap-meta-final",
+    "stage": "/app/.git/payment-release-2130-93cbedb6",
+    "shared_head_and_remote_ref_match": true
+  },
+  "host2": {
+    "checkpoint_commit": "bba42a4e3655a4d87da5058afe2052669d9a0bfa",
+    "staging_result": "REFUSED_BEFORE_WRITES",
+    "refusal": "Original guard inactivity assertion failed because successor lease is active",
+    "control_exists": false,
+    "inputs_staged": false,
+    "helper_executed": false,
+    "capture_runner_executed": false,
+    "own_lease_created": false,
+    "own_publish_clicked": false
+  },
+  "publication_observation": {
+    "surface": "Emergent Manage Overview",
+    "at_utc_approximate": "2026-11-25T19:19:00Z",
+    "latest_visible_version": "bbaba13",
+    "latest_visible_ordinal": "100th publish",
+    "latest_visible_finish_riyadh": "2026-11-25 19:21",
+    "successor_publish_observed": false,
+    "successor_verify_observed": false
+  },
+  "historical": {
+    "original_first_attempt": "BLOCKED",
+    "bounded_recovery_final": "UNKNOWN",
+    "bounded_recovery_last_seen": "RUNNING",
+    "historical_final_foreign_continuity_proved": false
+  },
+  "next": "Do not execute stale E14 host2 inputs or reuse/clear another conversation's lease. Observe successor owner's publication and original verify3/inactive; then normal dashboard Nov24 demand-refresh acceptance.",
+  "limits": [
+    "This root-authored record transcribes compact observed status/receipt/UI fields; it is not the complete raw foreign receipt or a verification result.",
+    "No private business values, customer records, full foreign inventories, backup contents, bytecode or environment values are included."
+  ]
+}
+

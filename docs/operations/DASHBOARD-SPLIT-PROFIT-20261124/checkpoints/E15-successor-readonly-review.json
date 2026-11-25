@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "status": "PASS_IMMUTABLE_SOURCE_RETENTION_REVIEW_ONLY",
+  "reviewed_at": "2026-11-25 19:23:58 UTC",
+  "scope": "GitHub GET-only independent ancestry and exact source/control blob comparison. No host/browser access, remote/source writes, build, guard, lease or publication action.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "prior_pr": 2129,
+  "successor_pr": 2130,
+  "identities": {
+    "prior_dashboard_source": "0b39c456ea17d6e80f824f44b57563764441216c",
+    "prior_dashboard_intent": "ebaae98290f25db5580d888601d236431961d104",
+    "prior_dashboard_deployment": "b651eacf5ded173c4f3224d195ef874b8bcea312",
+    "prior_dashboard_tree": "d50681f64d3387eb4b6f2137658be9cb11c62bd8",
+    "successor_source": "ca426cee9e4ed4fa730dece2409f916003249f83",
+    "successor_intent": "66ac128fd6c9c25b86f1e8cdb7c5ccb929310636",
+    "successor_deployment": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "successor_tree": "039cacf3578f645fb2a0172cb5a2e2e15112a3c5",
+    "successor_release_id": "rg5-48825e8e9f14da864b75269ea230fa1d0f4a5c146a462a14c840317ce0225ab7"
+  },
+  "lineage": {
+    "source_parents": [
+      "b651eacf5ded173c4f3224d195ef874b8bcea312"
+    ],
+    "intent_parents": [
+      "ca426cee9e4ed4fa730dece2409f916003249f83"
+    ],
+    "deployment_parents": [
+      "b651eacf5ded173c4f3224d195ef874b8bcea312",
+      "66ac128fd6c9c25b86f1e8cdb7c5ccb929310636"
+    ],
+    "intent_tree": "039cacf3578f645fb2a0172cb5a2e2e15112a3c5",
+    "deployment_tree": "039cacf3578f645fb2a0172cb5a2e2e15112a3c5",
+    "intent_and_deployment_trees_equal": true,
+    "compare_status": "ahead",
+    "ahead_by": 3,
+    "behind_by": 0,
+    "total_commits": 3,
+    "changed_paths": 86,
+    "source_status_overlap": []
+  },
+  "tree_evidence": {
+    "prior_tree_entries": 7116,
+    "successor_tree_entries": 7176,
+    "both_recursive_responses_untruncated": true,
+    "source_status_paths_compared": 11,
+    "application_test_workflow_paths_excluding_status": 10,
+    "all_blob_ids_modes_and_types_identical": true
+  },
+  "retained_pr2129_paths": [
+    {
+      "path": ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
+      "own_sha": "b5bfbf68e6da402398f1f02e5ed98cc341c48460",
+      "successor_sha": "b5bfbf68e6da402398f1f02e5ed98cc341c48460",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "b5bfbf68e6da402398f1f02e5ed98cc341c48460"
+    },
+    {
+      "path": "backend/dashboard_payment_fees.py",
+      "own_sha": "f88feb5e8c8041f7ba27c0ed605c2894bb4d0b63",
+      "successor_sha": "f88feb5e8c8041f7ba27c0ed605c2894bb4d0b63",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "f88feb5e8c8041f7ba27c0ed605c2894bb4d0b63"
+    },
+    {
+      "path": "backend/dashboard_split_payment_fees.py",
+      "own_sha": "585ec4755dd7458047d2dd1dcfb86c4416f950dd",
+      "successor_sha": "585ec4755dd7458047d2dd1dcfb86c4416f950dd",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "585ec4755dd7458047d2dd1dcfb86c4416f950dd"
+    },
+    {
+      "path": "backend/legacy_dashboard_reader.py",
+      "own_sha": "cc70f5d44987925086e8237bd89696aebeaab59f",
+      "successor_sha": "cc70f5d44987925086e8237bd89696aebeaab59f",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "cc70f5d44987925086e8237bd89696aebeaab59f"
+    },
+    {
+      "path": "backend/tests/test_dashboard_ads_account_results.py",
+      "own_sha": "a6831a3394891c269a051f67b0f848b7fb3d9a87",
+      "successor_sha": "a6831a3394891c269a051f67b0f848b7fb3d9a87",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "a6831a3394891c269a051f67b0f848b7fb3d9a87"
+    },
+    {
+      "path": "backend/tests/test_dashboard_split_payment_cash_basis.py",
+      "own_sha": "a30d251f942879d7fb3c0b74894bed21a3a89457",
+      "successor_sha": "a30d251f942879d7fb3c0b74894bed21a3a89457",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "a30d251f942879d7fb3c0b74894bed21a3a89457"
+    },
+    {
+      "path": "backend/tests/test_dashboard_split_payment_fees.py",
+      "own_sha": "8744d3cdeb4b80371d76cabbc35a5b5476a96034",
+      "successor_sha": "8744d3cdeb4b80371d76cabbc35a5b5476a96034",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "8744d3cdeb4b80371d76cabbc35a5b5476a96034"
+    },
+    {
+      "path": "docs/operations/DASHBOARD-SPLIT-PROFIT-20261124/STATUS.md",
+      "own_sha": "c31428eefa72368ec7e9ef0d23b32f9ed7cd98d6",
+      "successor_sha": "c31428eefa72368ec7e9ef0d23b32f9ed7cd98d6",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "c31428eefa72368ec7e9ef0d23b32f9ed7cd98d6"
+    },
+    {
+      "path": "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx",
+      "own_sha": "f48e7f203feff2b86b56a01e57729138faed3f48",
+      "successor_sha": "f48e7f203feff2b86b56a01e57729138faed3f48",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "f48e7f203feff2b86b56a01e57729138faed3f48"
+    },
+    {
+      "path": "frontend/src/lib/paymentFeeCompleteness.js",
+      "own_sha": "d0204441d74a4826685f0278bd271f00acf65e38",
+      "successor_sha": "d0204441d74a4826685f0278bd271f00acf65e38",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "d0204441d74a4826685f0278bd271f00acf65e38"
+    },
+    {
+      "path": "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx",
+      "own_sha": "21d369005033504e495b44789b0eade7ac761f11",
+      "successor_sha": "21d369005033504e495b44789b0eade7ac761f11",
+      "mode": "100644",
+      "successor_mode": "100644",
+      "identical": true,
+      "pr2129_sha": "21d369005033504e495b44789b0eade7ac761f11"
+    }
+  ],
+  "unchanged_release_protocol_and_control_paths": [
+    {
+      "path": "AGENTS.md",
+      "own_sha": "0e0bbff4d9625f9323affae84b620a0cf12eb209",
+      "successor_sha": "0e0bbff4d9625f9323affae84b620a0cf12eb209",
+      "identical": true
+    },
+    {
+      "path": "docs/PRODUCTION_RELEASE_PROTOCOL.md",
+      "own_sha": "c38289eba83fd7d20c77e3a4582781dacb9fe6c8",
+      "successor_sha": "c38289eba83fd7d20c77e3a4582781dacb9fe6c8",
+      "identical": true
+    },
+    {
+      "path": "scripts/production_release_guard.py",
+      "own_sha": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+      "successor_sha": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+      "identical": true
+    },
+    {
+      "path": "scripts/emergent_deployment_adapter.py",
+      "own_sha": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+      "successor_sha": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+      "identical": true
+    },
+    {
+      "path": "scripts/frontend_release_toolchain.py",
+      "own_sha": "24ec1b60656aafe4bf1514df06592d8c108335e2",
+      "successor_sha": "24ec1b60656aafe4bf1514df06592d8c108335e2",
+      "identical": true
+    },
+    {
+      "path": "scripts/verify_frontend_build.py",
+      "own_sha": "8d9a5c31963aba825dc4a1d8edebf0db92c00601",
+      "successor_sha": "8d9a5c31963aba825dc4a1d8edebf0db92c00601",
+      "identical": true
+    },
+    {
+      "path": "frontend/scripts/build-entry.cjs",
+      "own_sha": "327ea41b20dc49c6ce3597969b77774deed6c0d3",
+      "successor_sha": "327ea41b20dc49c6ce3597969b77774deed6c0d3",
+      "identical": true
+    },
+    {
+      "path": "frontend/scripts/build-release-frontend.cjs",
+      "own_sha": "63704e2148fc2fe745376bae6dc3e6eab8c4c339",
+      "successor_sha": "63704e2148fc2fe745376bae6dc3e6eab8c4c339",
+      "identical": true
+    },
+    {
+      "path": ".github/workflows/mezan-production-release.yml",
+      "own_sha": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+      "successor_sha": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+      "identical": true
+    }
+  ],
+  "production_ref_get": {
+    "ref": "refs/heads/hotfix/prod-snap-meta-final",
+    "sha": "17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "limitation": "Snapshot of this GET; not a claim about later ref movement."
+  },
+  "successor_handoff": {
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2130",
+    "title": "Require confirmed courier bank receipts and finalize payment evidence release",
+    "merged_at": "2026-11-25T19:00:13Z",
+    "body_updated_at": "2026-11-25T19:11:30Z",
+    "reported_phase": "guard_prepared",
+    "reported_actor": "operational-payment-20261125",
+    "reported_lease_active": true,
+    "reported_publish_performed": false,
+    "reported_adapter_exit_code": 0,
+    "reported_adapter_seconds": 94.81,
+    "reported_frontend_and_package_verification": "PASS",
+    "stage": "/app/.git/payment-release-2130-93cbedb6",
+    "source_record": "docs/operations/OPERATIONAL-PAYMENT-RECEIPTS-20261125/STATUS.md",
+    "attribution": "PR2130 owner handoff text; this child did not independently inspect actual host receipts or rerun their checks."
+  },
+  "root_supplied_later_observations": {
+    "original_guard_active_and_head_at": "2026-11-25T19:18:48Z",
+    "receipt_guard_prepared_and_exit_codes_0_at": "2026-11-25T19:20:44Z",
+    "own_host2_control_created": false,
+    "own_host2_staged": false,
+    "own_host2_executed": false,
+    "own_lease_created": false,
+    "own_publish_performed": false,
+    "attribution": "Parent root observations, not child host access."
+  },
+  "disposition": {
+    "dashboard_fix_exactly_retained_in_successor_source": true,
+    "host2_frozen_candidate": "NOT_RUN; binds prior D and must not execute over successor.",
+    "successor_lease": "Leave lifecycle to existing actor; do not clear, reuse or duplicate it.",
+    "next_step": "Follow successor owner's original publish/verify/lease-closure evidence, then perform the authorized dashboard acceptance against the actually verified successor runtime.",
+    "historical_recovery_final_status": "UNKNOWN",
+    "historical_final_foreign_continuity_proved": false
+  },
+  "limits": [
+    "This verifies source blob retention and ancestry, not successful production adoption or numeric dashboard-profit acceptance.",
+    "Successor introduces86 other changed paths; no broader behavioral equivalence or new-release CI validation was performed by this child.",
+    "PR handoff and parent-observed lease state are time-specific; no later publication or closure is inferred.",
+    "Exporter preparation stopped before creating an exporter file; all frozen host2 inputs remain unchanged."
+  ],
+  "evidence_urls": [
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/b651eacf5ded173c4f3224d195ef874b8bcea312...17a0c8c58a71962d1733e7888eeac31d20bc40c0",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees/d50681f64d3387eb4b6f2137658be9cb11c62bd8?recursive=1",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees/039cacf3578f645fb2a0172cb5a2e2e15112a3c5?recursive=1",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls/2129/files?per_page=100",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits/17a0c8c58a71962d1733e7888eeac31d20bc40c0/pulls",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/ref/heads/hotfix/prod-snap-meta-final",
+    "https://github.com/AMASI-SA/AMASI-SA/pull/2130"
+  ]
+}
