@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "official_live_verify_running",
-  "updated_utc": "2026-11-26 00:30:04 UTC",
+  "phase": "production_verified_live_financial_acceptance_pending",
+  "updated_utc": "2026-11-26 00:42:32 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -101,10 +101,12 @@
     "current_generated_backup": {
       "bytes": 97041771,
       "sha256": "9ee77a6a75da47569bc96e5c9edf8d30233feff92ead8bfb4d268f8a88d83772"
-    }
+    },
+    "development_backend_restored": true,
+    "development_backend_restored_at": "2026-11-26T00:41:50.801272+00:00"
   },
   "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Observe existing original /app receipt and guard-verify output; do not start another verifier or publish again. Wait for production_verified with checks=3 and inactive matching lease. Then perform new visible financial refresh, private recovery-proof comparison and bounded live samples.",
+  "next_safe_action": "Perform one owner-visible refresh; keep its page visible until complete, retain private recovery proof, compare preservation/no-new-duplicate evidence and live samples. Use next natural scheduled run around 03:53 Asia/Riyadh for scheduler timing/replay acceptance; do not change scheduling settings.",
   "guard": {
     "actor": "operational-refresh-root-fix-20261126",
     "prepared": true,
@@ -138,7 +140,25 @@
     "guard_pid": 11789,
     "invocations": 1,
     "required_checks": 3,
-    "status": "running",
-    "observed_stderr_empty": true
+    "status": "verified",
+    "observed_stderr_empty": true,
+    "verified": true,
+    "checks": 3,
+    "exit_code": 0,
+    "finished_at": "2026-11-26T00:41:49.162517+00:00",
+    "verified_at": "2026-11-26T00:41:49.293582+00:00",
+    "original_proof_sha256": "ddcc8f46ce142cbb7f40fb6afcf070708aec6341e851b6959d8ab644b4ab00de",
+    "source_A": "d7ea8f0d595cbe698dcd92249aa5de9d9f07ffc2",
+    "deployment_D": "570b173d1dc6438624c39a5c511311f2a33be9a3",
+    "release_id": "rg5-8af02353f8652f8cc8adab79e9d931d82a78bc19ee8864f2bde08751cb18b50d",
+    "frontend_artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+    "first_probe_frontend_checked_requests": 770,
+    "boot_started_at_observations": [
+      "2026-11-26T00:25:21.087007+00:00",
+      "2026-11-26T00:25:28.140720+00:00"
+    ],
+    "final_guard_status": {
+      "active": false
+    }
   }
 }
