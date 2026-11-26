@@ -120,6 +120,11 @@ async def read_exact_product(
             "name": str(opt.get("name") or "")[:120],
             "type": str(opt.get("type") or "")[:40],
             "required": opt.get("required") is True,
+            "characters_limit": opt.get("characters_limit"),
+            "visibility": str(opt.get("visibility") or "always")[:40],
+            "visibility_condition_type": opt.get("visibility_condition_type"),
+            "visibility_condition_option": opt.get("visibility_condition_option"),
+            "visibility_condition_value": opt.get("visibility_condition_value"),
             "values": values,
         })
     variant_facts = []
