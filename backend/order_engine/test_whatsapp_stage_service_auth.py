@@ -22,11 +22,11 @@ def signed(**overrides):
         "timestamp": TS, "nonce": NONCE, "key_id": KID,
         "active_keys": {KID: KEY}, "now": 1800000000,
     }
-    payload.update(overrides)
     message = "\n".join((
         "POST", PATH, TS, NONCE, KID, hashlib.sha256(BODY).hexdigest()
     )).encode("ascii")
     payload["signature"] = hmac.new(KEY, message, hashlib.sha256).hexdigest()
+    payload.update(overrides)
     return payload
 
 
