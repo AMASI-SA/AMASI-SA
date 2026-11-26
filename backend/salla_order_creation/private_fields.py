@@ -113,7 +113,11 @@ def _safe_value(field: str, value: str) -> str:
         return str(coord)
     if field in ("postal_code", "short_address",
                  "building_number", "additional_number", "street_number"):
-        if not CODE.fullmatch(text):
+        min_chars = 1 if field in (
+            "building_number", "additional_number", "street_number"
+        ) else 3
+        if (not min_chars <= len(text) <= 20 or
+                not re.fullmatch(r"[A-Za-z0-9-]+", text)):
             raise PrivateOrderFieldDenied("invalid_private_address_part")
     return text
 
