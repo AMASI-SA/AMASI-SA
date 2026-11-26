@@ -87,7 +87,7 @@ def _assert_cancel_allowed(assignment: dict, order: dict, workflow: dict) -> Non
     if any(normalize_text(assignment.get(field)) for field in (
         "delivered_at", "collection_method", "collection_amount", "delivery_proof_reference",
         "receipt_reference", "physical_cash_amount", "physical_cash_confirmed",
-        "financial_handoff_status", "pending_delivery_completion",
+        "financial_handoff_status", "pending_delivery_completion", "noncash_delivery_attempt",
     )):
         raise HTTPException(409, detail={"code": "cancel_financial_evidence_requires_review"})
     if normalize_text(workflow.get("store_courier_delivered_at")):
@@ -146,6 +146,10 @@ async def _finish_local_cancellation(
                 if not o or not w:
                     raise HTTPException(409, detail={"code": "cancel_assignment_projection_changed"})
                 await _assert_no_financial_entries(db, owner, assignment_id, session=tx)
+                # A noncash provider POST can finish after the original HTTP
+                # response is lost. Preserve custody for reconciliation.
+                if a.get("noncash_delivery_attempt") or a.get("pending_delivery_completion"):
+                    raise HTTPException(409, detail={"code": "cancel_financial_evidence_requires_review"})
                 if any(normalize_text(a.get(field)) for field in (
                     "delivered_at", "collection_method", "collection_amount",
                     "receipt_reference", "delivery_proof_reference",
