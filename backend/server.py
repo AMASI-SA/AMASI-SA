@@ -3932,6 +3932,8 @@ from dashboard_v2_routes import make_dashboard_v2_router
 api.include_router(
     make_dashboard_v2_router(db, current_user, dashboard, _require_owner)
 )
+from order_engine.whatsapp_stage_mount import mount_if_enabled as mount_whatsapp_stage_if_enabled
+mount_whatsapp_stage_if_enabled(api, db)
 api.include_router(make_order_engine_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)
