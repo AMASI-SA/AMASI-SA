@@ -25,6 +25,9 @@ from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
 from .prepare_action import verify_prepare_unpaid_order
 from .private_field_action import verify_private_field
 from .private_fields import PrivateOrderFieldDenied, save_private_order_field
+from .private_fields import require_private_fields_ttl
+from .private_vault_action import verify_private_vault_prepare
+from .private_order_builder import PrivateOrderAssemblyDenied, prepare_from_private_vault
 from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .http_limits import BodyTooLarge, read_bounded_action_body
@@ -102,6 +105,62 @@ def make_assisted_salla_order_router(
             raise HTTPException(
                 status_code=409, detail={"code": str(exc)}
             ) from exc
+
+    @router.post("/signed-prepare-private")
+    async def signed_prepare_private(request: Request) -> dict:
+        """Server-only encrypted field vault → validated Salla unpaid quote.
+
+        The signed caller never supplies buyer phone/name/email/address.
+        It only names a verified Chatwoot contact + Salla catalog selections.
+        This endpoint is OFF until private field storage, quote TTL and the
+        Salla read scopes are explicitly enabled by the merchant owner.
+        """
+        if (os.environ.get("MEZAN_ASSISTED_SALLA_SIGNED_PREPARE_ENABLED", "0") != "1" or
+                os.environ.get("MEZAN_ASSISTED_SALLA_PRIVATE_FIELDS_ENABLED", "0") != "1" or
+                os.environ.get("MEZAN_ASSISTED_SALLA_QUOTE_WRITE_ENABLED", "0") != "1"):
+            raise HTTPException(status_code=503, detail={"code":"private_prepare_disabled"})
+        owner_id=str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        secret=str(os.environ.get("MEZAN_ASSISTED_SALLA_PREPARE_VAULT_HMAC_SECRET") or "").encode()
+        account=str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
+        inbox=str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
+        if (not owner_id or len(secret)<32 or not account.isdigit()
+                or not inbox.isdigit()):
+            raise HTTPException(status_code=503,detail={"code":"private_prepare_scope_not_configured"})
+        try:
+            raw=await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(status_code=413,detail={"code":exc.args[0]}) from exc
+        try:
+            action=verify_private_vault_prepare(
+                raw,request.headers.get("x-mezan-action-timestamp",""),
+                request.headers.get("x-mezan-action-delivery",""),
+                request.headers.get("x-mezan-action-signature",""),secret,
+            )
+        except SignatureDenied as exc:
+            raise HTTPException(status_code=401,detail={"code":exc.args[0]}) from exc
+        if (action.account_id!=int(account) or action.inbox_id!=int(inbox)):
+            raise HTTPException(status_code=403,detail={"code":"outside_approved_inbox"})
+        try:
+            await require_assisted_quote_ttl(db)
+            await require_private_fields_ttl(db)
+            return await prepare_from_private_vault(
+                db,owner_id=owner_id,
+                account_id=action.account_id,inbox_id=action.inbox_id,
+                conversation_id=action.conversation_id,
+                intent_id=action.intent_id,contact_id=action.source_contact_id,
+                current_message_id=action.source_message_id,
+                receiver_country_code=action.receiver_country_code,
+                country_id=action.country_id,city_id=action.city_id,
+                district_id=action.district_id,courier_id=action.courier_id,
+                selected_rate_id=action.selected_rate_id,
+                products=[p.model_dump(exclude_none=True) for p in action.products],
+                accepted_methods=list(action.accepted_methods),
+                branch_id=action.branch_id,
+                enabled=True,
+            )
+        except (RetentionNotReady,PrivateOrderFieldDenied,PrivateOrderAssemblyDenied,
+                PrepareDenied) as exc:
+            raise HTTPException(status_code=409,detail={"code":str(exc)}) from exc
 
     @router.post("/signed-prepare")
     async def signed_prepare(request: Request) -> dict:
