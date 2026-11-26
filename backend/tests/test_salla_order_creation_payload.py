@@ -15,8 +15,11 @@ def request_data():
         "receiver": {"name": "Synthetic Recipient", "phone": "+966500000000", "country_code": "SA"},
         "branch_id": 100,
         "courier_id": 200,
-        "ship_to": {"country": 1, "city": 2, "district": 3, "address": "Sample street",
-                    "street_number": "10", "postal_code": "12345"},
+        "ship_to": {"country": 1, "city": 2, "district": 3, "block": None,
+                    "street_number": "10", "address_line": "Sample street",
+                    "postal_code": "12345", "short_address": "ABCD1234",
+                    "building_number": "10", "additional_number": "20",
+                    "geo_coordinates": {"lat": 24.7, "lng": 46.7}},
         "accepted_methods": ["mada", "credit_card"],
         "products": [{"identifier_type": "id", "identifier": 400, "quantity": 2,
                       "options": [{"id": 500, "value": ["M"]}]}],
@@ -98,3 +101,38 @@ def test_supports_sku_with_no_option(request_data):
     request_data["products"] = [{"identifier_type": "sku", "identifier": "SKU-123", "quantity": 1}]
     payload = build_pending_order_payload(PendingOrder.model_validate(request_data))
     assert payload["products"] == [{"identifier_type": "sku", "identifier": "SKU-123", "quantity": 1}]
+
+
+def test_requires_2026_sa_national_address(request_data):
+    request_data["ship_to"]["short_address"] = None
+    with pytest.raises(ValidationError):
+        PendingOrder.model_validate(request_data)
+
+
+def test_preserves_required_nullable_salla_address_keys(request_data):
+    payload = build_pending_order_payload(PendingOrder.model_validate(request_data))
+    assert "block" in payload["ship_to"] and payload["ship_to"]["block"] is None
+    assert payload["ship_to"]["short_address"] == "ABCD1234"
+    assert payload["courier_id"] == "200"
+
+
+def test_non_sa_address_does_not_require_sa_extra_fields(request_data):
+    request_data["receiver"]["country_code"] = "KW"
+    request_data["ship_to"].update(
+        short_address=None, building_number=None, additional_number=None,
+        geo_coordinates=None,
+    )
+    payload = build_pending_order_payload(PendingOrder.model_validate(request_data))
+    assert "short_address" not in payload["ship_to"]
+
+
+def test_cannot_embed_paid_or_manual_checkout_url_in_address(request_data):
+    request_data["ship_to"]["checkout_url"] = "https://example.invalid/pay"
+    with pytest.raises(ValidationError):
+        PendingOrder.model_validate(request_data)
+
+
+def test_duplicate_product_option_values_are_rejected(request_data):
+    request_data["products"][0]["options"][0]["value"] = [""]
+    with pytest.raises(ValidationError):
+        PendingOrder.model_validate(request_data)
