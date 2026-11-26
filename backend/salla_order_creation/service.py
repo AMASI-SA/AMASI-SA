@@ -212,6 +212,10 @@ async def create_confirmed_salla_order(
             "salla_order_id": prior.get("salla_order_id"),
             "reference_id": prior.get("reference_id"),
             "pricing_mode": prior.get("pricing_mode"),
+            "amount_confirmed": (
+                prior.get("state") == "created"
+                and prior.get("pricing_mode") == "preverified"
+            ),
             "replayed": True,
         }
 
