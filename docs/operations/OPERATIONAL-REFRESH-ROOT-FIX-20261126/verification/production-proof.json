@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "original_host_local_verified_ready_for_lease",
-  "updated_utc": "2026-11-26 00:13:11 UTC",
+  "phase": "publication_started_waiting_for_provider_success",
+  "updated_utc": "2026-11-26 00:15:56 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -64,8 +64,8 @@
     "tree_matches_B": true
   },
   "production_changed": false,
-  "publication_action_count": 0,
-  "lease_created": false,
+  "publication_action_count": 1,
+  "lease_created": true,
   "original_host": {
     "last_guard_observation": {
       "active": false
@@ -102,5 +102,20 @@
     }
   },
   "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Run original guard prepare with task actor and prepublish; immediately perform one authorized Production publication. Require a newer explicit Deployment finished, then original three-probe verification. Restore only task-stopped development backend after lease closure."
+  "next_safe_action": "Wait for newer explicit Deployment finished and new published version. Do not publish again. Then run original guard verify exactly once, retain full proof, require all three probes and inactive lease before live financial refresh.",
+  "guard": {
+    "actor": "operational-refresh-root-fix-20261126",
+    "prepared": true,
+    "prepublish_ready": true,
+    "immediate_prepublish_at": "2026-11-26T00:15:17.080086+00:00"
+  },
+  "publication": {
+    "destination": "https://mezansalla.com",
+    "provider_started_label": "Deployment Started Nov 26, 03:15 AM",
+    "timezone": "Asia/Riyadh",
+    "provider_event_id": "66938a38-3cc2-509e-88ce-3c21d9c2e7cd",
+    "observed_at": "2026-11-26T00:15:39.350371+00:00",
+    "previous_platform_version": "cf13467",
+    "previous_publish_number": 100
+  }
 }
