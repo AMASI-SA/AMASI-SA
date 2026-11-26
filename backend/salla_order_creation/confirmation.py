@@ -35,7 +35,7 @@ class SignedCustomerConfirmation(BaseModel):
     quote_digest: str = Field(pattern=DIGEST)
     quote_version: int = Field(gt=0)
     confirmation_message_id: int = Field(gt=0)
-    message_created_at: int = Field(gt=0)
+    message_created_at: int = Field(gt=0, lt=4_102_444_800)
     source_id_sha256: str = Field(pattern=DIGEST)
 
 
