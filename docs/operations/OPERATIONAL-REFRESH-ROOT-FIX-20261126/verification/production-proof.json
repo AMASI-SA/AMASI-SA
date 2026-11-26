@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "merged_awaiting_original_host_build",
-  "updated_utc": "2026-11-26 00:01:52 UTC",
+  "phase": "original_host_preservation_and_rehearsal_started",
+  "updated_utc": "2026-11-26 00:10:04 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -40,7 +40,22 @@
     "original_ci_host_rehearsals": [
       "Node20.20.2",
       "Node24.19.0"
-    ]
+    ],
+    "intent_B_results": {
+      "backend_passed": 7770,
+      "backend_subtests": 151,
+      "stock_passed": 6443,
+      "stock_subtests": 97,
+      "frontend_tests": 1850,
+      "frontend_suites": 115,
+      "skipped": 0,
+      "failed": 0
+    },
+    "intent_B_artifacts": {
+      "backend": 15074072275,
+      "stock": 15074027840,
+      "frontend": 15073167893
+    }
   },
   "exact_B_ci": "all_required_passed",
   "merge": {
@@ -60,12 +75,16 @@
     "untracked_count": 432,
     "untracked_files_untouched": true,
     "planned_stage": "/app/.git/operational-refresh-2132-d7ea8f0d",
-    "planned_stage_created": false,
+    "planned_stage_created": true,
     "last_guard_observed_utc": "2026-11-26T00:00:12.319890+00:00",
     "free_mib_before": 383,
     "host_node": "v24.19.0",
-    "host_yarn": "1.22.22"
+    "host_yarn": "1.22.22",
+    "current_receipt": "/app/.git/operational-refresh-2132-d7ea8f0d/receipt.json",
+    "preserved_files": "432-path content/metadata baseline retained privately. Previous generated ownership identified; fresh compressed backup being prepared before cleanup. Original dependency backup retained.",
+    "derived_bytecode": "Two inherited generated Python bytecode files identified; reversible preservation outside backend package. Local development backend stopped by task; restore only after matching lease is inactive.",
+    "host_setup_notes": "Filesystem device changed from prior receipt; known platform-file metadata differences preserved at new baseline. Initial source verifier refused inherited cache; official release rules unchanged. Detached preparation resumed after treating supervisor STOPPED exit 3 as expected status."
   },
   "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Fast-forward original /app to verified D, retaining unrelated files and task-owned generated provenance; run unchanged actual adapter without a lease, verify frontend/package artifacts, then prepare/prepublish and direct Production publication."
+  "next_safe_action": "Inspect original receipt and adapter logs. Require local_verified and inactive guard before prepare/prepublish and one Production action."
 }
