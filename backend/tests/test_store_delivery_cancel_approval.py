@@ -139,7 +139,8 @@ async def test_ambiguous_post_does_not_auto_post_twice(monkeypatch):
         pending = await approve(ASSIGNMENT_ID, payload(), user=OWNER)
         assert pending["status"] == "awaiting_salla_confirmation"
         assert await db[ASSIGNMENTS].count_documents({
-            "id": ASSIGNMENT_ID, "active": True, "status": "cancel_syncing",
+            "id": ASSIGNMENT_ID, "active": True, "status": "out_for_delivery",
+            "cancel_approval_state": "reserved",
         }) == 1
         done = await approve(ASSIGNMENT_ID, payload(), user=OWNER)
         assert done["status"] == "completed"
@@ -159,7 +160,8 @@ async def test_unconfirmed_salla_never_removes_assignment_or_posts_money(monkeyp
         response = await approve(ASSIGNMENT_ID, payload(), user=OWNER)
         assert response["status"] == "awaiting_salla_confirmation"
         assert await db[ASSIGNMENTS].count_documents({
-            "id": ASSIGNMENT_ID, "active": True, "status": "cancel_syncing",
+            "id": ASSIGNMENT_ID, "active": True, "status": "out_for_delivery",
+            "cancel_approval_state": "reserved",
         }) == 1
         await approve(ASSIGNMENT_ID, payload(), user=OWNER)
         assert state["posts"] == 1
@@ -269,5 +271,55 @@ async def test_pending_cancellation_blocks_driver_delivery_and_exception_replace
         assert exception_error.value.detail["code"] == "driver_cancellation_pending_staff_approval"
         assert await db["store_delivery_collections"].count_documents({}) == 0
         assert await db["store_delivery_driver_earnings"].count_documents({}) == 0
+    finally:
+        await cleanup(client, db)
+
+@pytest.mark.asyncio
+async def test_reserved_cancel_remains_visible_and_cannot_be_reassigned(monkeypatch):
+    """During Salla latency, the parcel remains visible to the courier."""
+    from store_delivery_reassignment_routes import ReassignPayload
+
+    monkeypatch.setenv("AMASI_COURIER_CANCELLATION_APPROVAL_ENABLED", "1")
+    client, db = await scenario()
+    try:
+        _state, call = fake_salla(post_behavior="no_confirm")
+        monkeypatch.setattr(cancellation, "_call_salla", call)
+        await endpoint(db)(ASSIGNMENT_ID, payload(), user=OWNER)
+        row = await db[ASSIGNMENTS].find_one({"id": ASSIGNMENT_ID})
+        assert row["status"] == "out_for_delivery"
+        assert row["active"] is True
+        assert row["cancel_approval_state"] == "reserved"
+        await db["store_drivers"].insert_one({
+            "user_id": "merchant", "id": "new-driver", "status": "active",
+            "delivery_fee": 20,
+        })
+        router = make_store_delivery_reassignment_router(db, lambda: OWNER)
+        reassign = next(
+            item.endpoint for item in router.routes
+            if item.path.endswith("/{assignment_id}/reassign")
+        )
+        with pytest.raises(HTTPException) as err:
+            await reassign(
+                ASSIGNMENT_ID, ReassignPayload(driver_id="new-driver"),
+                user=OWNER,
+            )
+        assert err.value.detail["code"] == "cancel_approval_in_progress"
+    finally:
+        await cleanup(client, db)
+
+
+@pytest.mark.asyncio
+async def test_capability_stays_disabled_until_backend_activation(monkeypatch):
+    monkeypatch.delenv("AMASI_COURIER_CANCELLATION_APPROVAL_ENABLED", raising=False)
+    client, db = await scenario()
+    try:
+        router = make_store_delivery_reassignment_router(db, lambda: OWNER)
+        capability = next(
+            row.endpoint for row in router.routes
+            if row.path.endswith("/cancellation-capability")
+        )
+        response = await capability(user=OWNER)
+        assert response["enabled"] is False
+        assert response["salla_canceled_slug"] == "canceled"
     finally:
         await cleanup(client, db)
