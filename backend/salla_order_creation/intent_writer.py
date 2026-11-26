@@ -104,6 +104,7 @@ async def prepare_salla_unpaid_order_intent(
             raise PrepareDenied("payment_method_source_unverified")
         allowed = methods.get("eligible_create_order_method_candidates")
         if (not isinstance(allowed, list) or
+                not all(type(value) is str for value in allowed) or
                 not set(order.accepted_methods).issubset(set(allowed))):
             raise PrepareDenied("online_payment_method_not_enabled")
 
