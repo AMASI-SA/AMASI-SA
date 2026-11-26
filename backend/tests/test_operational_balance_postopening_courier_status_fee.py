@@ -193,3 +193,37 @@ def test_full_salla_source_collector_status_to_saved_courier_base(party):
     assert not any(k.startswith("cod_collection:") for k in result["engine"]["facts"])
     assert not any(row["kind"] in {"provider", "cod"} for row in result["engine"]["obligations"].values())
     assert reconcile(deepcopy(result), deepcopy(sources), OBSERVED) == result
+
+
+def test_later_native_delivery_date_never_rewrites_observed_charge_or_adds_base():
+    first = reconcile(saved(), {"orders": [new_order()]}, OBSERVED)
+    key = "shipping:synthetic-postopening-100:base_shipping"
+    before = deepcopy(first["engine"]["obligations"][key])
+    dated = new_order(observation=LATER)
+    dated["delivered_at"] = "2026-11-23T08:00:00+00:00"
+    dated["delivery_event"].update(
+        schema="operational_delivery_event_v1",
+        id="courier-delivery:synthetic-postopening-100",
+        delivered_at=dated["delivered_at"],
+    )
+    dated["delivery_event"].pop("recognition_basis")
+    dated["delivery_event"].pop("recorded_at")
+    later = reconcile(deepcopy(first), {"orders": [dated]}, LATER)
+    assert later["engine"]["obligations"][key] == before
+    assert later["engine"]["facts"][PROOF + dated["id"]] == first["engine"]["facts"][PROOF + dated["id"]]
+    assert len([r for r in later["engine"]["obligations"].values()
+                if r["kind"] == "shipping" and r.get("confirmed") == "17.25"]) == 1
+    assert not later["movements"]
+
+
+def test_unrelated_existing_courier_payment_never_changes_money_on_refresh():
+    state = saved()
+    state["movements"].append({
+        "id": "prior-company-payment", "party_type": "courier", "party_id": "smsa",
+        "direction": "outgoing", "kind": "payment", "currency": "SAR",
+        "amount": "50.00", "allocations": [],
+    })
+    original = deepcopy(state["movements"])
+    after = reconcile(state, {"orders": [new_order(party="imile")]}, OBSERVED)
+    assert after["movements"] == original
+    assert after["engine"]["obligations"]["shipping:synthetic-postopening-100:base_shipping"]["party_id"] == "imile"
