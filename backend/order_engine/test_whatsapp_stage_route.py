@@ -89,6 +89,24 @@ class OrderStageRouteTest(unittest.TestCase):
             response=client.post(PATH,content=data,headers=signed(data))
         self.assertEqual(response.status_code,404)
 
+    def test_shared_rate_limit_denies_before_order_access(self):
+        data=body()
+        app=FastAPI()
+        async def verified(conversation,message):
+            raise AssertionError("should not read Chatwoot after rate denial")
+        async def freshness(dto):
+            return True
+        app.include_router(make_whatsapp_stage_router(
+            repository=object(),fixed_owner_id="fixed_test_tenant",
+            active_keys={KID:KEY},claim_nonce=lambda *_:True,
+            rate_limit=lambda key: False,
+            resolve_verified_sender=verified,source_freshness=freshness,
+            now_fn=lambda:NOW),prefix="/api")
+        with patch("backend.order_engine.whatsapp_stage_route.get_order") as reader:
+            response=TestClient(app).post(PATH,content=data,headers=signed(data))
+        self.assertEqual(response.status_code,429)
+        reader.assert_not_called()
+
     def test_bad_signature_no_lookup(self):
         data=body()
         headers=signed(data)
