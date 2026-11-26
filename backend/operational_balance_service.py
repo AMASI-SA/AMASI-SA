@@ -853,16 +853,15 @@ async def refresh(db, owner, *, clock=None, ad_correction=None):
                 reconcile_staged_payment_evidence(result)
             else:
                 await run_calculation(reconcile_staged_payment_evidence, result)
-        state.update(result)
-        state["engine"]["as_of"] = stamp
+        result["engine"]["as_of"] = stamp
         await checkpoint()
-        return state
+        return result
     async def review_before_commit(before, after):
         from operational_ad_corrections import verify_before_commit
         return await verify_before_commit(db, owner, before, after, ad_correction)
 
     options = {"before_commit": review_before_commit} if ad_correction is not None else {}
-    return await mutate(db, owner, apply, **options)
+    return await mutate(db, owner, apply, replacement_state=True, **options)
 
 
 async def supplier_return(db, owner, actor, payload, *, clock=None):

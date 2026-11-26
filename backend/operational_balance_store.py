@@ -64,11 +64,16 @@ async def read(db, owner):
     return await logical_state(db, owner, await _raw_state(db, owner))
 
 
-async def mutate(db, owner, operation, *, threaded_preparation=False, before_commit=None):
+async def mutate(db, owner, operation, *, threaded_preparation=False, before_commit=None,
+                 replacement_state=False):
     """Operation is async and side-effect free outside the returned aggregate.
 
     Callers revalidate source identity/permissions on every retry. No process
     mutex and no last-write-wins fallback; concurrent workers use the revision.
+    Replacement operations must leave their input untouched and return an
+    independent successor (or the unchanged input for a no-op). Refresh uses
+    this contract because its pure reducer already copies the complete state.
+    Ordinary writers retain the isolated mutable copy and arbitrary result.
     """
     from operational_demand_refresh import demand_context, refresh_stage, run_calculation
 
@@ -89,11 +94,18 @@ async def mutate(db, owner, operation, *, threaded_preparation=False, before_com
                 stored = await _raw_state(db, owner)
             with refresh_stage("snapshot_unpack"):
                 before = await logical_state(db, owner, stored)
-            # This includes the existing authorization/thread handoff and
-            # joined cleanup around deepcopy; it is not exclusive CPU time.
+            # Ordinary writers include the authorization/thread handoff and
+            # joined deepcopy here. Replacement operations retain the original
+            # input; their reducer owns the independent successor copy.
             with refresh_stage("snapshot_copy_prepare"):
-                after = await prepare_change(deepcopy, before)
+                after = before if replacement_state else await prepare_change(deepcopy, before)
         result = await operation(after)
+        if replacement_state:
+            if (type(result) is not dict or any(key not in result
+                    or type(result[key]) is not type(before[key]) or result[key] != before[key]
+                    for key in ("_id", "owner_id", "revision"))):
+                fail("operational_replacement_state_invalid", "تعذر تثبيت نتيجة الاحتساب", 503)
+            after = result
         await check_authorization()
         with refresh_stage("snapshot_compare"):
             if await prepare_change(lambda: after == before):
