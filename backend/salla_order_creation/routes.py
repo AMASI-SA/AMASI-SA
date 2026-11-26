@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from salla_integration.service import call_salla, get_integration
 
 from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
+from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
 from .signature import SignatureDenied, verify_action
@@ -126,13 +127,18 @@ def make_assisted_salla_order_router(
         if os.environ.get("MEZAN_ASSISTED_SALLA_CONFIRMATION_ENABLED", "0") != "1":
             raise HTTPException(status_code=503, detail={"code": "confirmation_disabled"})
         owner_id = str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
-        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_HMAC_SECRET") or "").encode()
+        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_CONFIRMATION_HMAC_SECRET") or "").encode()
         account = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
         inbox = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
         if (not owner_id or len(secret) < 32 or
                 not account.isdigit() or not inbox.isdigit()):
             raise HTTPException(status_code=503, detail={"code": "action_scope_not_configured"})
-        raw = await request.body()
+        try:
+            raw = await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(
+                status_code=413, detail={"code": exc.args[0]}
+            ) from exc
         delivery = request.headers.get("x-mezan-action-delivery", "")
         try:
             verified = verify_confirmation(
@@ -169,7 +175,7 @@ def make_assisted_salla_order_router(
         if os.environ.get("MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED", "0") != "1":
             raise HTTPException(status_code=503, detail={"code": "creation_disabled"})
         owner_id = str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
-        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_HMAC_SECRET") or "").encode()
+        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_ORDER_HMAC_SECRET") or "").encode()
         configured_account = str(
             os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or ""
         )
@@ -179,7 +185,12 @@ def make_assisted_salla_order_router(
         if (not owner_id or len(secret) < 32 or not configured_account.isdigit()
                 or not configured_inbox.isdigit()):
             raise HTTPException(status_code=503, detail={"code": "action_scope_not_configured"})
-        raw = await request.body()
+        try:
+            raw = await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(
+                status_code=413, detail={"code": exc.args[0]}
+            ) from exc
         delivery = request.headers.get("x-mezan-action-delivery", "")
         try:
             action = verify_action(
