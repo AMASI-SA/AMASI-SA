@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "merged_deployment_gates_running",
+  "phase": "merged_original_host_rehearsal_running",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,5 +691,29 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "After a fresh original-host inactive guard, upload the exact reviewed operator into a separate task-owned .git directory and run one governed local rehearsal; require all exact-D push gates before lease/publication."
+  "next_safe_action": "After a fresh original-host inactive guard, upload the exact reviewed operator into a separate task-owned .git directory and run one governed local rehearsal; require all exact-D push gates before lease/publication.",
+  "original_host_current_attempt": {
+    "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
+    "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
+    "operator_files_verified": 10,
+    "config_sha256": "e0bc4866e20131aef7ea53b35a916234d19bf258b2a9b5e7f2d05ea969516fa5",
+    "manifest_sha256": "a9f98d8f90c22617995d25cb7cd7a223d71e53343092daf326ee649e27db817c",
+    "guard_before_upload": {
+      "active": false
+    },
+    "prepare_invocations": 1,
+    "observed_phases": [
+      "initial_guard_inactive",
+      "previous_runtime_validation",
+      "backend_stop_requested",
+      "backend_stopped",
+      "baseline_recorded",
+      "cache_validation",
+      "cache_quarantine",
+      "cache_quarantined"
+    ],
+    "backend_restore_required": true,
+    "lease_created": false,
+    "publication_count": 0
+  }
 }
