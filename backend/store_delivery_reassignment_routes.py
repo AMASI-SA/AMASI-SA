@@ -59,6 +59,8 @@ def _assignment_status_filter(value: str | None) -> str | dict[str, list[str]] |
         return None
     if normalized == "current":
         return {"$in": list(CURRENT_DELIVERY_STATUSES)}
+    if normalized == "cancellation_requests":
+        return {"$in": [*CURRENT_DELIVERY_STATUSES, "cancel_syncing"]}
     return normalized
 
 
@@ -654,6 +656,11 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         async with await db.client.start_session() as session:
             return await session.with_transaction(transfer)
 
+    from store_delivery_cancel_approval import attach_cancel_approval_route
+    attach_cancel_approval_route(
+        router, db, current_user,
+        require_operator=_require_operator, merchant_user_id=_merchant_user_id,
+    )
     return router
 
 
