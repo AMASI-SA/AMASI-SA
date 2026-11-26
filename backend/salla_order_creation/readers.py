@@ -127,8 +127,8 @@ async def read_exact_product(
 async def read_shipping_rate_candidates(
     db: Any, user_id: str,
     *, country_id: int, city_id: int, postal_code: str | None = None,
-    request: Callable[..., Awaitable[dict]] = call_salla,
-    integration_reader: Callable[..., Awaitable[dict]] = get_integration,
+    request: Callable[..., Awaitable[dict]] | None = None,
+    integration_reader: Callable[..., Awaitable[dict]] | None = None,
 ) -> list[dict]:
     """Read eligible-looking rate estimates, never certify a final cart price."""
     country_id = _positive_id(country_id)
