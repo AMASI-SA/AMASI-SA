@@ -14,7 +14,16 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any, Awaitable, Callable
 
-from salla_integration.service import call_salla, get_integration
+# Import the full Salla runtime lazily: this pure reader and its synthetic
+# tests must not require FastAPI or Mongo connections merely at import time.
+
+
+def _resolve_salla_readers(request, integration_reader):
+    if request is None or integration_reader is None:
+        from salla_integration.service import call_salla, get_integration
+        request = request or call_salla
+        integration_reader = integration_reader or get_integration
+    return request, integration_reader
 
 
 class SourceUnavailable(ValueError):
@@ -61,11 +70,12 @@ def _reply_data(response: Any, *, expected_list: bool) -> Any:
 
 async def read_exact_product(
     db: Any, user_id: str, product_id: int,
-    *, request: Callable[..., Awaitable[dict]] = call_salla,
-    integration_reader: Callable[..., Awaitable[dict]] = get_integration,
+    *, request: Callable[..., Awaitable[dict]] | None = None,
+    integration_reader: Callable[..., Awaitable[dict]] | None = None,
 ) -> dict:
     """Return current catalog facts, never a ready-to-POST final quote."""
     identifier = _positive_id(product_id)
+    request, integration_reader = _resolve_salla_readers(request, integration_reader)
     await _scope(db, user_id, "products.read", integration_reader)
     response = await request(db, user_id, "GET", f"/products/{identifier}")
     product = _reply_data(response, expected_list=False)
@@ -127,6 +137,7 @@ async def read_shipping_rate_candidates(
         if (not isinstance(postal_code, str) or len(postal_code) > 20 or
                 not postal_code.isalnum()):
             raise SourceUnavailable("invalid_postal_code")
+    request, integration_reader = _resolve_salla_readers(request, integration_reader)
     await _scope(db, user_id, "shipping.read_write", integration_reader)
     params: dict = {"country_id": country_id, "city_id": city_id}
     if postal_code:
