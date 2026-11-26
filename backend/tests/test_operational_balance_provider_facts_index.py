@@ -178,7 +178,9 @@ def test_full_reducer_late_provider_recovery_matches_unindexed_scan(monkeypatch)
     from operational_provider_transaction_evidence import CANONICAL_WITH_UNBOUND_ACTIVITY
     from test_operational_balance_engine import initial, order, policy, NOW
 
-    existing = engine.reconcile(initial(), {"orders": [order()]}, NOW)
+    synthetic = {**initial(), "owner_id": "synthetic-provider-index-owner"}
+    base_order = order(order_number="SYNTHETIC-INDEX-1")
+    existing = engine.reconcile(synthetic, {"orders": [base_order]}, NOW)
     # In production the aggregate store owns the saved calculation timestamp;
     # the pure reducer intentionally does not assign it. Retain that metadata
     # so a later-arriving capture reaches the actual historical overlap gate.
@@ -190,7 +192,8 @@ def test_full_reducer_late_provider_recovery_matches_unindexed_scan(monkeypatch)
         "captures": [{"id": "late-capture-1", "amount": "100.00",
                       "captured_at": "2026-10-07T08:00:00+00:00"}],
     }
-    sources = {"orders": [order(payment=payment, updated_at="2026-10-07T10:00:00+00:00")],
+    sources = {"orders": [order(order_number="SYNTHETIC-INDEX-1", payment=payment,
+                                updated_at="2026-10-07T10:00:00+00:00")],
                "fee_policies": [policy()]}
     seen = []
     original_context = history._context
@@ -213,5 +216,8 @@ def test_full_reducer_late_provider_recovery_matches_unindexed_scan(monkeypatch)
         unindexed = engine.reconcile(deepcopy(existing), deepcopy(sources), NOW)
     assert seen, "baseline must exercise the same history check"
     assert indexed == unindexed
+    assert indexed["engine"]["facts"].get("capture:late-capture-1") == {
+        "order_id": "o1", "provider": "tabby", "amount": "100.00"
+    }, "fixture must admit the paid capture after actual historical overlap checks"
     assert existing == old_state
     assert engine.reconcile(deepcopy(indexed), deepcopy(sources), NOW) == indexed
