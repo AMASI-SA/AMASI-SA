@@ -134,3 +134,12 @@ A read-only authorized Salla catalog inspection found Amasi **service-type perso
 - Official docs: [Product Details](https://docs.salla.dev/product/product-details) and [Create Order](https://docs.salla.dev/5394145e0). Full options/conditions in the real catalog vary and must be checked per product; never generalize a rule from product name.
 - Current exact-branch test run after the personalization changes is **pending** as of this documentation checkpoint; do not claim all new tests pass without CI evidence.
 
+
+## 2026-11-26 — Personalization acceptance: 201 synthetic tests PASS
+
+- Amasi's actual connected Salla catalog contains service products with required `type=text` options, radio choices and `on_condition` text fields. Read-only inspection confirmed these must be supported before the customer-service agent can reliably create personalized gift orders.
+- Mezan `readers.py` now projects the source's `characters_limit` and visibility condition IDs. `catalog_validation.py` enforces required visible text, provider/fallback length limits, exact selected conditional values, rejection of hidden fields/unsafe controls, stock and variant matching. It returns only selected text **option IDs** in review evidence; buyer text stays only in the trusted `PendingOrder` when POST is eventually permitted.
+- Synthetic [GitHub Actions run **45890916663**](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45890916663): **201/201 PASS**, implementation commit `24dccd68133926b16c78ef202402464084f07f8a`. The initial run found two tests incorrectly expecting the later catalog validator to reject empty inputs; the strict Pydantic payload schema correctly rejected them earlier. Updated tests explicitly accept rejection at either safety boundary, with no relaxation to production rules.
+- Scope checks and provisional price/payment methods also remained green at this test checkpoint. This is still an isolated unit suite, **not a live Salla POST / chat-to-order acceptance**.
+
+Open: validate that the official Create Order API accepts each required Amasi product text/conditional option representation in a separately approved synthetic integration, match the final Salla total, and verify the existing Mezan checkout URL sync. Do not deploy or enable order creation until final quote source and owner go-live approvals exist.
