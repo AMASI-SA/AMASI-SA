@@ -7,6 +7,7 @@ proof removes received quantities; it never posts a second supplier liability.
 from collections import Counter, defaultdict
 from copy import deepcopy
 from decimal import Decimal, ROUND_HALF_UP
+import math
 
 from operational_bundle_cost_projection import project_bundle_costs, _leaf_key, _number
 from operational_demand_refresh import calculation_checkpoint, refresh_stage
@@ -45,8 +46,53 @@ def _legacy_piece_index(pieces):
     return result
 
 
+def _plain_item_tree(item):
+    """Admit native JSON trees without invoking custom hooks or conversions."""
+    if type(item) is not dict:
+        return False
+    pending, seen = [item], set()
+    while pending:
+        value = pending.pop()
+        kind = type(value)
+        if kind is str or kind is int or kind is bool or kind is type(None):
+            continue
+        if kind is float:
+            if not math.isfinite(value):
+                return False
+            continue
+        if kind is not dict and kind is not list:
+            return False
+        identity = id(value)
+        if identity in seen:
+            return False  # Keep aliases/cycles on the complete-copy path.
+        seen.add(identity)
+        if kind is dict:
+            if any(type(key) is not str for key in value):
+                return False
+            pending.extend(value.values())
+        else:
+            pending.extend(value)
+    return True
+
+
+def _copy_item_read_view(item):
+    """Borrow only for the collector's fresh, exclusively owned source rows.
+
+    The private normalization root owns its overrides. Authority/selection
+    consumers read native branches; receipt mapping copies its snapshots/units
+    before changes, and final financial rows contain no native item containers.
+    Unsupported graphs retain the original copy at the original call point.
+    No graph or admission cache survives this synchronous check.
+    """
+    return dict(item) if _plain_item_tree(item) else deepcopy(item)
+
+
 def normalized_orders(raw_orders):
     """Use native option normalization; do not match a historical line by SKU."""
+    return _normalized_orders(raw_orders, deepcopy)
+
+
+def _normalized_orders(raw_orders, copy_item):
     from order_engine.mapper import _normalise_options, _custom_fields
     result = []
     counts = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
@@ -71,7 +117,7 @@ def normalized_orders(raw_orders):
                 if isinstance(value, list): candidates.extend(value)
                 elif isinstance(value, dict): candidates.append(value)
             options, _ = _normalise_options(candidates)
-            items.append({**deepcopy(item), 'product_id': pid, 'source_item_id': str(native),
+            items.append({**copy_item(item), 'product_id': pid, 'source_item_id': str(native),
                 'order_item_id': f'salla:{number}:{native}',
                 'variant_id': item.get('variant_id') or variant.get('id'),
                 'options_raw': options, 'custom_fields': _custom_fields(item)})
@@ -235,7 +281,7 @@ def _preperiod_cost_orders(raw_orders, started_at):
 
 
 async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pieces=None, operational_state=None,
-                                 native_matches=None, cost_started_at=None):
+                                 native_matches=None, cost_started_at=None, _read_only_items=False):
     """One bounded authority load, then batched units/receipts/invoices only.
 
     Reporting-only cost corrections do not constitute a physical recipe or a
@@ -248,7 +294,8 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
     # Observe pure normalization separately from authoritative DB reads.
     # The same source cohort, full history and proofs are still processed.
     with refresh_stage("bundle_order_normalization"):
-        orders = normalized_orders(raw_orders)
+        orders = (_normalized_orders(raw_orders, _copy_item_read_view) if _read_only_items
+                  else normalized_orders(raw_orders))
     if not orders:
         return {}
     with refresh_stage("bundle_cost_authority"):

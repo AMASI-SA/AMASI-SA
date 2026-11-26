@@ -1517,8 +1517,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     'scope': 'received_products', 'reasons': match.get('issues'),
                     'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
     with refresh_stage('source_bundles'):
+        # These freshly read rows are private to this collector. The awaited
+        # bundle reader only borrows untouched native item branches internally;
+        # its financial result is independent before the source loop begins.
         bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
-            operational_state=operational_state, native_matches=native_matches, cost_started_at=start)
+            operational_state=operational_state, native_matches=native_matches, cost_started_at=start,
+            _read_only_items=True)
     with refresh_stage('source_option_catalog'):
         await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
     from operational_retained_payment_index import RetainedPaymentFactScope

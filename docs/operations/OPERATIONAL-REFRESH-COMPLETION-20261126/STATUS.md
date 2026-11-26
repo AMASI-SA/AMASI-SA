@@ -190,3 +190,99 @@ original dates, bank receipt approval state, delivery/courier obligations,
 advertising and collections against the private baseline. Existing warnings
 about source completeness are not silently converted into verified sources.
 If the live refresh still fails, preserve its trace and keep this task open.
+
+## Subsequent natural attempt and final source preparation
+
+The first candidate A was `7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6`, tree
+`f764cc59cf9eb2ad378656b5cbf0ded462481b2f`. All 12 applicable workflows passed.
+The Stock backend executed 6,746 cases plus 97 subtests; Web backend executed
+8,073 cases plus 151 subtests, and demand-read executed 106 cases. Both backend
+XMLs contain all 147 newly added cases and all four previously unavailable
+local Mongo cases, without failures, errors or skips. Job logs prove Mongo
+8.0.12 replica sets and exact-A checkout. These results belong to that exact
+candidate; any additional implementation requires fresh A gates and intent.
+No intent-only B, merge, lease or publication followed that first A.
+
+A read-only schedule-status observation at 03:37:02.190 UTC found that the
+existing PR2133 Production scheduler's 06:34 Asia/Riyadh attempt also failed.
+It read 19,152 orders and completed source collection (56,615.505 ms), but
+reconciliation was cancelled at 6,585.907 ms when the same outer deadline
+expired. Bundle normalization took 11,321.974 ms. The saved calculation remains
+at `2026-11-25T22:51:55.742037+00:00` (01:51 Asia/Riyadh). This observation used
+only the existing status GET; no extra refresh or schedule change was made.
+
+A single, reviewed offline baseline/private-view pair on the first candidate
+measured a conservative native-item view at the existing bundle normalization
+copy point. Both modes used separate fresh processes and the unchanged actual
+option/payment implementations. The 19,151-order/76,604-item synthetic cohort
+contained no selected physical/financial bundles or supplier history, so
+populated financial and lifecycle tests are required before adoption.
+
+| Work | Original item copies | Private native-item view |
+| --- | ---: | ---: |
+| Bundle normalization | 12,352.540 ms | 8,041.561 ms |
+| Whole source collector | 27,274.038 ms | 24,006.110 ms |
+| Process CPU | 27,712.823 ms | 24,587.306 ms |
+| Full item deep copies | 76,604 | 0 |
+| Process high-water RSS | 942,020 KiB | 719,188 KiB |
+
+Full financial output and serialized-output hashes, query sequence, input
+digests and all runtime hashes matched. Both children were joined. The view
+avoided 1,551,228 nested container clones in this fixture. Inclusive stage
+timings overlap, unchanged stages varied, and process RSS includes imports and
+fixture setup. These measurements do not establish live latency or memory use.
+No timing sweep or additional production refresh was performed.
+
+The fifth scoped improvement is authorized for implementation: only the
+collector's freshly materialized, private cohort may opt into a read-only item
+view during bundle authority preparation. Public/default normalization retains
+its independent-copy behavior. Exact JSON trees may borrow untouched nested
+branches; repeated containers, cycles, custom/subclass values and unsupported
+shapes retain the original copy at its original point. No query, cohort,
+financial formula, supplier proof, receipt/fingerprint rule or deadline changes.
+Meaningful populated financial, fallback, mutation and cancellation tests and
+independent source review remain required before freezing the next A.
+
+Full first-A CI and diagnostic evidence, including the exact raw bundle result
+SHA256 `8f9321f986e49580ac9e45756a940b8c7ada426c3a207986f7478af016c492a6`,
+is durable on the documentation-only evidence branch
+`codex/operational-refresh-completion-evidence-20261126` at
+`1d2ca5443885635f95f2b8d2efd3ae285db6c16a`. Never merge or deploy that branch.
+The independently reviewed next-release operator drafts are disabled and
+separately checkpointed there; final A/B/D/runtime values remain unfilled.
+
+## Final private bundle-view implementation and review
+
+The fifth change is complete and independently reviewed with no blocker. The
+public normalizer and default loader keep full item copies; only
+`collect_sources` enables the private view. AST comparison confirms the shared
+normalization body is unchanged apart from its copier seam, and all remaining
+authority/receipt/projection logic is identical. Normalization stays synchronous
+at its existing location; no new thread or checkpoint is claimed.
+
+The input boundary is the collector's fresh standard Motor/BSON cohort. The
+server and isolated demand runner use no custom document class, codec or type
+registry. The private opt-in is not a general API for arbitrary injected Python
+objects, hooks mutating unrelated input rows, or module-global monkeypatching.
+Unsupported item shapes still retain their original per-item copy behavior.
+No native item container escapes into returned financial rows or a cache.
+
+The meaningful red control ran one newly added copy-count regression against
+the preceding runtime: financial output and input preservation passed, but the
+expected eight unnecessary complete item copies failed the new requirement.
+The final focused suite passed all 34 cases in 2.99 seconds without failures,
+errors or skips. Valid populated physical/financial cases explicitly observe
+borrowing at the real authority boundary and zero complete item copies; an
+aliased case proves one independent fallback copy with preserved internal alias.
+Complete financial results, queries and source/database immutability match the
+default path. Output mutation is isolated. The collector/reducer/replay case
+retains exact supplier exposures and zero fabricated movements/facts. Both
+authority-await cancellation paths join work and leave no remaining tasks.
+
+Independent source/test/JUnit review and `git diff --check` passed. The new
+`test_operational_balance_bundle_item_view.py` is selected by both existing
+strict CI globs. Local focused evidence is recorded in the accompanying
+`evidence/bundle_item_view_*` files. The next source checkpoint is the final
+candidate A and needs new complete CI, a new intent-only B and all unchanged
+release/live acceptance gates. Do not reuse the first candidate's intent.
+Production still runs PR2133; the live accounting-refresh goal remains open.
