@@ -102,3 +102,12 @@ The proof writers are **not implemented** in this checkpoint; therefore this end
 - P02 CSA counterparts [PR #104](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/pull/104): protected draft persistence and signed consent/action sending; [CI 45889365933](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/actions/runs/45889365933) **73 tests PASS** on its earlier exact source.
 
 **Still NOT DONE:** full server-owned final cart quote writer, live proof writers hooked into native Chatwoot worker, authorized scope verification, actual one-order Salla creation, provider checkout readback, full backend regression/production deployment approval. Quotes from estimates MUST NOT be persisted as `state=verified`. Signed confirmation proof persistence may be safely tested in isolation before enabling order posting, but both feature flags remain OFF.
+
+## 2026-11-26 — Carrier selection and exact source verification checkpoint
+
+- Added `backend/salla_order_creation/shipping_selection.py` to check a selected Salla carrier/rate against the **same country, city and courier ID** and to disallow COD if the provider estimate does not include a verified COD service. It verifies scope/freshness but returns `can_create_order=False` because estimates do not prove the final amount of a particular cart.
+- Added `backend/tests/test_salla_order_creation_shipping_selection.py` and extended the isolated CI.
+- **Verified GitHub Actions run [45889547290](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45889547290): 171/171 hermetic synthetic tests PASS** on implementation commit `97ad91a122b403a9fc2eb44fcb7ed9620bcbb3a8`. This is a dedicated synthetic workflow, **not** end-to-end external Salla/Chatwoot test or full repository green status. General unrelated CI requires separate review.
+- Branch has documentation-only commits after this tested implementation; feature flags still OFF and no real orders have been created.
+- Outstanding gate remains a **server-controlled, customer-specific final cart quote** incorporating actual option/variant pricing, VAT, discounts, carrier shipping and COD fee, or another authoritative Salla supported final quote. A standalone carrier estimate MUST NEVER be marked as an eligible final order quote.
+
