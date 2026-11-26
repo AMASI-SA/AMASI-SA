@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlencode
 
@@ -17,7 +18,7 @@ from salla_integration.service import call_salla
 from .whatsapp_stage_service_auth import (
     verify_stage_service_request, StageServiceUnauthorized, CATALOG_PATH
 )
-from .whatsapp_salla_catalog_projection import project, InvalidProduct
+from .whatsapp_salla_catalog_projection import project, InvalidProduct, amount
 
 MAX_BODY=2048
 
@@ -94,6 +95,19 @@ def public_salla_product(row, *, fetched_at, detailed):
         options_verified=False
     if facts["list_status"]!="sale" or facts["inventory_hint"]=="out":
         raise InvalidProduct("not_publicly_purchasable")
+    # A positive Salla sale price overrides the regular list price.
+    # sale_price=0 does not mean a free product.
+    sale=raw.get("sale_price")
+    original=Decimal(facts["base_price_sar"])
+    if sale is not None:
+        discounted=Decimal(amount(sale))
+        facts["display_price_sar"]=(
+            f"{discounted:.2f}"
+            if discounted>0 and discounted<=original else
+            facts["base_price_sar"]
+        )
+    else:
+        facts["display_price_sar"]=facts["base_price_sar"]
     facts["options_verified"]=options_verified
     # Exact source time; no cached indefinite item links or prices.
     facts["source"]="verified_salla_mezan_read_v1"
