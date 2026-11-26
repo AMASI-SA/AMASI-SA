@@ -146,3 +146,50 @@ def test_prior_completed_shipping_or_settled_base_never_doubles_observed_fee():
                     if row["kind"] == "shipping" and row.get("confirmed") == "17.25"]) == 1
         assert result["engine"]["obligations"][charge]["business_date"] == "2026-11-22"
         assert not result["movements"]
+
+
+@pytest.mark.parametrize("party", ["imile", "smsa"])
+def test_full_salla_source_collector_status_to_saved_courier_base(party):
+    """No injected normalized order: exercise retained register, quote and reducer."""
+    from test_operational_balance_sources import HardBoundaryDB, run
+    from test_operational_balance_source_fixes import shipping_data
+    from operational_balance_sources import collect_sources
+
+    data = shipping_data(
+        created_at=CREATED, updated_at=OBSERVED, status="delivered",
+        payment={"method": "card"}, paid_amount="0",
+    )
+    source = data["unified_orders"][0]
+    raw = source["raw_by_source"]["salla_direct"]
+    raw["shipping"]["company_code"] = party
+    source["salla_shipping_current"] = {
+        "source_kind": "order", "company_code": party,
+        "company_name": "iMile" if party == "imile" else "سمسا",
+        "status": "delivered", "superseded_shipment_ids": [],
+    }
+    setup = data["mz2_shipping_setup_v2"][0]
+    setup["couriers"][0].update(
+        courier_key=party,
+        name="iMile" if party == "imile" else "سمسا",
+        salla_carrier_keys=[party],
+    )
+    setup["contracts"][0]["party_id"] = party
+    prior = saved()
+    original = deepcopy((data, prior))
+    sources = run(collect_sources(
+        HardBoundaryDB(data), "owner", START, OBSERVED,
+        operational_state=prior,
+    ))
+    assert (data, prior) == original
+    assert len(sources["orders"]) == 1
+    assert sources["orders"][0]["delivery_event"]["schema"] == "operational_delivery_status_v1"
+    assert sources["orders"][0]["carrier"]["id"] == party
+    result = reconcile(deepcopy(prior), deepcopy(sources), OBSERVED)
+    fee = result["engine"]["obligations"]["shipping:100:base_shipping"]
+    assert (fee["party_id"], fee["confirmed"], fee["business_date"]) == (
+        party, "10.00", "2026-11-26")
+    assert fee["business_date_basis"] == "first_observed_delivered_status"
+    assert result["movements"] == prior["movements"] == []
+    assert not any(k.startswith("cod_collection:") for k in result["engine"]["facts"])
+    assert not any(row["kind"] in {"provider", "cod"} for row in result["engine"]["obligations"].values())
+    assert reconcile(deepcopy(result), deepcopy(sources), OBSERVED) == result
