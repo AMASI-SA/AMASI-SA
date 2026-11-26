@@ -10,11 +10,44 @@ is WAITING, never a reason to create a second Salla order or invent a URL.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .signature import verify_signed_json, SignatureDenied, DIGEST, ID, REF
 from urllib.parse import parse_qsl, urlsplit
 import unicodedata
 
 from .service import intent_storage_id
+
+class SignedCheckoutRead(BaseModel):
+    """Purpose-bound read request; never accept a caller-supplied order URL."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    action: Literal["salla.read_created_order_checkout"]
+    account_id: int = Field(gt=0)
+    inbox_id: int = Field(gt=0)
+    conversation_id: int = Field(gt=0)
+    intent_id: str = Field(pattern=ID)
+    quote_ref: str = Field(pattern=REF)
+    quote_digest: str = Field(pattern=DIGEST)
+    quote_version: int = Field(gt=0)
+    confirmation_message_id: int = Field(gt=0)
+
+
+def verify_checkout_read(
+    raw: bytes, timestamp: str, delivery: str, signature: str, secret: bytes,
+    *, now: int | None = None,
+) -> SignedCheckoutRead:
+    """Authenticate a Checkout READ, never grant create-order capability."""
+    signed = verify_signed_json(
+        raw, timestamp, delivery, signature, secret, now=now,
+    )
+    try:
+        return SignedCheckoutRead.model_validate(signed)
+    except ValidationError as exc:
+        raise SignatureDenied("invalid_checkout_read_action") from exc
+
 
 ReadOrder = Callable[[str, str], Awaitable[Any]]
 ALLOWED_STATUS = frozenset({
