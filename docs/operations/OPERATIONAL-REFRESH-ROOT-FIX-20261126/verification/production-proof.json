@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "provider_publication_succeeded_before_official_live_verify",
-  "updated_utc": "2026-11-26 00:27:26 UTC",
+  "phase": "official_live_verify_running",
+  "updated_utc": "2026-11-26 00:30:04 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -104,7 +104,7 @@
     }
   },
   "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Start prepared original /app verify_runner.py exactly once, then retain guard proof and final inactive lease. No financial refresh until official verification succeeds.",
+  "next_safe_action": "Observe existing original /app receipt and guard-verify output; do not start another verifier or publish again. Wait for production_verified with checks=3 and inactive matching lease. Then perform new visible financial refresh, private recovery-proof comparison and bounded live samples.",
   "guard": {
     "actor": "operational-refresh-root-fix-20261126",
     "prepared": true,
@@ -131,5 +131,14 @@
     "critical_file_hashes_match": true,
     "frontend_build_verified": true,
     "official_three_probe_verification": false
+  },
+  "live_release_verification": {
+    "started_at": "2026-11-26T00:27:36.725073+00:00",
+    "runner_pid": 11770,
+    "guard_pid": 11789,
+    "invocations": 1,
+    "required_checks": 3,
+    "status": "running",
+    "observed_stderr_empty": true
   }
 }
