@@ -15,7 +15,7 @@ from backend.order_engine.whatsapp_stage_route import make_whatsapp_stage_router
 NOW=1800000000
 TS=str(NOW)
 KEY=b"S"*32
-PATH="/internal/whatsapp/order-stage/read"
+PATH="/api/internal/whatsapp/order-stage/read"
 KID="test-key"
 NONCE="abcdefghijklmnopqrstuvwx"
 
