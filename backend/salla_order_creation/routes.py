@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from salla_integration.service import call_salla, get_integration
 
+from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
 from .signature import SignatureDenied, verify_action
@@ -112,6 +113,49 @@ def make_assisted_salla_order_router(
         except CreationDenied as exc:
             raise HTTPException(
                 status_code=exc.status_code, detail={"code": exc.code}
+            ) from exc
+
+    @router.post("/signed-confirmation")
+    async def signed_confirmation(request: Request) -> dict:
+        """Record customer consent without authorizing a Salla POST.
+
+        This endpoint is independently feature-gated, so a pilot can verify
+        signed Chatwoot consent safely while order creation remains OFF.
+        Only the native worker may sign after a canonical current-message read.
+        """
+        if os.environ.get("MEZAN_ASSISTED_SALLA_CONFIRMATION_ENABLED", "0") != "1":
+            raise HTTPException(status_code=503, detail={"code": "confirmation_disabled"})
+        owner_id = str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_HMAC_SECRET") or "").encode()
+        account = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
+        inbox = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
+        if (not owner_id or len(secret) < 32 or
+                not account.isdigit() or not inbox.isdigit()):
+            raise HTTPException(status_code=503, detail={"code": "action_scope_not_configured"})
+        raw = await request.body()
+        delivery = request.headers.get("x-mezan-action-delivery", "")
+        try:
+            verified = verify_confirmation(
+                raw, request.headers.get("x-mezan-action-timestamp", ""),
+                delivery,
+                request.headers.get("x-mezan-action-signature", ""),
+                secret,
+            )
+        except SignatureDenied as exc:
+            raise HTTPException(
+                status_code=401, detail={"code": exc.args[0]}
+            ) from exc
+        try:
+            return await persist_signed_confirmation(
+                db,
+                owner_id=owner_id,
+                expected_account_id=int(account),
+                expected_inbox_id=int(inbox),
+                action=verified,
+            )
+        except ConfirmationDenied as exc:
+            raise HTTPException(
+                status_code=exc.status_code, detail={"code": exc.args[0]}
             ) from exc
 
     @router.post("/signed-action")
