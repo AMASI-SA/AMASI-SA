@@ -1,0 +1,56 @@
+{
+  "base_host_deployment": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+  "files": [
+    {
+      "bytes": 11271,
+      "path": "README.md",
+      "sha256": "ac0b528ed245f13d053ecc8753924e5709071607aef553b8d47d603118302d12"
+    },
+    {
+      "bytes": 10282,
+      "path": "offline_contract_checks.py",
+      "sha256": "b0893b765d576bbf4cc168f33cbf5528e6c9e60e56d84d716e0392ccf9bb4c89"
+    },
+    {
+      "bytes": 1936,
+      "path": "offline_contract_checks_result.json",
+      "sha256": "050452c4f0190d482e3110ec41077b6b4724b49efb612bab3162b486b2bc9779"
+    },
+    {
+      "bytes": 2388,
+      "path": "operator_config.py",
+      "sha256": "edc83b59a50feab9feac66b860ec4c3a75624b4de627eabe8c98b4cb55291345"
+    },
+    {
+      "bytes": 17349,
+      "path": "operator_preservation.py",
+      "sha256": "0bfa4efc7d34726f004997670bd38b5b8658e25173d65b95942617b6b4a76f01"
+    },
+    {
+      "bytes": 13281,
+      "path": "owned_output_backup.py",
+      "sha256": "88aefca55dfb496300965fc6f9f7977e7db9ca6c5e76116c1d42e485a86bb912"
+    },
+    {
+      "bytes": 31399,
+      "path": "prepare_original_host.py",
+      "sha256": "37d46e7de8bdf97a99de7f06698b2f83dcf26403303edf7ba32d4e312ec1c32a"
+    },
+    {
+      "bytes": 6781,
+      "path": "restore_original_backend.py",
+      "sha256": "e551e56a5d4780a358e0e57cc7c58377b90660c5ae0a77668f04e9ed55a96cf3"
+    },
+    {
+      "bytes": 8213,
+      "path": "verify_original_host.py",
+      "sha256": "21058d133bc4734175230d677d40b5449ca9ab6a459c6f32cd87ea19bd74660f"
+    }
+  ],
+  "host_actions_executed": false,
+  "independent_review": "audit_evening_release: no remaining blocker after hardlink and baseline-cohort corrections",
+  "offline_contract_checks_passed": 21,
+  "release_config_frozen": false,
+  "status": "disabled_drafts_independently_reviewed",
+  "subprocesses_in_offline_probes": 0
+}

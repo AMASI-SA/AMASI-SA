@@ -1,0 +1,14 @@
+2026-11-26T03:19:18.3645096Z   ref: 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:18.8072276Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:20.4281336Z  * branch            7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6 -> FETCH_HEAD
+2026-11-26T03:19:20.4478094Z [command]/usr/bin/git checkout --progress --force 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.0887339Z Note: switching to '7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6'.
+2026-11-26T03:19:21.1013105Z 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.1255265Z ##[group]Run git rev-parse HEAD
+2026-11-26T03:19:21.1255794Z [36;1mgit rev-parse HEAD[0m
+2026-11-26T03:19:21.1256207Z [36;1mgit rev-parse 'HEAD^{tree}'[0m
+2026-11-26T03:19:21.1394580Z 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.1412695Z f764cc59cf9eb2ad378656b5cbf0ded462481b2f
+2026-11-26T03:33:05.9113881Z   name: eligibility-backend-7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:33:07.3437370Z Artifact eligibility-backend-7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6.zip successfully finalized. Artifact ID 15084079732
+2026-11-26T03:33:07.3439857Z Artifact eligibility-backend-7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6 has been successfully uploaded! Final size is 113835 bytes. Artifact ID is 15084079732

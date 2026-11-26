@@ -39,7 +39,12 @@
     "generated_backup_bytes": 95817277,
     "changed": false
   },
-  "source_tests": "Exact-A Operational Balance/Stock gates pending; local Mongo-unavailable cases are not counted as passed.",
+  "source_tests": {
+    "all_12_source_a_workflows_success": true,
+    "source_a": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+    "targeted_artifact_validation": "in progress",
+    "local_mongo_cases": "Four known local failures require exact-A Mongo CI proof; do not count as locally passed"
+  },
   "diagnostic": {
     "script_sha256": "1cbda56ef7fd0ad64fb9a9b10c33f30cbc69111ea2d6e5c547293f91b3f21fff",
     "executed": true,
@@ -103,5 +108,57 @@
     ],
     "limitations": "Instrumented synthetic reducer only; whole service and save excluded; no throughput or production completion claim. Base64 pstats preserve exact binary artifacts."
   },
-  "next": "Complete exact-A CI and bounded diagnostic; create fresh B only after required acceptance gates. This evidence branch must never be merged or deployed."
+  "next": "Keep exact A remotely recoverable; finish exact-A CI, evaluate one private bundle-input-copy prototype against the newly observed11.322s normalization stage. No B/lease/publication until final scoped decision. Any added source change requires a fresh A and all gates.",
+  "latest_natural_production_attempt": {
+    "observed_at": "2026-11-26T03:37:02.190Z",
+    "attempt_local": "2026-11-26 06:34 Asia/Riyadh",
+    "trigger": "existing scheduler; read-only schedule status button used; no manual refresh",
+    "code": "operational_refresh_timeout",
+    "last_saved_as_of": "2026-11-25T22:51:55.742037+00:00",
+    "consecutive_failures": 6,
+    "next_local": "2026-11-26 08:35 Asia/Riyadh",
+    "primary_rows": 19152,
+    "primary_budget_ms": 20000,
+    "stages_ms": {
+      "native_evidence": 9304.693,
+      "snapshot_raw_read": 81.701,
+      "snapshot_unpack": 12333.415,
+      "snapshot_copy_prepare": 0.002,
+      "snapshot_load": 12416.899,
+      "orders_cursor_read": 14081.649,
+      "source_primary_reads": 14100.789,
+      "bundle_order_normalization": 11321.974,
+      "bundle_cost_authority": 3873.4,
+      "source_bundles": 15429.222,
+      "source_option_catalog": 655.088,
+      "source_order_indexes": 1059.509,
+      "source_orders": 18947.172,
+      "source_collection": 56615.505,
+      "reconciliation": 6585.907,
+      "aggregate": 75783.035,
+      "profit_context": 20019.646,
+      "profit_snapshot": 20312.674
+    },
+    "cancelled_stages": [
+      "reconciliation",
+      "aggregate",
+      "profit_context",
+      "profit_context_prepare"
+    ],
+    "interpretation": "Sources completed, reconciliation did not complete and no saved as_of advanced. Overlapping stages must not be summed indiscriminately."
+  },
+  "operator_drafts": {
+    "status": "disabled_independently_reviewed",
+    "manifest_sha256": "0265c43af1aed9a7e9489efb0630281d4dae8451a7b2cf253278de6a85f4ce9a",
+    "files": 10,
+    "offline_checks_passed": 21,
+    "host_actions_executed": false,
+    "source_identities_filled": false
+  },
+  "bundle_prototype": {
+    "script_sha256": "9f2424738075ae1a575a4c293c2f92211fc343e69fbc5944ee43a617c34c6e0a",
+    "status": "checkpointed_not_executed",
+    "source_a_unchanged": true,
+    "plan": "One fresh-process baseline/prototype pair; only private full-item copy guard; runtime adoption requires separate tests and new source A."
+  }
 }
