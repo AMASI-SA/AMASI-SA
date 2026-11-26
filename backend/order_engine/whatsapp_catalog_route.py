@@ -115,7 +115,7 @@ def public_salla_product(row, *, fetched_at, detailed):
 
 
 def make_whatsapp_catalog_router(*, db: Any, fixed_owner_id: str,
-                                 active_keys, claim_nonce, now_fn=None):
+                                 active_keys, claim_nonce, rate_limit=None, now_fn=None):
     import json
     import re
     import time
@@ -142,6 +142,16 @@ def make_whatsapp_catalog_router(*, db: Any, fixed_owner_id: str,
             )
         except (ValueError,StageServiceUnauthorized):
             raise HTTPException(status_code=401,detail="service_unauthorized") from None
+        if rate_limit is not None:
+            try:
+                allowed=await asyncio.to_thread(rate_limit,request.headers.get("x-amasi-key-id",""))
+                if allowed is not True:
+                    raise HTTPException(status_code=429,detail="rate_limited")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=503,detail="rate_limit_unavailable") from None
+
         try:
             payload=json.loads(body)
             if type(payload) is not dict or payload.get("action") not in ("search","product"):
