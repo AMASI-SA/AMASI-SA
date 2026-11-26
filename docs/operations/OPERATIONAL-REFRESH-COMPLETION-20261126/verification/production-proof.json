@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "official_production_verification_running",
+  "phase": "production_verified_exact_preservation_review_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,7 +691,7 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "Wait for this existing original verifier only; do not repeat publication or verification, inspect its result and preservation, restore owned Backend, then perform one actual financial refresh.",
+  "next_safe_action": "Independently review a separate exact-observation restoration continuation without changing original controls/receipts or credential file; restore only owned STOPPED Backend, then inspect latest financial save and perform one refresh if needed.",
   "original_host_current_attempt": {
     "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
     "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
@@ -817,6 +817,45 @@
       "owned_process_alive": true,
       "proof_bytes": 0,
       "stderr_bytes": 0
+    },
+    "runtime_log_window": {
+      "observed_at": "2026-11-26T05:07:11.011Z",
+      "provider_version": "bff6a19",
+      "visible_log_count": 100,
+      "displayed_error_count": 0,
+      "displayed_warning_count": 0,
+      "scope": "Displayed provider log window only; no complete historical log or Cloud Build argv/cwd claim."
+    },
+    "official_verification": {
+      "invocations": 1,
+      "exit_code": 0,
+      "verified": true,
+      "checks": 3,
+      "protocol_version": 5,
+      "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+      "deployment_git_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+      "started_at": "2026-11-26T05:05:09.532939+00:00",
+      "finished_at": "2026-11-26T05:18:45.614482+00:00",
+      "proof_bytes": 43129,
+      "proof_sha256": "6e6534130c99d75433c08e2f281a444fb72c441873e2229c25949bd238ad761b",
+      "stderr_bytes": 0,
+      "final_guard_status": {
+        "active": false
+      }
+    },
+    "retained_receipt": {
+      "phase": "production_verified_local_restore_pending",
+      "bytes": 244628,
+      "sha256": "8974eba82cad7ecd859c3e1b4dced8406daafd2758b39c2a0609f20296c365a1"
+    },
+    "preservation_observation": {
+      "bytes": 3229,
+      "sha256": "31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d",
+      "original_wrapper_admitted": false,
+      "reason": "Same-inode credential mtime change is outside the originally reviewed inode-replacement pattern; bookkeeping append is378bytes with original prefix preserved. No credential contents read/hashed/copied/modified or equality claimed; no actor attribution.",
+      "service_restore_attempts": 0,
+      "raw_integer_precision_preserved": true
     }
   },
   "deployment_ci": {
