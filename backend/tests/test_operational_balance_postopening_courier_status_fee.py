@@ -251,3 +251,53 @@ def test_legacy_aggregate_courier_base_is_not_charged_again():
     assert "shipping:" + oid + ":base_shipping" not in result["engine"]["obligations"]
     assert PROOF + oid not in result["engine"]["facts"]
     assert result["movements"] == []
+
+
+@pytest.mark.parametrize("payout_at,should_accrue", [
+    ("2026-11-20T00:00:00+00:00", True),
+    ("2026-11-23T00:00:00+00:00", False),
+    (None, False),
+])
+def test_canonical_new_order_prior_company_payout_has_bounded_hold(payout_at, should_accrue):
+    """The existing courier hold must not block an order not yet created."""
+    from test_operational_balance_sources import HardBoundaryDB, run
+    from test_operational_balance_source_fixes import shipping_data
+    from operational_balance_sources import collect_sources
+
+    data = shipping_data(
+        created_at=CREATED, updated_at=OBSERVED, status="delivered",
+        payment={"method": "card"}, paid_amount="0",
+    )
+    source = data["unified_orders"][0]
+    raw = source["raw_by_source"]["salla_direct"]
+    raw["shipping"]["company_code"] = "imile"
+    source["salla_shipping_current"] = {
+        "source_kind": "order", "company_code": "imile",
+        "company_name": "iMile", "status": "delivered",
+        "superseded_shipment_ids": [],
+    }
+    setup = data["mz2_shipping_setup_v2"][0]
+    setup["couriers"][0].update(
+        courier_key="imile", name="iMile", salla_carrier_keys=["imile"])
+    setup["contracts"][0]["party_id"] = "imile"
+
+    previous = saved()
+    previous["movements"] = [{
+        "id": "synthetic-prior-company-payout", "party_type": "courier",
+        "party_id": "imile", "direction": "outgoing", "kind": "payment",
+        "currency": "SAR", "amount": "35.00", "allocations": [],
+        **({"occurred_at": payout_at} if payout_at else {}),
+    }]
+    movement_before = deepcopy(previous["movements"])
+    sources = run(collect_sources(
+        HardBoundaryDB(data), "owner", START, OBSERVED,
+        operational_state=previous,
+    ))
+    order = sources["orders"][0]
+    assert order["delivery_event"]["schema"] == "operational_delivery_status_v1"
+    assert (order["carrier"].get("fee_recognition_held") is not True) == should_accrue
+    updated = reconcile(deepcopy(previous), deepcopy(sources), OBSERVED)
+    assert updated["movements"] == movement_before
+    charge = updated["engine"]["obligations"].get("shipping:100:base_shipping")
+    assert (charge is not None and charge.get("confirmed") == "10.00") == should_accrue
+    assert reconcile(deepcopy(updated), deepcopy(sources), OBSERVED) == updated
