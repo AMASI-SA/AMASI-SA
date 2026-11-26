@@ -1,0 +1,22 @@
+{
+  "record_exact_tested_source_log": [
+    "2026-11-26T04:03:53.6389127Z ##[group]Run git rev-parse HEAD",
+    "2026-11-26T04:03:53.6389608Z \u001b[36;1mgit rev-parse HEAD\u001b[0m",
+    "2026-11-26T04:03:53.6389916Z \u001b[36;1mgit rev-parse 'HEAD^{tree}'\u001b[0m",
+    "2026-11-26T04:03:53.6414112Z shell: /usr/bin/bash -e {0}",
+    "2026-11-26T04:03:53.6414445Z env:",
+    "2026-11-26T04:03:53.6414855Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical",
+    "2026-11-26T04:03:53.6415313Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true",
+    "2026-11-26T04:03:53.6415760Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical",
+    "2026-11-26T04:03:53.6416180Z   PYTHONDONTWRITEBYTECODE: 1",
+    "2026-11-26T04:03:53.6416476Z   PYTHONPATH: ..:.:tests",
+    "2026-11-26T04:03:53.6416770Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false",
+    "2026-11-26T04:03:53.6417066Z ##[endgroup]",
+    "2026-11-26T04:03:53.6491307Z b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "2026-11-26T04:03:53.6504239Z c8e2297bcccf65b545a0aa0b3c798944232234dd"
+  ],
+  "pytest_result": "2026-11-26T04:14:19.6431736Z 6780 passed, 8 warnings, 97 subtests passed in 598.14s (0:09:58)",
+  "mongo_image": "mongo:8.0.12",
+  "mongo_mode": "isolated loopback replica set operationalphysical; companion standalone",
+  "source_and_tree_log_proven": true
+}

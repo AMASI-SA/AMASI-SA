@@ -1,0 +1,75 @@
+{
+  "source": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+  "tree": "c8e2297bcccf65b545a0aa0b3c798944232234dd",
+  "run_id": 45752783491,
+  "job_id": 139684259037,
+  "artifact_id": 15086263516,
+  "archive_sha256": "6eeeb2358e49b72a8aa742ab0466f4ae6e17aca5335247986d7766a441d4d115",
+  "archive_crc_valid": true,
+  "xml_sha256": "7e8bb6dceb41ed752303ff049e4810c8302d99535965f9a126973eb0879adac9",
+  "xml_bytes": 1183608,
+  "testcases": 6780,
+  "suites": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "6877",
+      "time": "598.113",
+      "timestamp": "2026-11-26T04:04:19.975674+00:00",
+      "hostname": "ip-10-0-131-23"
+    }
+  ],
+  "rejected_cases": [],
+  "new_module_counts": {
+    "test_operational_balance_archive_checkpoint_boundaries": 32,
+    "test_operational_balance_option_authority": 63,
+    "test_operational_balance_payment_read_view": 45,
+    "test_operational_balance_report_copy_lifetime": 7,
+    "test_operational_balance_bundle_item_view": 34
+  },
+  "new_module_total": 181,
+  "required_mongo_cases": [
+    {
+      "classname": "tests.test_operational_balance_split_tenders",
+      "name": "test_actual_provider_payout_allocates_to_one_split_share_only_and_replay_is_idempotent",
+      "time": "0.266"
+    },
+    {
+      "classname": "tests.test_operational_balance_split_tenders",
+      "name": "test_frozen_split_order_does_not_turn_into_a_second_bank_receipt_or_cod_collection",
+      "time": "0.278"
+    },
+    {
+      "classname": "tests.test_operational_balance_bank_tender_proof",
+      "name": "test_replayed_refresh_of_bank_and_bnpl_waits_for_original_bank_leg_date",
+      "time": "0.603"
+    },
+    {
+      "classname": "tests.test_operational_balance_bank_tender_proof",
+      "name": "test_existing_provider_share_can_coexist_only_when_proved_same_payment",
+      "time": "0.332"
+    }
+  ],
+  "status": "success",
+  "source_and_tree_log_proven": true,
+  "pytest_passed": 6780,
+  "subtests_passed": 97,
+  "pytest_warnings": 8,
+  "pytest_seconds": 598.14,
+  "junit_declared_tests": 6877,
+  "junit_count_note": "The testsuite declaration includes 97 passing subtests; there are 6780 testcase elements.",
+  "job_all_steps_success": true,
+  "artifact_digest_matches_github": true,
+  "repository_unchanged_by_task": true,
+  "no_ci_or_local_test_rerun": true,
+  "file_hashes": {
+    "run-evidence.json": "83f21cb14dd4257b0d4e41ee53322016b78c0ae5fb591ac09413bbcaa8d951c5",
+    "job-139684259037.log": "fbce8a9d2482cb1a1f4c696888cfc0b668f1a4325dbdf171827cd06e2e09982a",
+    "source-identity-evidence.json": "675c65f3f1a44418efdcaea492c2a653037a6e92948ff529687d4e15201bda01",
+    "eligibility-backend.xml": "7e8bb6dceb41ed752303ff049e4810c8302d99535965f9a126973eb0879adac9",
+    "stock-final-a-b7c7d13f.zip": "6eeeb2358e49b72a8aa742ab0466f4ae6e17aca5335247986d7766a441d4d115",
+    "xml-verification.json": "9840fd9a283416e6ba3a01133e5d813774b6966e2cf3435c9a28eacb879bf3cb"
+  }
+}

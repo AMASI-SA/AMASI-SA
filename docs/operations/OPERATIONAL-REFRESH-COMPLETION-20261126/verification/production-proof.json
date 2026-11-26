@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "final_source_A_validated_ci_pending",
+  "phase": "final_source_A_last_gate_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -104,6 +104,99 @@
       {
         "name": "Operational Payment Event Policy",
         "id": 45752783345
+      }
+    ],
+    "stock": {
+      "run": 45752783491,
+      "job": 139684259037,
+      "testcases": 6780,
+      "subtests": 97,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "new_module_cases": 181,
+      "required_mongo_cases": 4,
+      "artifact": 15086263516,
+      "artifact_sha256": "6eeeb2358e49b72a8aa742ab0466f4ae6e17aca5335247986d7766a441d4d115"
+    },
+    "current_workflow_results": [
+      {
+        "id": 45752783307,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783338,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783259,
+        "name": "Operational Balance Web",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 45752783383,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783345,
+        "name": "Operational Payment Event Policy",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783476,
+        "name": "Mobile Order Tracking",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783281,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783401,
+        "name": "MZ2 Employee Salary and Password",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783253,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783491,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783332,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783244,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45752783460,
+        "name": "Supplier cost report performance",
+        "status": "completed",
+        "conclusion": "success"
       }
     ]
   },
@@ -324,5 +417,22 @@
     "candidate_sha256": "6f37b8523c00ba89a06e606d8afd994f3e3ba0d85e8023eed360322871161ad9",
     "candidate_bytes": 1549194,
     "validated": true
+  },
+  "latest_original_host_preflight": {
+    "observed_at": "2026-11-26T04:18:12.287Z",
+    "guard_active": false,
+    "head": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+    "tree": "a8aedd1be45cf7dcb26b31078a6c5e580709e30f",
+    "tracked_clean": true,
+    "untracked_count": 432,
+    "free_bytes": 181469184,
+    "prior_receipt_sha256": "0ef141cb905ebd2ca3593cd3bc42d0d78578652e9712637cd6e090816d343d53",
+    "prior_official_proof_sha256": "108220774d22e0074127aa10d63b1dbd5e35afbaaf87998ac14c6bed37da6c4b",
+    "prior_continuation_sha256": "143827cc19bccacb84fbfea33cf31e8e08f52765275b653460d85f4e3d20f959",
+    "generated_backup_bytes": 95817277,
+    "backend": "RUNNING pid639 uptime0:02:53",
+    "ui_reconnection": "One Reload Window recovered original IDE; new process observed, actor attribution not established; no source/service control command executed.",
+    "production_provider_version": "bad38ff",
+    "new_publication_actions": 0
   }
 }
