@@ -123,3 +123,14 @@ The buyer-facing flow now has an isolated, source-restricted **read-only estimat
 - New offline tests cover preview uncertainty and method filtering. Exact-head CI for the new tests is **pending**, not yet claimed successful.
 
 **Still blocked:** server-authored, authoritative final price for the exact customer checkout cart. Never label a subtotal of product listings + carrier estimate as final or sign it into `salla_ai_order_quotes`. An owner-reviewed manual pilot quote (if separately authorized in the future) would be an interim mode, not autonomous AI pricing. No feature flags were enabled, no real order placed, no existing financial/accounting entry changed.
+
+## 2026-11-26 — Real Amasi personalized-product option discovery
+
+A read-only authorized Salla catalog inspection found Amasi **service-type personalized name necklaces** with `type=text` options, `required=true`, no enum values and sometimes `characters_limit=null`, plus `type=radio` choices. Some additional required text fields use `visibility=on_condition` with `visibility_condition_type="="`, referencing a selected radio option and value. Therefore a radio/checkbox-only order builder would be **functionally incomplete for real Amasi products**.
+
+- `readers.py` now preserves text limit and conditional visibility metadata from product details, without leaking customer-supplied personalization.
+- `catalog_validation.py` now supports strict Arabic/Unicode text input (control/HTML-ish characters rejected), conservative 120-character cap when provider limit is absent, exact provider cap when present, equality/inequality conditional visibility for text/choice options, required visible personalized fields, hidden conditional option rejection, and exact variant stock checks. Returned evidence contains only selected text **option IDs**, never the actual customer's engraving text; the trusted `PendingOrder` payload retains the confirmed text for Salla submission.
+- Added `backend/tests/test_salla_order_creation_personalization.py` for synthetically generated Arabic engraving, conditional fields, hidden/missing/too-long text, and unchanged pending-payment payload. This **does not yet prove Salla accepts text option values via POST /orders**; staging acceptance remains mandatory.
+- Official docs: [Product Details](https://docs.salla.dev/product/product-details) and [Create Order](https://docs.salla.dev/5394145e0). Full options/conditions in the real catalog vary and must be checked per product; never generalize a rule from product name.
+- Current exact-branch test run after the personalization changes is **pending** as of this documentation checkpoint; do not claim all new tests pass without CI evidence.
+
