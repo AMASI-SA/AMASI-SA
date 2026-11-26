@@ -198,16 +198,36 @@ async def create_confirmed_salla_order(
 
     reference = data.get("reference_id")
     reference = reference if str(reference).isdigit() else None
+
+    # Salla remains the price authority after creation. A mismatched/absent
+    # provider total must never lead to automatic checkout-link delivery.
+    total_raw = (data.get("amounts") or {}).get("total")
+    total_currency = ""
+    if isinstance(total_raw, dict):
+        total_currency = str(total_raw.get("currency") or "").upper()
+        total_raw = total_raw.get("amount")
+    try:
+        observed_total = Decimal(str(total_raw))
+        expected_total = Decimal(str(quote["total_sar"]))
+        amount_confirmed = (
+            total_currency == "SAR"
+            and observed_total.is_finite()
+            and abs(observed_total - expected_total) <= Decimal("0.01")
+        )
+    except (InvalidOperation, ValueError, TypeError):
+        amount_confirmed = False
+
+    final_state = "created" if amount_confirmed else "created_amount_unverified"
     await db.salla_ai_order_intents.update_one(
         {"_id": storage_id, "state": "sending"},
         {"$set": {
-            "state": "created", "salla_order_id": int(order_id),
+            "state": final_state, "salla_order_id": int(order_id),
             "reference_id": int(reference) if reference is not None else None,
             "updated_at": datetime.now(timezone.utc),
         }},
     )
     return {
-        "state": "created", "salla_order_id": int(order_id),
+        "state": final_state, "salla_order_id": int(order_id),
         "reference_id": int(reference) if reference is not None else None,
-        "replayed": False,
+        "replayed": False, "amount_confirmed": amount_confirmed,
     }
