@@ -120,3 +120,19 @@ def test_oversized_signed_action_rejected():
     raw = json.dumps(body()).encode() + b" " * 5000
     with pytest.raises(SignatureDenied):
         verify_action(raw, STAMP, DELIVERY, signed(raw), SECRET, now=1800000000)
+
+
+def test_cross_repository_action_signature_vector():
+    body = {
+        "action": "salla.create_pending_order",
+        "account_id": 1, "inbox_id": 2, "conversation_id": 3,
+        "intent_id": "intent-1234", "quote_ref": "quote.001",
+        "quote_digest": "a" * 64, "quote_version": 2,
+        "confirmation_message_id": 50,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    secret = b"synthetic-cross-repo-secret-32-plus-bytes"
+    actual = sign_action(raw, STAMP, DELIVERY, secret)
+    assert actual == "sha256=bc10935598a7384ea5cb25601ea3082d99e3952267918ad9272c0eabdcb1375a"
+    checked = verify_action(raw, STAMP, DELIVERY, actual, secret, now=1800000000)
+    assert checked.intent_id == "intent-1234"
