@@ -21,5 +21,5 @@ jobs:
         run: |
           PYTHONPATH=.:backend python -m pytest -q \
             backend/order_engine/test_whatsapp_stage_service_auth.py \
-            order_engine/test_whatsapp_stage_projection.py \
-            order_engine/test_whatsapp_stage_route.py
+            backend/order_engine/test_whatsapp_stage_projection.py \
+            backend/order_engine/test_whatsapp_stage_route.py
