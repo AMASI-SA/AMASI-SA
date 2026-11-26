@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "merged_original_host_rehearsal_running",
+  "phase": "original_host_local_verified_waiting_last_deployment_gate",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -714,6 +714,66 @@
     ],
     "backend_restore_required": true,
     "lease_created": false,
-    "publication_count": 0
+    "publication_count": 0,
+    "local_verification": {
+      "phase": "local_verified",
+      "created_at": "2026-11-26T04:46:01.353655+00:00",
+      "local_verified_at": "2026-11-26T04:48:54.739142+00:00",
+      "receipt_sha256": "d71ae79fea2ac4eea4cb6911f6ca90dffb4379f172a7d4d4e448e0e9962960e7",
+      "receipt_bytes": 198518,
+      "command_count": 20,
+      "expected_nonzero": [
+        {
+          "label": "supervisor-stopped",
+          "exit_code": 3,
+          "reason": "Supervisor status exit3 confirms the service is stopped; accepted by the reviewed preparer."
+        }
+      ],
+      "guard_after": {
+        "active": false
+      },
+      "foreign_check": {
+        "foreign_roots": 59,
+        "untracked_files": 432
+      },
+      "backend_restore_required": true,
+      "adapter": {
+        "command": [
+          "yarn",
+          "build"
+        ],
+        "cwd": "/app/frontend",
+        "exit_code": 0,
+        "started_at": "2026-11-26T04:47:12.394389+00:00",
+        "finished_at": "2026-11-26T04:48:50.140564+00:00"
+      },
+      "frontend_verifier": {
+        "exit_code": 0
+      },
+      "package_verifier": {
+        "exit_code": 0
+      },
+      "backup": {
+        "strategy": "verified_dependency_payload_reuse_plus_fresh_small_outputs",
+        "dependency": {
+          "archive_sha256": "fc86599790cfba92489663f9330b691f6300eb4c12d9a209ac4dcc545a613fde",
+          "members": 76640,
+          "old_backup_unchanged": true,
+          "payload_manifest_sha256": "08a3838610c0f973ab1f9bbd9bcc1bfdcc18bd077c1ca74a130994c90ad532b1"
+        },
+        "fresh_inventory": {
+          "bytes": 896185,
+          "members": 77033,
+          "sha256": "dcb1aed623b676477b83b013bf527939185b369a7df704f495b69a3ab9a16e10"
+        },
+        "fresh_outputs": {
+          "bytes": 3396641,
+          "members": 393,
+          "sha256": "3ec6c38d5040ba613d0446b5121b0ca96020b8647b8f2ccca496f1bcce20d6c9"
+        },
+        "free_bytes_after": 174231552,
+        "no_output_removed_before_complete_verification": true
+      }
+    }
   }
 }
