@@ -161,10 +161,15 @@ async def resolve_synced_checkout(
     order_id = intent.get("salla_order_id")
     ref_id = intent.get("reference_id")
     if (type(order_id) is not int or order_id <= 0 or
-            type(ref_id) is not int or ref_id <= 0 or
             intent.get("payload_digest") != quote_digest or
             intent.get("quote_version") != quote_version or
             str(intent.get("confirmation_message_id")) != str(confirmation_message_id)):
+        return _not_ready("order_intent_mismatch")
+    if ref_id is None:
+        # Salla's order id is known, but the human reference has not yet
+        # reached Mezan. A scoped provider GET may recover it safely.
+        return _not_ready("waiting_for_salla_reference",salla_order_id=order_id)
+    if type(ref_id) is not int or ref_id <= 0:
         return _not_ready("order_intent_mismatch")
     if (intent.get("inbox_id") != inbox_id or
             intent.get("conversation_id") != conversation_id):
