@@ -6,6 +6,8 @@ pre-opening sales, payments or supplier expenses, and never duplicate old fees.
 from copy import deepcopy
 from decimal import Decimal
 
+import pytest
+
 from operational_balance_engine import reconcile
 from operational_balance_sources import collect_sources
 from test_operational_balance_delivery_cutover import active, courier_data, fee_total
@@ -99,3 +101,34 @@ def test_order_created_after_opening_and_delivered_november_keeps_single_fee():
     assert fee_total(result) == Decimal("12.00")
     assert "shipping:100:base_shipping" in result["engine"]["obligations"]
     assert reconcile(deepcopy(result), deepcopy(sources), LATEST) == result
+
+
+@pytest.mark.parametrize("courier_key,courier_name", [
+    ("imile", "iMile"),
+    ("smsa", "سمسا"),
+])
+def test_named_courier_postcutover_delivery_recognizes_once(courier_key, courier_name):
+    data = _data()
+    source = data["unified_orders"][0]
+    raw = source["raw_by_source"]["salla_direct"]
+    raw["shipping"]["company_code"] = courier_key
+    raw["shipments"][0]["company"] = {"code": courier_key}
+    source["salla_shipping_current"].update(
+        company_code=courier_key, company_name=courier_name)
+    setup = data["mz2_shipping_setup_v2"][0]
+    setup["couriers"][0].update(
+        courier_key=courier_key, name=courier_name,
+        salla_carrier_keys=[courier_key])
+    setup["contracts"][0]["party_id"] = courier_key
+
+    previous = _state()
+    sources = _sources(data, previous)
+    assert len(sources["delivery_events"]) == 1
+    after = reconcile(deepcopy(previous), deepcopy(sources), LATEST)
+    fee = after["engine"]["obligations"]["shipping:100:base_shipping"]
+    assert fee["party_type"] == "courier"
+    assert fee["party_id"] == courier_key
+    assert fee["confirmed"] == "10.00"
+    assert fee["business_date"] == "2026-11-22"
+    assert fee_total(after) == Decimal("12.00")
+    assert reconcile(deepcopy(after), deepcopy(sources), LATEST) == after
