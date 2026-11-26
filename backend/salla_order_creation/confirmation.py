@@ -115,6 +115,7 @@ async def persist_signed_confirmation(
         "payload_digest": action.quote_digest,
         "quote_version": action.quote_version,
         "message_id": str(action.confirmation_message_id),
+        "source_contact_id": action.source_contact_id,
         "provider_source_sha256": action.source_id_sha256,
     }
     record = {
