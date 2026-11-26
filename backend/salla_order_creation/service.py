@@ -53,32 +53,61 @@ def _utc(value: Any) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+def quote_pricing_mode(quote: dict | None) -> str | None:
+    """Identify the explicitly server-owned checkout pricing contract.
+
+    Full quote: customer accepted an authoritative SAR amount before creation.
+    Post-create Salla: customer approved only creation of an UNPAID electronic
+    order, and Salla owns the final total shown with its checkout link.
+    Neither contract grants the AI permission to mark a payment collected.
+    """
+    if not isinstance(quote, dict):
+        return None
+    if (quote.get("source") == "mezan_authoritative_quote_v1"
+            and quote.get("state") == "verified"
+            and all(quote.get(k) is True for k in (
+                "products_verified", "shipping_verified", "pricing_verified",
+                "payment_methods_verified",
+            ))):
+        try:
+            price = Decimal(str(quote.get("total_sar") or "0"))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+        if (price.is_finite() and price > 0
+                and price.as_tuple().exponent >= -2):
+            return "preverified"
+        return None
+
+    if (quote.get("source") == "mezan_verified_unpaid_order_intent_v1"
+            and quote.get("state") == "authorized_for_pending_creation"
+            and quote.get("post_create_salla_total") is True
+            and quote.get("pricing_verified") is False
+            and quote.get("online_only") is True
+            and quote.get("total_sar") is None
+            and all(quote.get(k) is True for k in (
+                "products_verified", "shipping_verified",
+                "payment_methods_verified",
+            ))):
+        # The final amount must be read back from the same Salla order in
+        # Mezan before any customer checkout link is released.
+        return "salla_post_create"
+    return None
+
+
 def _is_verified_quote(quote: dict | None, *, digest: str,
                        user_id: str, intent_id: str,
                        inbox_id: str, conversation_id: str, now: datetime) -> bool:
-    if not quote:
+    if not isinstance(quote, dict) or quote_pricing_mode(quote) is None:
         return False
     if any(quote.get(k) != v for k, v in (
         ("user_id", user_id), ("intent_id", intent_id),
         ("inbox_id", inbox_id), ("conversation_id", conversation_id),
-        ("payload_digest", digest), ("source", "mezan_authoritative_quote_v1"),
-        ("state", "verified"),
-    )):
-        return False
-    if not all(quote.get(k) is True for k in (
-        "products_verified", "shipping_verified", "pricing_verified",
-        "payment_methods_verified",
+        ("payload_digest", digest),
     )):
         return False
     verified_at = _utc(quote.get("verified_at"))
     expires_at = _utc(quote.get("expires_at"))
-    if not verified_at or not expires_at or not (verified_at <= now < expires_at):
-        return False
-    try:
-        total = Decimal(str(quote.get("total_sar") or "0"))
-    except (InvalidOperation, ValueError):
-        return False
-    return total.is_finite() and total > 0 and total.as_tuple().exponent >= -2
+    return bool(verified_at and expires_at and verified_at <= now < expires_at)
 
 
 def _is_customer_confirmed(confirmation: dict | None, quote: dict, *,
@@ -139,6 +168,15 @@ async def create_confirmed_salla_order(
         inbox_id=inbox_id, conversation_id=conversation_id, now=now,
     ):
         raise CreationDenied("fresh_server_verified_quote_required", 409)
+    # Post-create Salla pricing is allowed ONLY for electronically payable
+    # unpaid orders. COD/bank require a separately verified financial flow.
+    pricing_mode = quote_pricing_mode(quote)
+    if (pricing_mode == "salla_post_create"
+            and not set(order.accepted_methods).issubset(
+                {"mada", "credit_card"}
+            )):
+        raise CreationDenied("post_create_pricing_requires_online_payment", 409)
+
     confirmation = await db.salla_ai_order_confirmations.find_one(
         {"user_id": user_id, "intent_id": intent_id}
     )
@@ -154,6 +192,7 @@ async def create_confirmed_salla_order(
         "inbox_id": inbox_id, "conversation_id": conversation_id,
         "actor_id": actor_id, "state": "sending", "payload_digest": digest,
         "quote_version": quote["version"],
+        "pricing_mode": pricing_mode,
         "confirmation_message_id": str(confirmation["message_id"]),
         "created_at": now, "updated_at": now,
     }
@@ -214,16 +253,20 @@ async def create_confirmed_salla_order(
     if isinstance(total_raw, dict):
         total_currency = str(total_raw.get("currency") or "").upper()
         total_raw = total_raw.get("amount")
-    try:
-        observed_total = Decimal(str(total_raw))
-        expected_total = Decimal(str(quote["total_sar"]))
-        amount_confirmed = (
-            total_currency == "SAR"
-            and observed_total.is_finite()
-            and abs(observed_total - expected_total) <= Decimal("0.01")
-        )
-    except (InvalidOperation, ValueError, TypeError):
-        amount_confirmed = False
+    amount_confirmed = False
+    if pricing_mode == "preverified":
+        try:
+            observed_total = Decimal(str(total_raw))
+            expected_total = Decimal(str(quote["total_sar"]))
+            amount_confirmed = (
+                total_currency == "SAR"
+                and observed_total.is_finite()
+                and abs(observed_total - expected_total) <= Decimal("0.01")
+            )
+        except (InvalidOperation, ValueError, TypeError):
+            amount_confirmed = False
+    # In salla_post_create mode, even a total returned by POST is not enough
+    # to release payment; the same order must be read back via Mezan sync.
 
     final_state = "created" if amount_confirmed else "created_amount_unverified"
     await db.salla_ai_order_intents.update_one(
