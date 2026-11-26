@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="16" skipped="0" tests="32" time="1.661" timestamp="2026-11-26T05:53:12.633744+03:00" hostname="7b1c7493d169"><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-1-serial]" time="0.014" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-1-prefetch]" time="0.007" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-8-serial]" time="0.008" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-8-prefetch]" time="0.008" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-9-serial]" time="0.008"><failure message="assert [0, 8, 8, 9] == [0, 8, 9]&#10;  &#10;  At index 2 diff: 8 != 9&#10;  Left contains one more item: 9&#10;  Use -v to get more diff">E   assert [0, 8, 8, 9] == [0, 8, 9]
+      
+      At index 2 diff: 8 != 9
+      Left contains one more item: 9
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-9-prefetch]" time="0.009"><failure message="assert [0, 8, 8, 9] == [0, 8, 9]&#10;  &#10;  At index 2 diff: 8 != 9&#10;  Left contains one more item: 9&#10;  Use -v to get more diff">E   assert [0, 8, 8, 9] == [0, 8, 9]
+      
+      At index 2 diff: 8 != 9
+      Left contains one more item: 9
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-16-serial]" time="0.011"><failure message="assert [0, 8, 8, 16] == [0, 8, 16]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains one more item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16] == [0, 8, 16]
+      
+      At index 2 diff: 8 != 16
+      Left contains one more item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-16-prefetch]" time="0.010"><failure message="assert [0, 8, 8, 16] == [0, 8, 16]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains one more item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16] == [0, 8, 16]
+      
+      At index 2 diff: 8 != 16
+      Left contains one more item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-17-serial]" time="0.010"><failure message="assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 2 more items, first extra item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]
+      
+      At index 2 diff: 8 != 16
+      Left contains 2 more items, first extra item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-17-prefetch]" time="0.011"><failure message="assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 2 more items, first extra item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]
+      
+      At index 2 diff: 8 != 16
+      Left contains 2 more items, first extra item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-64-serial]" time="0.026"><failure message="assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 7 more items, first extra item: 40&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]
+      
+      At index 2 diff: 8 != 16
+      Left contains 7 more items, first extra item: 40
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[False-64-prefetch]" time="0.030"><failure message="assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 7 more items, first extra item: 40&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]
+      
+      At index 2 diff: 8 != 16
+      Left contains 7 more items, first extra item: 40
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-1-serial]" time="0.013" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-1-prefetch]" time="0.012" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-8-serial]" time="0.010" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-8-prefetch]" time="0.011" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-9-serial]" time="0.010"><failure message="assert [0, 8, 8, 9] == [0, 8, 9]&#10;  &#10;  At index 2 diff: 8 != 9&#10;  Left contains one more item: 9&#10;  Use -v to get more diff">E   assert [0, 8, 8, 9] == [0, 8, 9]
+      
+      At index 2 diff: 8 != 9
+      Left contains one more item: 9
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-9-prefetch]" time="0.009"><failure message="assert [0, 8, 8, 9] == [0, 8, 9]&#10;  &#10;  At index 2 diff: 8 != 9&#10;  Left contains one more item: 9&#10;  Use -v to get more diff">E   assert [0, 8, 8, 9] == [0, 8, 9]
+      
+      At index 2 diff: 8 != 9
+      Left contains one more item: 9
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-16-serial]" time="0.012"><failure message="assert [0, 8, 8, 16] == [0, 8, 16]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains one more item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16] == [0, 8, 16]
+      
+      At index 2 diff: 8 != 16
+      Left contains one more item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-16-prefetch]" time="0.013"><failure message="assert [0, 8, 8, 16] == [0, 8, 16]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains one more item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16] == [0, 8, 16]
+      
+      At index 2 diff: 8 != 16
+      Left contains one more item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-17-serial]" time="0.013"><failure message="assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 2 more items, first extra item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]
+      
+      At index 2 diff: 8 != 16
+      Left contains 2 more items, first extra item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-17-prefetch]" time="0.012"><failure message="assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 2 more items, first extra item: 16&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 17] == [0, 8, 16, 17]
+      
+      At index 2 diff: 8 != 16
+      Left contains 2 more items, first extra item: 16
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-64-serial]" time="0.026"><failure message="assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 7 more items, first extra item: 40&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]
+      
+      At index 2 diff: 8 != 16
+      Left contains 7 more items, first extra item: 40
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_each_audit_boundary_has_one_fresh_checkpoint[True-64-prefetch]" time="0.026"><failure message="assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]&#10;  &#10;  At index 2 diff: 8 != 16&#10;  Left contains 7 more items, first extra item: 40&#10;  Use -v to get more diff">E   assert [0, 8, 8, 16, 16, 24, ...] == [0, 8, 16, 24, 32, 40, ...]
+      
+      At index 2 diff: 8 != 16
+      Left contains 7 more items, first extra item: 40
+      Use -v to get more diff</failure></testcase><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[revoked-8-serial]" time="0.012" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[revoked-8-prefetch]" time="0.012" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[revoked-16-serial]" time="0.011" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[revoked-16-prefetch]" time="0.030" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[lease_lost-8-serial]" time="0.010" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[lease_lost-8-prefetch]" time="0.010" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[lease_lost-16-serial]" time="0.011" /><testcase classname="backend.tests.test_operational_balance_archive_checkpoint_boundaries" name="test_boundary_denial_stops_before_the_next_page[lease_lost-16-prefetch]" time="0.059" /></testsuite></testsuites>

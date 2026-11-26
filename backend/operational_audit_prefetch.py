@@ -94,7 +94,10 @@ async def read_audit_pages(db, owner, refs):
     collection, codec = capability
     events = []
     for offset in range(0, len(refs), PREFETCH_PAGES):
-        if offset % VISIBLE_AUDIT_GATE_PAGES == 0:
+        # The completed eight-page group's final checkpoint is also the next
+        # group's admission checkpoint: no read or work intervenes. Keep the
+        # first gate explicit and every existing completion gate below.
+        if offset == 0:
             await checkpoint()
         group = refs[offset:offset + PREFETCH_PAGES]
         for ref in group:

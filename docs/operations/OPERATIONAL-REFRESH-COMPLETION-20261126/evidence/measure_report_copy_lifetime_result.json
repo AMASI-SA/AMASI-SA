@@ -1,0 +1,286 @@
+{
+  "copier_source_sha256_before_and_after": "1679d81b0420706dc2028eaac7cd878a4cc3d1cedc650ca306c1fc4faf663eaf",
+  "existing_parity_checks_passed": [
+    "test_bson_python_types_and_nonstring_keys_use_the_standard_semantics",
+    "test_aliases_and_cycles_cross_plain_containers_and_fallback_tuples",
+    "test_custom_hooks_subclasses_shared_memo_and_original_keepalive",
+    "test_copy_failure_and_cooperative_cancellation_return_no_partial_value",
+    "test_custom_hook_memo_override_applies_to_later_atomic_values_and_keys",
+    "test_completed_container_restores_its_memo_after_a_custom_hook",
+    "escaped_custom_hook_memo_remains_intact"
+  ],
+  "fixture_script_sha256": "402c2a4df247373da7c06da004c81a64313cbb8e060996c62f863c9991dfc19b",
+  "lifetime_method": "GC disabled while dropping acyclic original graph and retaining copy; explicit collection only for cleanup",
+  "lifetime_observations": [
+    {
+      "input_retained_without_gc": false,
+      "mode": "success",
+      "outcome": "returned",
+      "output_retained": true,
+      "preparation_checkpoints": 0,
+      "variant": "deepcopy"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "hook_error",
+      "outcome": "ValueError",
+      "output_retained": false,
+      "preparation_checkpoints": 0,
+      "variant": "deepcopy"
+    },
+    {
+      "input_retained_without_gc": true,
+      "mode": "success",
+      "outcome": "returned",
+      "output_retained": true,
+      "preparation_checkpoints": 2,
+      "variant": "current"
+    },
+    {
+      "input_retained_without_gc": true,
+      "mode": "hook_error",
+      "outcome": "ValueError",
+      "output_retained": false,
+      "preparation_checkpoints": 1,
+      "variant": "current"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "cancel_entry",
+      "outcome": "CancelledError",
+      "output_retained": false,
+      "preparation_checkpoints": 1,
+      "variant": "current"
+    },
+    {
+      "input_retained_without_gc": true,
+      "mode": "cancel_during",
+      "outcome": "CancelledError",
+      "output_retained": false,
+      "preparation_checkpoints": 2,
+      "variant": "current"
+    },
+    {
+      "input_retained_without_gc": true,
+      "mode": "cancel_exit",
+      "outcome": "CancelledError",
+      "output_retained": false,
+      "preparation_checkpoints": 2,
+      "variant": "current"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "success",
+      "outcome": "returned",
+      "output_retained": true,
+      "preparation_checkpoints": 2,
+      "variant": "prototype"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "hook_error",
+      "outcome": "ValueError",
+      "output_retained": false,
+      "preparation_checkpoints": 1,
+      "variant": "prototype"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "cancel_entry",
+      "outcome": "CancelledError",
+      "output_retained": false,
+      "preparation_checkpoints": 1,
+      "variant": "prototype"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "cancel_during",
+      "outcome": "CancelledError",
+      "output_retained": false,
+      "preparation_checkpoints": 2,
+      "variant": "prototype"
+    },
+    {
+      "input_retained_without_gc": false,
+      "mode": "cancel_exit",
+      "outcome": "CancelledError",
+      "output_retained": false,
+      "preparation_checkpoints": 2,
+      "variant": "prototype"
+    }
+  ],
+  "limitations": [
+    "8,192 items at most; exact existing synthetic item shape, not the complete 76,604-item source collector.",
+    "No real financial data, database/network work, production memory pressure or production speed was measured.",
+    "RSS/high-water include interpreter and fixture allocations; weakref checks establish retention causality.",
+    "The prototype is not a production change and does not replace any additional copy call site."
+  ],
+  "median_ms": {
+    "current": 387.5915,
+    "deepcopy": 449.79049999999995,
+    "prototype": 343.8615
+  },
+  "prototype": "Existing final four statements wrapped in try/finally; only clone = None added on exit",
+  "python": "3.12.14",
+  "scope": "Isolated copier lifetime prototype and bounded synthetic item copies; no production edits",
+  "script_sha256": "f8f15a8787d64f8027047e935eb53980b351139c62b8109198d1906f98c3ba6c",
+  "timing_method": "Six fresh processes: deepcopy/current/prototype/prototype/current/deepcopy; normal GC during timing; setup collection before timing",
+  "timing_runs": [
+    {
+      "complete_bson_parity": true,
+      "duration_ms": 454.453,
+      "gc_collections": [
+        227,
+        20,
+        1
+      ],
+      "gc_enabled": true,
+      "gc_ms": 119.443,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "input_bson_bytes": 6894447,
+      "input_unchanged": true,
+      "items_copied": 8192,
+      "logical_bson_sha256": "867da5043c0664208f9f058bdf3817943dc6bd7895de8b64ee0fbd60c3156251",
+      "process_cpu_ms": 454.433,
+      "process_peak_rss": 139853824,
+      "rss_after": 133083136,
+      "rss_before": 115814400,
+      "sampled_nested_output_independence": true,
+      "variant": "deepcopy"
+    },
+    {
+      "complete_bson_parity": true,
+      "duration_ms": 372.522,
+      "gc_collections": [
+        283,
+        25,
+        1
+      ],
+      "gc_enabled": true,
+      "gc_ms": 117.723,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "input_bson_bytes": 6894447,
+      "input_unchanged": true,
+      "items_copied": 8192,
+      "logical_bson_sha256": "867da5043c0664208f9f058bdf3817943dc6bd7895de8b64ee0fbd60c3156251",
+      "process_cpu_ms": 372.455,
+      "process_peak_rss": 139603968,
+      "rss_after": 132902912,
+      "rss_before": 115331072,
+      "sampled_nested_output_independence": true,
+      "variant": "current"
+    },
+    {
+      "complete_bson_parity": true,
+      "duration_ms": 364.106,
+      "gc_collections": [
+        228,
+        20,
+        1
+      ],
+      "gc_enabled": true,
+      "gc_ms": 109.193,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "input_bson_bytes": 6894447,
+      "input_unchanged": true,
+      "items_copied": 8192,
+      "logical_bson_sha256": "867da5043c0664208f9f058bdf3817943dc6bd7895de8b64ee0fbd60c3156251",
+      "process_cpu_ms": 363.109,
+      "process_peak_rss": 139563008,
+      "rss_after": 132857856,
+      "rss_before": 115331072,
+      "sampled_nested_output_independence": true,
+      "variant": "prototype"
+    },
+    {
+      "complete_bson_parity": true,
+      "duration_ms": 323.617,
+      "gc_collections": [
+        228,
+        20,
+        1
+      ],
+      "gc_enabled": true,
+      "gc_ms": 109.802,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "input_bson_bytes": 6894447,
+      "input_unchanged": true,
+      "items_copied": 8192,
+      "logical_bson_sha256": "867da5043c0664208f9f058bdf3817943dc6bd7895de8b64ee0fbd60c3156251",
+      "process_cpu_ms": 323.579,
+      "process_peak_rss": 139628544,
+      "rss_after": 132853760,
+      "rss_before": 115326976,
+      "sampled_nested_output_independence": true,
+      "variant": "prototype"
+    },
+    {
+      "complete_bson_parity": true,
+      "duration_ms": 402.661,
+      "gc_collections": [
+        283,
+        25,
+        1
+      ],
+      "gc_enabled": true,
+      "gc_ms": 139.69,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "input_bson_bytes": 6894447,
+      "input_unchanged": true,
+      "items_copied": 8192,
+      "logical_bson_sha256": "867da5043c0664208f9f058bdf3817943dc6bd7895de8b64ee0fbd60c3156251",
+      "process_cpu_ms": 400.953,
+      "process_peak_rss": 139513856,
+      "rss_after": 132907008,
+      "rss_before": 115335168,
+      "sampled_nested_output_independence": true,
+      "variant": "current"
+    },
+    {
+      "complete_bson_parity": true,
+      "duration_ms": 445.128,
+      "gc_collections": [
+        227,
+        20,
+        1
+      ],
+      "gc_enabled": true,
+      "gc_ms": 113.805,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "input_bson_bytes": 6894447,
+      "input_unchanged": true,
+      "items_copied": 8192,
+      "logical_bson_sha256": "867da5043c0664208f9f058bdf3817943dc6bd7895de8b64ee0fbd60c3156251",
+      "process_cpu_ms": 443.931,
+      "process_peak_rss": 139370496,
+      "rss_after": 132595712,
+      "rss_before": 115326976,
+      "sampled_nested_output_independence": true,
+      "variant": "deepcopy"
+    }
+  ]
+}

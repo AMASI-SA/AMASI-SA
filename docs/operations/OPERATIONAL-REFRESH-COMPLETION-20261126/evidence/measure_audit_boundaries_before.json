@@ -1,0 +1,412 @@
+{
+  "fixture": "one synthetic BSON event per immutable page plus one tail event; packed financial/issue fields",
+  "head": "5de9d4ddb85e8f74852149e068c176b64bf0a8d6",
+  "limitations": [
+    "No production page count, gate latency, CPU duration or performance gain was measured.",
+    "Five DB operations per gate is a source-derived owner-browser model, not fixture I/O.",
+    "No additional query, polling, native evidence acquisition or financial write was executed."
+  ],
+  "measurement_kind": "isolated_operation_count_not_wall_clock",
+  "observations": [
+    {
+      "audit_page_reads": 1,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        1
+      ],
+      "page_lease_renewals": [
+        0,
+        1
+      ],
+      "pages": 1,
+      "reader": "serial",
+      "snapshot_load_checkpoints": 8,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 30,
+        "modelled_page_gate_db_operations": 10
+      }
+    },
+    {
+      "audit_page_reads": 1,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        1
+      ],
+      "page_lease_renewals": [
+        0,
+        1
+      ],
+      "pages": 1,
+      "reader": "prefetch",
+      "snapshot_load_checkpoints": 8,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 30,
+        "modelled_page_gate_db_operations": 10
+      }
+    },
+    {
+      "audit_page_reads": 8,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8
+      ],
+      "page_lease_renewals": [
+        0,
+        8
+      ],
+      "pages": 8,
+      "reader": "serial",
+      "snapshot_load_checkpoints": 8,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 30,
+        "modelled_page_gate_db_operations": 10
+      }
+    },
+    {
+      "audit_page_reads": 8,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8
+      ],
+      "page_lease_renewals": [
+        0,
+        8
+      ],
+      "pages": 8,
+      "reader": "prefetch",
+      "snapshot_load_checkpoints": 8,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 30,
+        "modelled_page_gate_db_operations": 10
+      }
+    },
+    {
+      "audit_page_reads": 9,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        9
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        9
+      ],
+      "pages": 9,
+      "reader": "serial",
+      "snapshot_load_checkpoints": 10,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 60,
+        "modelled_page_gate_db_operations": 20
+      }
+    },
+    {
+      "audit_page_reads": 9,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        9
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        9
+      ],
+      "pages": 9,
+      "reader": "prefetch",
+      "snapshot_load_checkpoints": 10,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 60,
+        "modelled_page_gate_db_operations": 20
+      }
+    },
+    {
+      "audit_page_reads": 16,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        16
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        16
+      ],
+      "pages": 16,
+      "reader": "serial",
+      "snapshot_load_checkpoints": 10,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 60,
+        "modelled_page_gate_db_operations": 20
+      }
+    },
+    {
+      "audit_page_reads": 16,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        16
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        16
+      ],
+      "pages": 16,
+      "reader": "prefetch",
+      "snapshot_load_checkpoints": 10,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 60,
+        "modelled_page_gate_db_operations": 20
+      }
+    },
+    {
+      "audit_page_reads": 17,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        17
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        17
+      ],
+      "pages": 17,
+      "reader": "serial",
+      "snapshot_load_checkpoints": 12,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 90,
+        "modelled_page_gate_db_operations": 30
+      }
+    },
+    {
+      "audit_page_reads": 17,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        17
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        17
+      ],
+      "pages": 17,
+      "reader": "prefetch",
+      "snapshot_load_checkpoints": 12,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 90,
+        "modelled_page_gate_db_operations": 30
+      }
+    },
+    {
+      "audit_page_reads": 64,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        24,
+        24,
+        32,
+        32,
+        40,
+        40,
+        48,
+        48,
+        56,
+        56,
+        64
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        24,
+        24,
+        32,
+        32,
+        40,
+        40,
+        48,
+        48,
+        56,
+        56,
+        64
+      ],
+      "pages": 64,
+      "reader": "serial",
+      "snapshot_load_checkpoints": 22,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 240,
+        "modelled_page_gate_db_operations": 80
+      }
+    },
+    {
+      "audit_page_reads": 64,
+      "full_state_equal": true,
+      "input_unchanged": true,
+      "nonlease_writes": 0,
+      "orphan_tasks": 0,
+      "packed": true,
+      "page_checkpoints": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        24,
+        24,
+        32,
+        32,
+        40,
+        40,
+        48,
+        48,
+        56,
+        56,
+        64
+      ],
+      "page_lease_renewals": [
+        0,
+        8,
+        8,
+        16,
+        16,
+        24,
+        24,
+        32,
+        32,
+        40,
+        40,
+        48,
+        48,
+        56,
+        56,
+        64
+      ],
+      "pages": 64,
+      "reader": "prefetch",
+      "snapshot_load_checkpoints": 22,
+      "synthetic_cost_model": {
+        "assumed_ms_per_db_operation": 3,
+        "db_operations_per_gate": 5,
+        "modelled_page_gate_db_ms": 240,
+        "modelled_page_gate_db_operations": 80
+      }
+    }
+  ],
+  "owner_browser_gate_model_sources": [
+    "backend/operational_demand_refresh_routes.py:gate_state/verify",
+    "backend/operational_balance_routes.py:scope",
+    "backend/operational_balance_service.py:active_gate/accounting_inactive",
+    "backend/operational_demand_refresh.py:DemandRefreshContext.checkpoint"
+  ],
+  "python_version": "3.12.14",
+  "source_sha256": {
+    "backend/operational_audit_prefetch.py": "078f63365380f789d9b27000c561f50f279151bda3f61492c372ce0d0b4c70f0",
+    "backend/operational_balance_archive.py": "d660df74705f870a8232a6425bc9fbe010e8f7bf1b570cfe84afefa69d1c077e",
+    "backend/tests/test_operational_balance_archive_checkpoint_boundaries.py": "4d9851ba0b1f054adb64b07e0c8c8891eabb13dd8ca5ee35f3b2921d0e45d92c"
+  }
+}

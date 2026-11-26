@@ -251,7 +251,9 @@ async def unpack(db, owner, state):
             raise ArchiveError("incomplete reconciliation audit")
         return await _prepare_read(_restore_audit, state, prefetched, tail)
     for index, ref in enumerate(refs):
-        if visible and index % VISIBLE_AUDIT_GATE_PAGES == 0:
+        # Adjacent groups share the fresh completion/admission boundary. The
+        # checkpoint below still runs after every eight pages and the last.
+        if visible and index == 0:
             await checkpoint()
         _checkpoint()
         if (not isinstance(ref, dict) or set(ref) != {"id", "count"}

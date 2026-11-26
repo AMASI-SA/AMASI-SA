@@ -47,3 +47,55 @@ Current follow-up production source edits: none. New lease/publication/manual re
 Next safe action: identify and measure substantial repeated work, implement only a proved equivalent scoped optimization, run relevant regression and independent review, then create a fresh A/B with all required gates before any further authorized publication. Continue to live saved-calculation and historical-preservation acceptance.
 
 Issue #1006 is at its comment cap; update this task document, its PR, and the evidence branch. Keep private financial reports outside GitHub.
+
+## Verified audit-boundary checkpoint and measured decisions
+
+The first scoped implementation removes only the immediately repeated admission
+checkpoint at each internal eight-page audit boundary. Both serial and four-page
+prefetch readers retain fresh first/every-eight/final authorization and lease
+renewal, all per-page validation and cooperative cancellation, exact queries,
+complete history and joined cleanup. The preceding completion checkpoint is
+also the next group's admission; no read, await or processing intervenes.
+
+The new 32-case regression first produced 16 expected duplicate-boundary
+failures and 16 passes on the old source. After the two predicate changes,
+119 focused cases passed in 4.845 seconds with 11 real-Mongo/socket cases
+explicitly deselected. Independent source/test/evidence review found no blocker.
+The 64-page synthetic count falls from 16 to 9 audit checkpoints (whole packed
+unpack 22 to 15), with exactly the same 64 page reads, full-state equality,
+unchanged stored input, zero nonlease writes and no orphan tasks. These are
+operation counts, not measured production latency. Evidence is in
+`evidence/audit_boundary_findings.md` and its linked scripts/JSON/JUnit.
+
+The proposed native-to-aggregate decoded-packet handoff is **rejected/deferred**.
+A dense 49.02 MiB financial packet plus 0.96 MiB issues, with 19,151 synthetic
+orders, produced an optimistic A/B/B/A median saving of 935.645 ms for avoiding
+the second decode. Native-stage retained allocations increased by 37.69 MiB;
+traced peak remained approximately 319.36 MiB. Exact native/full-state BSON
+parity and source/input hashes passed. This saving does not justify additional
+retention and alias ownership complexity. No request-local snapshot cache is
+implemented. See `evidence/native_decode_reuse_measure_result.json`.
+
+Separate full-source synthetic profiling found repeated per-line option-catalog
+construction and full order copying during pure payment normalization. An
+experimental combined run fell from 29.992 to 24.731 seconds with identical
+full outputs, input/source hashes and query sequence. It also included a
+rejected blanket small-item copier substitution whose isolated copy/GC cost
+increased, so that combined percentage is not attributed to the selected fixes
+or claimed as a production gain. A scoped per-attempt option authority and
+read-only payment view are under implementation/review; the general public
+payment snapshot must retain its independent-copy behavior.
+
+A separate copier-lifetime prototype identified an avoidable private recursive
+closure cycle retaining the original graph through its memo until cyclic GC.
+Breaking only that private closure reference on every exit preserved values,
+aliases/cycles, BSON/custom-hook behavior and escaped-memo contents. It released
+the original immediately under GC-disabled weakref probes. A narrow lifetime
+fix is under implementation; no blanket bundle-copy replacement is authorized
+by these measurements.
+
+This checkpoint is **not final source A and not ready to merge or publish**.
+Production remains the verified PR2133 runtime, whose sole post-publication
+manual refresh failed. Continue scoped implementation, independent review and
+complete affected verification before freezing a new A/B release. Do not retry
+the existing live refresh blindly or repeat the prior release.

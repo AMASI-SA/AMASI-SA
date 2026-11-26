@@ -1,0 +1,422 @@
+{
+  "all_full_and_native_bson_parity": true,
+  "all_stored_inputs_unchanged": true,
+  "bson_c_extension": true,
+  "environment_limit": "Local elapsed times do not estimate production native_evidence or snapshot_unpack; real authorization/audit/network costs excluded",
+  "median_pair_ms": {
+    "baseline": 1951.027,
+    "prototype": 1015.3825
+  },
+  "median_pair_ms_saved": 935.6445,
+  "memory_note": "RSS samples can miss GIL-held transients; separate tracemalloc runs measure live/peak Python allocations but their timings are not compared",
+  "method": "Four fresh-process A/B/B/A timing runs, then two separate tracing runs; normal GC; no forced collection or GC disabling",
+  "prototype_limit": "Optimistic one-use validated-packet experiment only; no production implementation or cancellation/fallback safety claim",
+  "pymongo": "4.18.3",
+  "python": "3.12.14",
+  "runs": [
+    {
+      "authorization_callbacks": 4,
+      "decode_counts": {
+        "full": 2,
+        "native": 2
+      },
+      "decode_thread_cpu_ms": {
+        "full": 683.203,
+        "native": 898.755
+      },
+      "decode_wall_ms": {
+        "full": 685.902,
+        "native": 903.244
+      },
+      "fixture": {
+        "facts": 38302,
+        "financial_packet_bytes": 51402684,
+        "financial_packet_compressed_bytes": 2162577,
+        "full_logical_bson_bytes": 52409589,
+        "issue_packet_bytes": 1006505,
+        "issue_packet_compressed_bytes": 36432,
+        "obligations": 38302,
+        "orders": 19151
+      },
+      "full_bson_sha256": "fd8fbb3771ad97e14914f848783b844b3aa6596c21b46685470320c168f7b424",
+      "full_unpack_ms": 872.032,
+      "gc_collections": [
+        151,
+        14,
+        1
+      ],
+      "gc_count_after": [
+        0,
+        8,
+        9
+      ],
+      "gc_count_before": [
+        207,
+        11,
+        6
+      ],
+      "gc_ms": 881.4,
+      "handoff_hit": false,
+      "inputs_unchanged": true,
+      "measurement": "timing",
+      "native_bson_sha256": "6d85e181274bd2f1680c5ea9ed93d1aee805c8e28f33a17ba4d18a9a742c80ae",
+      "native_ms": 1034.73,
+      "pair_ms": 1907.149,
+      "parity": true,
+      "process_cpu_ms": 1913.305,
+      "process_high_water_after": 626282496,
+      "process_high_water_before": 626282496,
+      "rss_after": 413843456,
+      "rss_before": 90497024,
+      "rss_between_stages": 373784576,
+      "sampled_peak_rss": 457543680,
+      "stored_bson_sha256": "c0a13a4d4bc2e597c678beaa0ab5987fea3e3be9a0b19ae8fad8c237835f2967",
+      "traced_memory_current_peak_by_phase": {},
+      "variant": "baseline"
+    },
+    {
+      "authorization_callbacks": 4,
+      "decode_counts": {
+        "full": 0,
+        "native": 2
+      },
+      "decode_thread_cpu_ms": {
+        "full": 0.0,
+        "native": 971.24
+      },
+      "decode_wall_ms": {
+        "full": 0.0,
+        "native": 974.681
+      },
+      "fixture": {
+        "facts": 38302,
+        "financial_packet_bytes": 51402684,
+        "financial_packet_compressed_bytes": 2162577,
+        "full_logical_bson_bytes": 52409589,
+        "issue_packet_bytes": 1006505,
+        "issue_packet_compressed_bytes": 36432,
+        "obligations": 38302,
+        "orders": 19151
+      },
+      "full_bson_sha256": "fd8fbb3771ad97e14914f848783b844b3aa6596c21b46685470320c168f7b424",
+      "full_unpack_ms": 0.872,
+      "gc_collections": [
+        75,
+        7,
+        1
+      ],
+      "gc_count_after": [
+        2,
+        9,
+        2
+      ],
+      "gc_count_before": [
+        207,
+        11,
+        6
+      ],
+      "gc_ms": 626.532,
+      "handoff_hit": true,
+      "inputs_unchanged": true,
+      "measurement": "timing",
+      "native_bson_sha256": "6d85e181274bd2f1680c5ea9ed93d1aee805c8e28f33a17ba4d18a9a742c80ae",
+      "native_ms": 1101.305,
+      "pair_ms": 1102.334,
+      "parity": true,
+      "process_cpu_ms": 1107.821,
+      "process_high_water_after": 626597888,
+      "process_high_water_before": 626597888,
+      "rss_after": 413372416,
+      "rss_before": 89649152,
+      "rss_between_stages": 413372416,
+      "sampled_peak_rss": 449929216,
+      "stored_bson_sha256": "c0a13a4d4bc2e597c678beaa0ab5987fea3e3be9a0b19ae8fad8c237835f2967",
+      "traced_memory_current_peak_by_phase": {},
+      "variant": "prototype"
+    },
+    {
+      "authorization_callbacks": 4,
+      "decode_counts": {
+        "full": 0,
+        "native": 2
+      },
+      "decode_thread_cpu_ms": {
+        "full": 0.0,
+        "native": 799.806
+      },
+      "decode_wall_ms": {
+        "full": 0.0,
+        "native": 800.85
+      },
+      "fixture": {
+        "facts": 38302,
+        "financial_packet_bytes": 51402684,
+        "financial_packet_compressed_bytes": 2162577,
+        "full_logical_bson_bytes": 52409589,
+        "issue_packet_bytes": 1006505,
+        "issue_packet_compressed_bytes": 36432,
+        "obligations": 38302,
+        "orders": 19151
+      },
+      "full_bson_sha256": "fd8fbb3771ad97e14914f848783b844b3aa6596c21b46685470320c168f7b424",
+      "full_unpack_ms": 0.518,
+      "gc_collections": [
+        75,
+        7,
+        1
+      ],
+      "gc_count_after": [
+        2,
+        9,
+        2
+      ],
+      "gc_count_before": [
+        207,
+        11,
+        6
+      ],
+      "gc_ms": 442.873,
+      "handoff_hit": true,
+      "inputs_unchanged": true,
+      "measurement": "timing",
+      "native_bson_sha256": "6d85e181274bd2f1680c5ea9ed93d1aee805c8e28f33a17ba4d18a9a742c80ae",
+      "native_ms": 927.669,
+      "pair_ms": 928.431,
+      "parity": true,
+      "process_cpu_ms": 932.567,
+      "process_high_water_after": 626548736,
+      "process_high_water_before": 626548736,
+      "rss_after": 413368320,
+      "rss_before": 89645056,
+      "rss_between_stages": 413368320,
+      "sampled_peak_rss": 449351680,
+      "stored_bson_sha256": "c0a13a4d4bc2e597c678beaa0ab5987fea3e3be9a0b19ae8fad8c237835f2967",
+      "traced_memory_current_peak_by_phase": {},
+      "variant": "prototype"
+    },
+    {
+      "authorization_callbacks": 4,
+      "decode_counts": {
+        "full": 2,
+        "native": 2
+      },
+      "decode_thread_cpu_ms": {
+        "full": 756.643,
+        "native": 890.537
+      },
+      "decode_wall_ms": {
+        "full": 760.793,
+        "native": 907.314
+      },
+      "fixture": {
+        "facts": 38302,
+        "financial_packet_bytes": 51402684,
+        "financial_packet_compressed_bytes": 2162577,
+        "full_logical_bson_bytes": 52409589,
+        "issue_packet_bytes": 1006505,
+        "issue_packet_compressed_bytes": 36432,
+        "obligations": 38302,
+        "orders": 19151
+      },
+      "full_bson_sha256": "fd8fbb3771ad97e14914f848783b844b3aa6596c21b46685470320c168f7b424",
+      "full_unpack_ms": 959.727,
+      "gc_collections": [
+        151,
+        14,
+        1
+      ],
+      "gc_count_after": [
+        0,
+        8,
+        9
+      ],
+      "gc_count_before": [
+        207,
+        11,
+        6
+      ],
+      "gc_ms": 903.568,
+      "handoff_hit": false,
+      "inputs_unchanged": true,
+      "measurement": "timing",
+      "native_bson_sha256": "6d85e181274bd2f1680c5ea9ed93d1aee805c8e28f33a17ba4d18a9a742c80ae",
+      "native_ms": 1034.975,
+      "pair_ms": 1994.905,
+      "parity": true,
+      "process_cpu_ms": 1992.392,
+      "process_high_water_after": 626233344,
+      "process_high_water_before": 626233344,
+      "rss_after": 413843456,
+      "rss_before": 90497024,
+      "rss_between_stages": 373051392,
+      "sampled_peak_rss": 457650176,
+      "stored_bson_sha256": "c0a13a4d4bc2e597c678beaa0ab5987fea3e3be9a0b19ae8fad8c237835f2967",
+      "traced_memory_current_peak_by_phase": {},
+      "variant": "baseline"
+    },
+    {
+      "authorization_callbacks": 4,
+      "decode_counts": {
+        "full": 2,
+        "native": 2
+      },
+      "decode_thread_cpu_ms": {
+        "full": 3686.086,
+        "native": 4770.459
+      },
+      "decode_wall_ms": {
+        "full": 3706.253,
+        "native": 4823.328
+      },
+      "fixture": {
+        "facts": 38302,
+        "financial_packet_bytes": 51402684,
+        "financial_packet_compressed_bytes": 2162577,
+        "full_logical_bson_bytes": 52409589,
+        "issue_packet_bytes": 1006505,
+        "issue_packet_compressed_bytes": 36432,
+        "obligations": 38302,
+        "orders": 19151
+      },
+      "full_bson_sha256": "fd8fbb3771ad97e14914f848783b844b3aa6596c21b46685470320c168f7b424",
+      "full_unpack_ms": 4553.242,
+      "gc_collections": [
+        151,
+        14,
+        1
+      ],
+      "gc_count_after": [
+        0,
+        8,
+        9
+      ],
+      "gc_count_before": [
+        207,
+        11,
+        6
+      ],
+      "gc_ms": 894.876,
+      "handoff_hit": false,
+      "inputs_unchanged": true,
+      "measurement": "memory_only",
+      "native_bson_sha256": "6d85e181274bd2f1680c5ea9ed93d1aee805c8e28f33a17ba4d18a9a742c80ae",
+      "native_ms": 5057.614,
+      "pair_ms": 9611.186,
+      "parity": true,
+      "process_cpu_ms": 9593.316,
+      "process_high_water_after": 970551296,
+      "process_high_water_before": 626606080,
+      "rss_after": 956563456,
+      "rss_before": 90542080,
+      "rss_between_stages": 870588416,
+      "sampled_peak_rss": 956563456,
+      "stored_bson_sha256": "c0a13a4d4bc2e597c678beaa0ab5987fea3e3be9a0b19ae8fad8c237835f2967",
+      "traced_memory_current_peak_by_phase": {
+        "after_full_unpack": [
+          287982558,
+          334874512
+        ],
+        "after_native_view": [
+          248476582,
+          334851985
+        ],
+        "after_native_view_released": [
+          248476802,
+          334851985
+        ]
+      },
+      "variant": "baseline"
+    },
+    {
+      "authorization_callbacks": 4,
+      "decode_counts": {
+        "full": 0,
+        "native": 2
+      },
+      "decode_thread_cpu_ms": {
+        "full": 0.0,
+        "native": 4543.121
+      },
+      "decode_wall_ms": {
+        "full": 0.0,
+        "native": 4556.874
+      },
+      "fixture": {
+        "facts": 38302,
+        "financial_packet_bytes": 51402684,
+        "financial_packet_compressed_bytes": 2162577,
+        "full_logical_bson_bytes": 52409589,
+        "issue_packet_bytes": 1006505,
+        "issue_packet_compressed_bytes": 36432,
+        "obligations": 38302,
+        "orders": 19151
+      },
+      "full_bson_sha256": "fd8fbb3771ad97e14914f848783b844b3aa6596c21b46685470320c168f7b424",
+      "full_unpack_ms": 0.725,
+      "gc_collections": [
+        75,
+        7,
+        1
+      ],
+      "gc_count_after": [
+        1,
+        9,
+        2
+      ],
+      "gc_count_before": [
+        208,
+        11,
+        6
+      ],
+      "gc_ms": 476.558,
+      "handoff_hit": true,
+      "inputs_unchanged": true,
+      "measurement": "memory_only",
+      "native_bson_sha256": "6d85e181274bd2f1680c5ea9ed93d1aee805c8e28f33a17ba4d18a9a742c80ae",
+      "native_ms": 4682.752,
+      "pair_ms": 4683.806,
+      "parity": true,
+      "process_cpu_ms": 4712.006,
+      "process_high_water_after": 964161536,
+      "process_high_water_before": 626442240,
+      "rss_after": 905576448,
+      "rss_before": 90554368,
+      "rss_between_stages": 905572352,
+      "sampled_peak_rss": 944492544,
+      "stored_bson_sha256": "c0a13a4d4bc2e597c678beaa0ab5987fea3e3be9a0b19ae8fad8c237835f2967",
+      "traced_memory_current_peak_by_phase": {
+        "after_full_unpack": [
+          287952700,
+          334862081
+        ],
+        "after_native_view": [
+          287998587,
+          334862081
+        ],
+        "after_native_view_released": [
+          287998927,
+          334862081
+        ]
+      },
+      "variant": "prototype"
+    }
+  ],
+  "runtime_hashes_before_and_after": {
+    "operational_balance_archive.py": "40ffa6f7aa481d4bd24d63ff34ba7cb086a1b81e23d83131b430abe8518c65b6",
+    "operational_balance_store.py": "21048968b9a06bc71fad2af3e43df9324f36c2b105cd869476268330fdd2329a",
+    "operational_demand_refresh.py": "c2ecb5340a2631b06d77524e83e30c7a738b388c7436950b888031a239625cd9",
+    "operational_visible_evidence.py": "2e26efd1dc8546d068a93110c73bb57b598c327c5a036d8dd0c7bd588a123476"
+  },
+  "scope": "Synthetic native _gaps then full archive.unpack; inline audit; no DB/provider/network",
+  "script_sha256": "751c2a1fdbd61afd2fac2f097db192f111258a99d69ad6bdea670c43a009c92f",
+  "timing_samples_ms": {
+    "baseline": [
+      1907.149,
+      1994.905
+    ],
+    "prototype": [
+      1102.334,
+      928.431
+    ]
+  }
+}
