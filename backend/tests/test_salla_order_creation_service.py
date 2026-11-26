@@ -287,3 +287,70 @@ def test_mongo_naive_utc_proofs_work_without_local_timezone(salla_pending_order)
     result=asyncio.run(call_create(db,salla_pending_order,salla))
     assert result["state"]=="created"
     assert result["amount_confirmed"] is True
+
+
+POST_CREATE_QUOTE = {
+    "source": "mezan_verified_unpaid_order_intent_v1",
+    "state": "authorized_for_pending_creation",
+    "post_create_salla_total": True,
+    "online_only": True,
+    "products_verified": True,
+    "carrier_eligibility_verified": True,
+    "shipping_price_verified": False,
+    "pricing_verified": False,
+    "payment_methods_verified": True,
+    "total_sar": None,
+}
+
+
+def test_post_create_salla_pricing_allows_only_unpaid_online_order(salla_pending_order):
+    db = fixture_db(salla_pending_order, quote=POST_CREATE_QUOTE)
+    calls = []
+    async def salla(*args, **kwargs):
+        calls.append(1)
+        return {"success": True, "data": {
+            "id": 90701, "reference_id": 30102,
+            "amounts": {"total": {"amount": 250, "currency": "SAR"}},
+        }}
+    result = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert result["state"] == "created_amount_unverified"
+    assert result["amount_confirmed"] is False
+    assert result["salla_order_id"] == 90701
+    assert calls == [1]
+    assert db.salla_ai_order_intents.rows[0]["pricing_mode"] == "salla_post_create"
+    assert db.salla_ai_order_intents.rows[0]["inbox_id"] == "inbox-1"
+
+
+def test_post_create_salla_pricing_denies_cod_bank_before_provider(salla_pending_order):
+    for method in ("bank", "cod"):
+        order = salla_pending_order.model_copy(deep=True)
+        order.accepted_methods = [method]
+        db = fixture_db(order, quote=POST_CREATE_QUOTE)
+        async def unreachable(*args, **kwargs):
+            raise AssertionError("Salla must not be called")
+        with pytest.raises(CreationDenied, match="requires_online_payment"):
+            asyncio.run(call_create(db, order, unreachable))
+        assert db.salla_ai_order_intents.rows == []
+
+
+@pytest.mark.parametrize("changed", [
+    {"source": "model_estimate"},
+    {"state": "draft"},
+    {"post_create_salla_total": False},
+    {"online_only": False},
+    {"products_verified": False},
+    {"carrier_eligibility_verified": False},
+    {"payment_methods_verified": False},
+    {"shipping_price_verified": True},
+    {"pricing_verified": True},
+    {"total_sar": "250.00"},
+])
+def test_post_create_requires_explicit_server_owned_unpriced_intent(
+    salla_pending_order, changed
+):
+    db=fixture_db(salla_pending_order, quote={**POST_CREATE_QUOTE, **changed})
+    async def unreachable(*args, **kwargs):
+        raise AssertionError("Salla must not be called")
+    with pytest.raises(CreationDenied, match="fresh_server_verified_quote_required"):
+        asyncio.run(call_create(db,salla_pending_order,unreachable))
+    assert db.salla_ai_order_intents.rows == []
