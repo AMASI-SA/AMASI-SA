@@ -90,6 +90,9 @@ async def persist_signed_confirmation(
     ) or quote.get("version") != action.quote_version:
         raise ConfirmationDenied("current_verified_quote_required")
 
+    if (quote.get("source_contact_id") is not None and
+            quote.get("source_contact_id") != action.source_contact_id):
+        raise ConfirmationDenied("confirmed_customer_contact_mismatch")
     message_time = datetime.fromtimestamp(
         action.message_created_at, tz=timezone.utc
     )
