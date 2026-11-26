@@ -227,3 +227,27 @@ def test_unrelated_existing_courier_payment_never_changes_money_on_refresh():
     after = reconcile(state, {"orders": [new_order(party="imile")]}, OBSERVED)
     assert after["movements"] == original
     assert after["engine"]["obligations"]["shipping:synthetic-postopening-100:base_shipping"]["party_id"] == "imile"
+
+
+def test_legacy_aggregate_courier_base_is_not_charged_again():
+    state = saved()
+    order = new_order()
+    oid = order["id"]
+    old_key = "shipping:" + oid
+    state["engine"]["obligations"] = {
+        old_key: {
+            "id": old_key, "kind": "shipping", "party_id": "imile",
+            "party_type": "courier", "currency": "SAR",
+            "direction": "payable", "confirmed": "17.25",
+            "expected": "0.00", "business_date": "2026-11-23",
+        }
+    }
+    state["engine"]["facts"] = {
+        old_key: {"id": "imile", "party_type": "courier",
+                  "cost": None, "delivered_at": None}
+    }
+    result = reconcile(deepcopy(state), {"orders": [order]}, OBSERVED)
+    assert result["engine"]["obligations"][old_key]["confirmed"] == "17.25"
+    assert "shipping:" + oid + ":base_shipping" not in result["engine"]["obligations"]
+    assert PROOF + oid not in result["engine"]["facts"]
+    assert result["movements"] == []
