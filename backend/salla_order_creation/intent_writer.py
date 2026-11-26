@@ -143,7 +143,10 @@ async def prepare_salla_unpaid_order_intent(
         "quote_ref": "quote." + uuid4().hex,
         "version": 1,
         "payload_digest": digest,
-        "order_payload": order.model_dump(exclude_none=True),
+        # Keep required nullable Salla address fields (district/block/postal_code)
+        # so the persisted payload survives PendingOrder.model_validate() later.
+        # Only the Salla POST formatter decides which optional fields to omit.
+        "order_payload": order.model_dump(exclude_none=False),
         "source": "mezan_verified_unpaid_order_intent_v1",
         "state": "authorized_for_pending_creation",
         "post_create_salla_total": True,
