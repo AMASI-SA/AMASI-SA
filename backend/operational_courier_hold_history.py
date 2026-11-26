@@ -70,9 +70,6 @@ class _HoldHistory:
             return False
         currency = (carrier or {}).get('currency')
         party = event['party_type'], event['party_id']
-        from operational_shipping_fee_review import (
-            _postopening_courier_order_created, _strictly_prior_unallocated_courier_payment)
-        created_after_opening = _postopening_courier_order_created(self.state, event)
         payable = self.payable.get((*party, currency), ())
         pooled = (self.outgoing.get(party, ()) if currency is None
                   else self.outgoing_currency.get((*party, currency), ()))
@@ -85,8 +82,6 @@ class _HoldHistory:
             if not pooled_only:
                 return True
             movement = self.state['movements'][position]
-            if _strictly_prior_unallocated_courier_payment(movement, event, created_after_opening):
-                continue
             allocations = movement.get('allocations') or []
             try:
                 if (movement.get('kind') != 'payment' or not allocations
