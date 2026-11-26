@@ -1267,6 +1267,12 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
         exception_code = normalize_text(payload.exception_code)
+        if (normalize_text(assignment.get("delivery_exception_code")) ==
+                DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL
+                and exception_code != DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL):
+            raise HTTPException(status_code=409, detail={
+                "code": "driver_cancellation_pending_staff_approval",
+            })
         if exception_code not in DELIVERY_EXCEPTION_CODES:
             raise HTTPException(status_code=422, detail={"code": "driver_delivery_exception_invalid"})
         note = normalize_text(payload.note)
@@ -1842,6 +1848,12 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
         exception_code = normalize_text(payload.exception_code)
+        if (normalize_text(assignment.get("delivery_exception_code")) ==
+                DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL
+                and exception_code != DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL):
+            raise HTTPException(status_code=409, detail={
+                "code": "driver_cancellation_pending_staff_approval",
+            })
         if exception_code not in DELIVERY_EXCEPTION_CODES:
             raise HTTPException(status_code=422, detail={"code": "driver_delivery_exception_invalid"})
         note = normalize_text(payload.note)
@@ -1964,6 +1976,15 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
 
+        # A customer cancellation request transfers decision authority to staff.
+        # Prevent fresh delivery/collection attempts from accruing money while
+        # the staff approval/Salla readback is pending.
+        if (normalize_text(assignment.get("delivery_exception_code")) ==
+                DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL
+                or normalize_text(assignment.get("cancel_approval_state")) in {"reserved", "completed"}):
+            raise HTTPException(status_code=409, detail={
+                "code": "driver_cancellation_pending_staff_approval",
+            })
         current = normalize_text(assignment.get("status"))
         target = normalize_text(payload.target_status)
         if (current == DELIVERY_STATUS_DELIVERED and target == DELIVERY_STATUS_DELIVERED

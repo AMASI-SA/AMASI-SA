@@ -59,6 +59,8 @@ def _assignment_status_filter(value: str | None) -> str | dict[str, list[str]] |
         return None
     if normalized == "current":
         return {"$in": list(CURRENT_DELIVERY_STATUSES)}
+    if normalized == "cancellation_requests":
+        return {"$in": [*CURRENT_DELIVERY_STATUSES, "cancel_syncing"]}
     return normalized
 
 
@@ -248,6 +250,8 @@ def _assert_unassignment_safe(
     physically returned. Never discard financial evidence or prior custody
     history; existing atomicity, identity and completion fences remain.
     """
+    if assignment.get("cancel_approval_state") in {"reserved", "completed"}:
+        raise HTTPException(409, detail={"code": "cancel_approval_in_progress"})
     if normalize_text(assignment.get("driver_id")) != expected_driver_id:
         raise HTTPException(status_code=409, detail={"code": "assignment_driver_changed"})
     state = normalize_text(assignment.get("status"))
@@ -547,6 +551,8 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
             old = await db[ASSIGNMENTS].find_one({"user_id": user_id, "id": assignment_id, "active": True}, {"_id": 0}, session=tx)
             if not old:
                 raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
+            if old.get("cancel_approval_state") in {"reserved", "completed"}:
+                raise HTTPException(status_code=409, detail={"code": "cancel_approval_in_progress"})
             if old.get("status") == "delivered":
                 raise HTTPException(status_code=409, detail={"code": "delivered_assignment_cannot_be_reassigned"})
             if old.get("driver_id") == payload.driver_id:
@@ -579,7 +585,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
             }
             await db[ASSIGNMENTS].insert_one(new_row, session=tx)
             old_update = await db[ASSIGNMENTS].update_one(
-                {"user_id": user_id, "id": old["id"], "active": True, "status": old.get("status")},
+                {"user_id": user_id, "id": old["id"], "active": True, "status": old.get("status"), "cancel_approval_state": {"$nin": ["reserved", "completed"]}},
                 {"$set": {
                     "active": False, "status": "reassigned", "reassigned_at": now,
                     "reassigned_by": normalize_text(actor.get("id")), "reassigned_to_assignment_id": new_id,
@@ -654,6 +660,11 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         async with await db.client.start_session() as session:
             return await session.with_transaction(transfer)
 
+    from store_delivery_cancel_approval import attach_cancel_approval_route
+    attach_cancel_approval_route(
+        router, db, current_user,
+        require_operator=_require_operator, merchant_user_id=_merchant_user_id,
+    )
     return router
 
 
