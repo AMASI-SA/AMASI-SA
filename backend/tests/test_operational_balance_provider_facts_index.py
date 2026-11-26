@@ -179,6 +179,10 @@ def test_full_reducer_late_provider_recovery_matches_unindexed_scan(monkeypatch)
     from test_operational_balance_engine import initial, order, policy, NOW
 
     existing = engine.reconcile(initial(), {"orders": [order()]}, NOW)
+    # In production the aggregate store owns the saved calculation timestamp;
+    # the pure reducer intentionally does not assign it. Retain that metadata
+    # so a later-arriving capture reaches the actual historical overlap gate.
+    existing["engine"]["as_of"] = NOW
     old_state = deepcopy(existing)
     payment = {
         "provider": "tabby", "currency": "SAR", "gross": "100.00",
