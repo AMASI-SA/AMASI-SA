@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "reviewed_intent_B_ci_pending",
+  "phase": "merged_deployment_gates_running",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -495,5 +495,201 @@
     "manifest_sha256": "f3270a736e75543e527af8d31930bb301087c3b6449d28a299336c8403c91ad5",
     "independent_review": "no blocker while disabled",
     "host_actions_executed": false
-  }
+  },
+  "deployment_push_gate_plan": {
+    "expected_workflows": [
+      "Mezan Release Readiness",
+      "Security Gate",
+      "CodeQL"
+    ],
+    "expected_successful_jobs": 11,
+    "readiness_jobs": 7,
+    "security_jobs": 2,
+    "codeql_jobs": 2,
+    "manual_redeploy_notice_must_run_on_D": true,
+    "operational_web_stock_manual_D_dispatch_required": false,
+    "conditions": "Ordinary merge D, first parent317dc, D tree equals reviewed B, source A ancestor and post-A diff intent-only; no workflow/AGENTS modifications."
+  },
+  "reviewed_b_ci": {
+    "head": "a59e6ee18f41d13baaa0e863de2ed5810dd43319",
+    "observed_utc": "2026-11-26T04:42:51Z",
+    "successful_workflows": 13,
+    "runs": [
+      {
+        "id": 45754803015,
+        "name": "TikTok Creator Release Candidate",
+        "status": "completed",
+        "conclusion": "skipped",
+        "run_number": 571,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803015/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803015/logs",
+        "workflow_id": 380971731
+      },
+      {
+        "id": 45754802837,
+        "name": "Operational Payment Event Policy",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 245,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802837/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802837/logs",
+        "workflow_id": 429265649
+      },
+      {
+        "id": 45754803191,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3980,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803191/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803191/logs",
+        "workflow_id": 344971566
+      },
+      {
+        "id": 45754802899,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2133,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802899/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802899/logs",
+        "workflow_id": 396364833
+      },
+      {
+        "id": 45754802902,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 4653,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802902/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802902/logs",
+        "workflow_id": 320915169
+      },
+      {
+        "id": 45754802865,
+        "name": "MZ2 Employee Salary and Password",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 719,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802865/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802865/logs",
+        "workflow_id": 375607499
+      },
+      {
+        "id": 45754803091,
+        "name": "Mobile Order Tracking",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 993,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803091/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803091/logs",
+        "workflow_id": 388861620
+      },
+      {
+        "id": 45754803149,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5257,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803149/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803149/logs",
+        "workflow_id": 335759269
+      },
+      {
+        "id": 45754802916,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5663,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802916/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802916/logs",
+        "workflow_id": 330739464
+      },
+      {
+        "id": 45754802867,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5257,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802867/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802867/logs",
+        "workflow_id": 335797767
+      },
+      {
+        "id": 45754802855,
+        "name": "Supplier cost report performance",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 132,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802855/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802855/logs",
+        "workflow_id": 423052534
+      },
+      {
+        "id": 45754803237,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2797,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803237/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754803237/logs",
+        "workflow_id": 367907600
+      },
+      {
+        "id": 45754802854,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2390,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802854/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802854/logs",
+        "workflow_id": 380812173
+      },
+      {
+        "id": 45754802920,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2304,
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802920/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45754802920/logs",
+        "workflow_id": 375747544
+      }
+    ],
+    "expected_skip": {
+      "workflow": "TikTok Creator Release Candidate",
+      "reason": "Unchanged workflow job restricts head_ref to codex/tiktok-content-ci-20261011; not this branch."
+    }
+  },
+  "merge": {
+    "pr": 2134,
+    "method": "merge",
+    "source_a": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "intent_b": "a59e6ee18f41d13baaa0e863de2ed5810dd43319",
+    "deployment_d": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+    "tree": "57601ee93838dde732e122354f0766c7e7414301",
+    "parents": [
+      "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+      "a59e6ee18f41d13baaa0e863de2ed5810dd43319"
+    ],
+    "tree_equivalent_to_reviewed_b": true,
+    "merged": true,
+    "published": false
+  },
+  "enabled_operator": {
+    "directory": "final-operator-b7c7d13f",
+    "config_sha256": "e0bc4866e20131aef7ea53b35a916234d19bf258b2a9b5e7f2d05ea969516fa5",
+    "manifest_sha256": "a9f98d8f90c22617995d25cb7cd7a223d71e53343092daf326ee649e27db817c",
+    "payload_count": 9,
+    "member_count": 10,
+    "independent_review": {
+      "reviewer": "audit_evening_release",
+      "result": "pass_no_blocker",
+      "exact_delta": "DRAFT True to False and DEPLOYMENT to exact D only; other eight payloads unchanged; all nine hashes and sizes verified",
+      "host_actions_executed": false
+    },
+    "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
+    "host_actions_executed": false
+  },
+  "next_safe_action": "After a fresh original-host inactive guard, upload the exact reviewed operator into a separate task-owned .git directory and run one governed local rehearsal; require all exact-D push gates before lease/publication."
 }

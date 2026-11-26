@@ -1,0 +1,92 @@
+{
+  "checks": [
+    {
+      "case": "matching_independent_files",
+      "passed": true
+    },
+    {
+      "case": "matching_hardlinks",
+      "passed": true
+    },
+    {
+      "case": "hardlink_mismatch_True_to_False",
+      "passed": true
+    },
+    {
+      "case": "hardlink_mismatch_False_to_True",
+      "passed": true
+    },
+    {
+      "case": "external_hardlink_rejected",
+      "passed": true
+    },
+    {
+      "case": "changed_dependency_bytes_rejected",
+      "passed": true
+    },
+    {
+      "case": "preservation_unchanged",
+      "passed": true
+    },
+    {
+      "case": "preservation_append",
+      "passed": true
+    },
+    {
+      "case": "preservation_credential_replacement",
+      "passed": true
+    },
+    {
+      "case": "preservation_credential_inplace",
+      "passed": true
+    },
+    {
+      "case": "preservation_prefix_changed",
+      "passed": true
+    },
+    {
+      "case": "preservation_append_too_large",
+      "passed": true
+    },
+    {
+      "case": "preservation_unrelated_change",
+      "passed": true
+    },
+    {
+      "case": "preservation_approved",
+      "passed": true
+    },
+    {
+      "case": "preservation_approval_mismatch",
+      "passed": true
+    },
+    {
+      "case": "preservation_truncated_roots_rejected",
+      "passed": true
+    },
+    {
+      "case": "preservation_truncated_manifest_rejected",
+      "passed": true
+    },
+    {
+      "case": "preservation_missing_credential_field_rejected",
+      "passed": true
+    },
+    {
+      "case": "draft_prepare_refused_before_subprocess",
+      "passed": true
+    },
+    {
+      "case": "draft_verify_refused_before_subprocess",
+      "passed": true
+    },
+    {
+      "case": "draft_restore_refused_before_subprocess",
+      "passed": true
+    }
+  ],
+  "host_access": false,
+  "production_credential_contents_read": false,
+  "scope": "synthetic temp trees and in-process draft refusal only",
+  "subprocesses_permitted": false
+}
