@@ -245,3 +245,35 @@ def test_private_ttl_installer_is_explicit_not_request_time(cipher):
     ]
     save(db, cipher)
     assert len(db.salla_ai_private_order_fields.rows) == 1
+
+
+
+def test_dynamic_engraving_option_id_is_encrypted_not_plaintext(cipher):
+    db=DB()
+    result=save(
+        db,cipher,field="option_text_501",
+        value="اسم هدية خاص",message_id=101,
+    )
+    assert result["fields_present"] == ["option_text_501"]
+    assert "اسم هدية خاص" not in str(result)
+    row=db.salla_ai_private_order_fields.rows[0]
+    assert "اسم هدية خاص" not in str(row)
+    assert load(db,cipher)["option_text_501"]=="اسم هدية خاص"
+
+
+@pytest.mark.parametrize("field",[
+    "option_text_0","option_text_-1","option_text_001",
+    "option_text_1; DROP TABLE","option_text_abc",
+])
+def test_invalid_dynamic_option_names_denied(cipher,field):
+    db=DB()
+    with pytest.raises(PrivateOrderFieldDenied,match="untrusted_private_order_field"):
+        save(db,cipher,field=field,value="اسم خاص")
+
+
+def test_oversized_engraving_or_html_is_not_accepted(cipher):
+    db=DB()
+    with pytest.raises(PrivateOrderFieldDenied):
+        save(db,cipher,field="option_text_501",value="أ"*501)
+    with pytest.raises(PrivateOrderFieldDenied):
+        save(db,cipher,field="option_text_501",value="<script>")
