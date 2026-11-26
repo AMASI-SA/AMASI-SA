@@ -238,3 +238,30 @@ def test_default_off_private_quote_does_not_decrypt_or_read():
             methods_reader=methods_reader,
         ))
     assert db.salla_ai_order_quotes.rows==[]
+
+
+
+def test_selected_personalization_placeholder_is_resolved_from_private_vault_only():
+    private=fields()
+    private["option_text_50"]="اسم هدية خاص"
+    selection=[{
+        "identifier_type":"id","identifier":400,"quantity":1,
+        "options":[{"id":50,"value":["private.option_text_50"]}],
+    }]
+    order=assemble_pending_from_private_fields(
+        private,**params(products=selection),
+    )
+    assert order.products[0].options[0].value==["اسم هدية خاص"]
+    assert "اسم هدية خاص" not in str(selection)
+
+
+def test_missing_or_wrong_engraving_placeholder_does_not_guess_name():
+    for ref in ("private.option_text_50","private.option_text_51"):
+        selected=[{
+            "identifier_type":"id","identifier":400,"quantity":1,
+            "options":[{"id":50,"value":[ref]}],
+        }]
+        with pytest.raises(PrivateOrderAssemblyDenied):
+            assemble_pending_from_private_fields(
+                fields(),**params(products=selected),
+            )
