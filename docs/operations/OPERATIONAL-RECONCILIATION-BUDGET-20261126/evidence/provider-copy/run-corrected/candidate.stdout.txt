@@ -1,0 +1,1 @@
+{"mode": "candidate", "whole_reducer_ms": 8989.652, "map_ms": 704.343, "helper_ms": 1612.392}
