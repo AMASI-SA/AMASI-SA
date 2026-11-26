@@ -86,3 +86,16 @@ def test_preopening_order_without_trusted_delivery_time_is_not_backdated():
     result = reconcile(prior, sources, LATEST)
     assert fee_total(result) == Decimal("0")
     assert result["movements"] == []
+
+
+def test_order_created_after_opening_and_delivered_november_keeps_single_fee():
+    data = _data()
+    raw = data["unified_orders"][0]["raw_by_source"]["salla_direct"]
+    raw["created_at"] = "2026-11-19T10:00:00+00:00"
+    state = _state()
+    sources = _sources(data, state)
+    assert len(sources["orders"]) == 1
+    result = reconcile(deepcopy(state), deepcopy(sources), LATEST)
+    assert fee_total(result) == Decimal("12.00")
+    assert "shipping:100:base_shipping" in result["engine"]["obligations"]
+    assert reconcile(deepcopy(result), deepcopy(sources), LATEST) == result
