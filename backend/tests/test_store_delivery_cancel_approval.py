@@ -221,3 +221,53 @@ async def test_release_gate_defaults_closed(monkeypatch):
         assert err.value.detail["code"] == "cancel_approval_release_gate_closed"
     finally:
         await cleanup(client, db)
+
+
+@pytest.mark.asyncio
+async def test_pending_cancellation_blocks_driver_delivery_and_exception_replacement():
+    """A courier cannot accrue delivery income or erase a pending customer refusal."""
+    from store_delivery_driver_app_routes import (
+        DriverDeliveryException, DriverStatusUpdate, MOBILE_APP_CLIENT,
+        make_store_delivery_driver_app_router,
+    )
+
+    client, db = await scenario()
+    try:
+        await db["store_drivers"].insert_one({
+            "user_id": "merchant", "id": "driver-1",
+            "account_user_id": "driver-account", "status": "active",
+        })
+        actor = {
+            "id": "driver-account", "role": "store_driver",
+            "created_by": "merchant", "_session_client": MOBILE_APP_CLIENT,
+        }
+        router = make_store_delivery_driver_app_router(db, lambda: actor)
+        status = next(
+            row.endpoint for row in router.routes
+            if row.path.endswith("/deliveries/status")
+        )
+        exception = next(
+            row.endpoint for row in router.routes
+            if row.path.endswith("/deliveries/exception")
+        )
+        with pytest.raises(HTTPException) as status_error:
+            await status(
+                DriverStatusUpdate(
+                    barcode=ORDER_NUMBER, target_status="delivered",
+                ),
+                user=actor,
+            )
+        assert status_error.value.detail["code"] == "driver_cancellation_pending_staff_approval"
+        with pytest.raises(HTTPException) as exception_error:
+            await exception(
+                DriverDeliveryException(
+                    barcode=ORDER_NUMBER,
+                    exception_code="customer_unreachable",
+                ),
+                user=actor,
+            )
+        assert exception_error.value.detail["code"] == "driver_cancellation_pending_staff_approval"
+        assert await db["store_delivery_collections"].count_documents({}) == 0
+        assert await db["store_delivery_driver_earnings"].count_documents({}) == 0
+    finally:
+        await cleanup(client, db)
