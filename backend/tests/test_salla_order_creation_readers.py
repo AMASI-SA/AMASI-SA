@@ -160,3 +160,26 @@ def test_salla_unsuccessful_product_response_is_denied():
             None, "owner", 123, request=get,
             integration_reader=integration("products.read"),
         ))
+
+
+
+def test_product_details_read_write_scope_is_valid_for_read_only_get():
+    async def get(*args, **kwargs):
+        return product_response()
+    row = asyncio.run(read_exact_product(
+        None, "owner", 123, request=get,
+        integration_reader=integration("orders.read_write products.read_write"),
+    ))
+    assert row["product_id"] == 123
+    assert row["can_use_as_final_quote"] is False
+
+
+def test_shipping_read_only_scope_can_read_estimates_without_write():
+    async def get(*args, **kwargs):
+        return shipping_response()
+    quotes = asyncio.run(read_shipping_rate_candidates(
+        None, "owner", country_id=1, city_id=2, request=get,
+        integration_reader=integration("shipping.read"),
+    ))
+    assert len(quotes) == 1
+    assert quotes[0]["is_final_cart_quote"] is False
