@@ -52,9 +52,14 @@ def copy_report_value(value):
         _keep_alive(source, memo)
         return result
 
-    preparation_checkpoint()
-    with phase("report_copy_cpu_ms", cpu=True):
-        result = clone(value)
-    preparation_checkpoint()
-    return result
+    try:
+        preparation_checkpoint()
+        with phase("report_copy_cpu_ms", cpu=True):
+            result = clone(value)
+        preparation_checkpoint()
+        return result
+    finally:
+        # Break the private recursive function/cell cycle so its keepalive memo
+        # can be released, without clearing a memo retained by a custom hook.
+        clone = None
 

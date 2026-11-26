@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.431" timestamp="2026-11-26T06:51:18.077172+03:00" hostname="7b1c7493d169"><testcase classname="backend.tests.test_operational_balance_bundle_item_view" name="test_collector_does_not_clone_complete_native_items_before_bundle_selection" time="0.982"><failure message="AssertionError: fresh collector items were fully copied before bundle selection&#10;assert [{'id': 'line...p', ...}, ...] == []&#10;  &#10;  Left contains 8 more items, first extra item: {'id': 'line', 'options': [], 'options_normalized': {'Color': 'Scarlet'}, 'product_id': 'p', ...}&#10;  Use -v to get more diff">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f55f2f19ac0&gt;
+
+    def test_collector_does_not_clone_complete_native_items_before_bundle_selection(monkeypatch):
+        data = repeated_fixture(8)
+        before = deepcopy(data)
+        calls = []
+        original = bundles.deepcopy
+    
+        def copied(item):
+            calls.append(item)
+            return original(item)
+    
+        monkeypatch.setattr(bundles, 'deepcopy', copied)
+        result = asyncio.run(sources.collect_sources(collector_database(data), 'owner', START, NOW))
+        assert len(result['orders']) == 8
+        assert all(order['items'][0]['cost'] == '36' for order in result['orders'])
+        assert data == before
+&gt;       assert calls == [], 'fresh collector items were fully copied before bundle selection'
+E       AssertionError: fresh collector items were fully copied before bundle selection
+E       assert [{'id': 'line...p', ...}, ...] == []
+E         
+E         Left contains 8 more items, first extra item: {'id': 'line', 'options': [], 'options_normalized': {'Color': 'Scarlet'}, 'product_id': 'p', ...}
+E         Use -v to get more diff
+
+backend/tests/test_operational_balance_bundle_item_view.py:27: AssertionError</failure></testcase></testsuite></testsuites>

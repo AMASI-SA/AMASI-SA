@@ -248,7 +248,7 @@ def _closed_foreign_tender(raw, payment, *, owner, order_number, provider_order_
 
 
 def normalize_operational_payment(raw, currency, total, created_at, as_of, *, owner, order_number,
-                                  provider_order_id, rows, source):
+                                  provider_order_id, rows, source, read_only=False):
     """Use the order detail's final documented amounts, retaining transaction conflicts."""
     from salla_payment_collection import provider_order_page_current, provider_order_page_balance, settled_payment_snapshot
     rows = expand_batches(rows)
@@ -285,7 +285,11 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
         provider_order_id=provider_order_id, rows=rows, source=source, created_at=created_at, as_of=as_of)
     if split is not None:
         return split
-    canonical = settled_payment_snapshot(raw) if amounts else raw
+    if amounts and read_only is True:
+        from operational_payment_read_view import settled_payment_read_view
+        canonical = settled_payment_read_view(raw)
+    else:
+        canonical = settled_payment_snapshot(raw) if amounts else raw
     if amounts and (canonical.get("payment") or {}).get("paid_amount") is None:
         # Bind a root-only paid amount to any available transaction for this order.
         canonical = {**canonical, "payment": {**(canonical.get("payment") or {}), "paid_amount": amounts["paid"]}}
