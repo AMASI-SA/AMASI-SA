@@ -210,6 +210,12 @@ async def save_private_order_field(
             current.get("contact_id") != contact_id or
             current.get("intent_id") != intent_id):
         raise PrivateOrderFieldDenied("private_field_scope_conflict")
+    expiry = current.get("purge_after")
+    if isinstance(expiry, datetime):
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if expiry <= clock:
+            raise PrivateOrderFieldDenied("private_field_record_expired")
     last = current.get("last_message_id")
     rev = current.get("revision")
     if (type(last) is not int or type(rev) is not int or
@@ -246,6 +252,7 @@ async def load_private_order_fields(
     db: Any, *,
     owner_id: str, account_id: int, inbox_id: int, conversation_id: int,
     intent_id: str, contact_id: int, cipher: Any | None = None,
+    now: datetime | None = None,
 ) -> dict:
     """Private Mezan ONLY. Never expose this return value in an API reply."""
     if type(contact_id) is not int or contact_id < 1:
@@ -258,4 +265,12 @@ async def load_private_order_fields(
     })
     if row is None:
         raise PrivateOrderFieldDenied("private_customer_fields_not_found")
+    expiry = row.get("purge_after")
+    if not isinstance(expiry, datetime):
+        raise PrivateOrderFieldDenied("private_customer_fields_expiration_missing")
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    clock = now or datetime.now(timezone.utc)
+    if clock.tzinfo is None or expiry <= clock.astimezone(timezone.utc):
+        raise PrivateOrderFieldDenied("private_customer_fields_expired")
     return _decode(cipher or _fernet_from_env(), row.get("encrypted_fields"))
