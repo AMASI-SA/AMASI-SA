@@ -178,7 +178,12 @@ async def create_confirmed_salla_order(
             db, user_id, "POST", "/orders",
             json=build_pending_order_payload(order),
         )
-        data = result.get("data") if isinstance(result, dict) else None
+        # Reject provider-level failure even when an error envelope happens
+        # to contain a numeric id. An uncertain provider outcome is reconciled,
+        # never optimistically announced to the customer.
+        if not isinstance(result, dict) or result.get("success") is False:
+            raise ValueError("Salla create call not confirmed successful")
+        data = result.get("data")
         if not isinstance(data, dict) or isinstance(data.get("id"), bool):
             raise ValueError("Salla create response missing order object")
         order_id = data.get("id")
