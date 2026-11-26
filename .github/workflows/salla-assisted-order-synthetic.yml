@@ -24,4 +24,4 @@ jobs:
       - name: Install isolated test dependencies
         run: python -m pip install 'pytest>=8,<10' 'pydantic>=2.8,<3'
       - name: Run no-network synthetic test suite
-        run: PYTHONPATH=backend python -m pytest --noconftest backend/tests/test_salla_order_creation_payload.py backend/tests/test_salla_order_creation_service.py backend/tests/test_salla_order_creation_signature.py backend/tests/test_salla_order_creation_readers.py backend/tests/test_salla_order_creation_confirmation.py backend/tests/test_salla_order_creation_customer_identity.py -q
+        run: PYTHONPATH=backend python -m pytest --noconftest backend/tests/test_salla_order_creation_payload.py backend/tests/test_salla_order_creation_service.py backend/tests/test_salla_order_creation_signature.py backend/tests/test_salla_order_creation_readers.py backend/tests/test_salla_order_creation_confirmation.py backend/tests/test_salla_order_creation_customer_identity.py backend/tests/test_salla_order_creation_catalog_validation.py -q
