@@ -70,6 +70,37 @@ class SallaCatalogTest(unittest.TestCase):
         )
         self.assertEqual(zero["display_price_sar"],"99.00")
 
+    def test_real_salla_detail_field_shapes_with_options(self):
+        # Same public field structure verified against Amasi Salla read API.
+        row=product(
+            quantity=None, unlimited_quantity=True,
+            url="https://amasi-sa.com/ar/AMS11847-سوار-بالاسم-وزهرة-لامعة-مخصص",
+            urls={"customer":"https://amasi-sa.com/ar/AMS11847-سوار-بالاسم-وزهرة-لامعة-مخصص"},
+            sale_price={"amount":99,"currency":"SAR"},
+            options=[
+                {"id":858952591,"name":"الاسم","type":"text",
+                 "purpose":"form","required":False,"visibility":"always","values":[]},
+                {"id":220181128,"name":"اللون","type":"radio",
+                 "purpose":"form","required":True,"visibility":"always",
+                 "values":[
+                     {"id":245832621,"name":"ذهبي",
+                      "price":{"amount":0,"currency":"SAR"},"is_out_of_stock":False},
+                     {"id":1485585070,"name":"فضي",
+                      "price":{"amount":0,"currency":"SAR"},"is_out_of_stock":False}
+                 ]}
+            ]
+        )
+        result=public_salla_product(row,fetched_at=NOW,detailed=True)
+        self.assertTrue(result["options_verified"])
+        self.assertEqual(result["display_price_sar"],"99.00")
+        self.assertEqual(result["inventory_hint"],"unlimited")
+        self.assertEqual(len(result["options"]),2)
+        self.assertFalse(result["options"][0]["required"])
+        self.assertTrue(result["options"][1]["required"])
+        self.assertEqual(len(result["options"][1]["values"]),2)
+        self.assertEqual(result["options"][1]["values"][0]["name"],"ذهبي")
+        self.assertNotIn("supplier_cost",str(result))
+
     def test_unrecognized_options_not_claimed(self):
         row=product(options=[{"unknown_option":"unverified"}])
         result=public_salla_product(row,fetched_at=NOW,detailed=True)
