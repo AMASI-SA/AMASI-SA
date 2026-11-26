@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from salla_integration.service import call_salla, get_integration
 
 from .payload import PendingOrder
-from .service import CreationDenied, create_confirmed_salla_order
+from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id
 
 
 class AssistedCreateRequest(BaseModel):
@@ -54,6 +54,32 @@ def make_assisted_salla_order_router(
             ),
             "proof_writers_integrated": False,
             "note": "Scope is a stored token claim, not live API authorization proof.",
+        }
+
+    @router.get("/intents/{intent_id}")
+    async def get_intent_status(
+        intent_id: str, user: dict = Depends(current_user),
+    ) -> dict:
+        role = str((user or {}).get("role") or "").strip().lower()
+        if not user or (role != "owner" and user.get("is_owner") is not True):
+            raise HTTPException(status_code=403, detail={"code": "owner_only"})
+        try:
+            key = intent_storage_id(str(user["id"]), intent_id)
+        except CreationDenied as exc:
+            raise HTTPException(
+                status_code=exc.status_code, detail={"code": exc.code}
+            ) from exc
+        record = await db.salla_ai_order_intents.find_one({
+            "_id": key, "user_id": str(user["id"]),
+        })
+        if not record:
+            raise HTTPException(status_code=404, detail={"code": "not_found"})
+        # Never return payload/customer data, secrets or private quote contents.
+        return {
+            "state": record.get("state"),
+            "salla_order_id": record.get("salla_order_id"),
+            "reference_id": record.get("reference_id"),
+            "needs_reconciliation": record.get("state") == "unknown",
         }
 
     @router.post("/create-confirmed")
