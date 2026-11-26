@@ -91,6 +91,7 @@ async def prepare_salla_unpaid_order_intent(
             product_id: await product_reader(db, user_id, product_id)
             for product_id in sorted(product_ids)
         }
+        product_checked_at = now or datetime.now(timezone.utc)
         rates = await rate_reader(
             db, user_id,
             country_id=order.ship_to.country,
@@ -98,6 +99,10 @@ async def prepare_salla_unpaid_order_intent(
             postal_code=order.ship_to.postal_code,
         )
         methods = await methods_reader(db, user_id)
+        # Capture elapsed time between product and shipping/payment reads.
+        # Never mark catalog fresh merely by using an earlier request start
+        # timestamp for both source and verification time.
+        timestamp = now or datetime.now(timezone.utc)
         if (not isinstance(methods, dict) or
                 methods.get("source") != "salla_payment_methods" or
                 methods.get("can_create_order") is not False):
@@ -110,7 +115,7 @@ async def prepare_salla_unpaid_order_intent(
 
         product_evidence = validate_selected_cart(
             order, catalog_by_product_id=products,
-            checked_at=timestamp, now=timestamp,
+            checked_at=product_checked_at, now=timestamp,
         )
         shipping_evidence = validate_shipping_selection(
             order, selected_rate_id=selected_rate_id,
