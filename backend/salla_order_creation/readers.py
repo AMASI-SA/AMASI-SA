@@ -110,8 +110,31 @@ async def read_exact_product(
         option_facts.append({
             "option_id": opt["id"],
             "name": str(opt.get("name") or "")[:120],
+            "type": str(opt.get("type") or "")[:40],
             "required": opt.get("required") is True,
             "values": values,
+        })
+    variant_facts = []
+    for variant in product.get("skus") or []:
+        if (not isinstance(variant, dict) or type(variant.get("id")) is not int or
+                variant["id"] <= 0 or
+                not isinstance(variant.get("related_option_values"), list)):
+            raise SourceUnavailable("unverified_product_variant")
+        values = variant["related_option_values"]
+        if (any(type(v) is not int or v < 1 for v in values) or
+                len(values) != len(set(values))):
+            raise SourceUnavailable("invalid_variant_value_id")
+        sku_unlimited = variant.get("unlimited_quantity") is True
+        stock = variant.get("stock_quantity")
+        if not sku_unlimited:
+            if isinstance(stock, bool) or not str(stock).isdigit():
+                raise SourceUnavailable("variant_stock_unverified")
+            stock = int(stock)
+        variant_facts.append({
+            "variant_id": variant["id"],
+            "selected_option_value_ids": sorted(values),
+            "available_quantity": None if sku_unlimited else stock,
+            "provider_variant_price_sar": _money_sar(variant.get("price")),
         })
     return {
         "product_id": identifier,
@@ -119,6 +142,7 @@ async def read_exact_product(
         "taxed_base_price_sar": amount,
         "available_quantity": None if unlimited else int(inventory),
         "options": option_facts,
+        "variants": variant_facts,
         "source": "salla_product_details",
         "can_use_as_final_quote": False,
     }
