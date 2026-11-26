@@ -1,0 +1,51 @@
+2026-11-26T03:19:18.9823174Z   ref: 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:18.9836268Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:18.9837354Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:18.9838622Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:19.3916201Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:20.7227233Z  * branch            7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6 -> FETCH_HEAD
+2026-11-26T03:19:20.7340213Z [command]/usr/bin/git checkout --progress --force 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.3770283Z Note: switching to '7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6'.
+2026-11-26T03:19:21.3880360Z 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.5190267Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:21.5190902Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:21.5191498Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:21.7139797Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:21.7140494Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:21.7141134Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:37.6873356Z [36;1mdocker run -d --name operational-projection-rs -p 127.0.0.1:27305:27305 mongo:8.0.12 --port 27305 --replSet operationalprojection --bind_ip_all --wiredTigerCacheSizeGB 1[0m
+2026-11-26T03:19:37.6877391Z [36;1m  if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi[0m
+2026-11-26T03:19:37.6879340Z [36;1mdocker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'[0m
+2026-11-26T03:19:37.6914892Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:37.6915495Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:37.6916057Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:48.3173351Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:48.3173946Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:48.3174506Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:48.3177441Z   EXPECTED_SOURCE: 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:48.3393709Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:48.3394502Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:19:48.3395066Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:34:31.7906526Z 8073 passed, 12 warnings, 151 subtests passed in 881.52s (0:14:41)
+2026-11-26T03:34:33.4420653Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:34:33.4421255Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:34:33.4421809Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:42.5333161Z 106 passed, 5 warnings in 68.35s (0:01:08)
+2026-11-26T03:35:43.1156000Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:43.1156575Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:43.1157110Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.1916691Z 16 passed, 18 subtests passed in 0.64s
+2026-11-26T03:35:44.2493578Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.2494176Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.2494713Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.4251144Z [36;1mprint('Demand-read acceptance:', len(cases), 'executed cases; zero skips/failures/errors')[0m
+2026-11-26T03:35:44.4301324Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.4302792Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.4303603Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.4675808Z Demand-read acceptance: 106 executed cases; zero skips/failures/errors
+2026-11-26T03:35:44.4800278Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.4800845Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:44.4801434Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:45.9031537Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:45.9032132Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-26T03:35:45.9032899Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection

@@ -1,0 +1,100 @@
+{
+  "schema": "local-ci-artifact-summary-v1",
+  "artifact": "stock-15084079732.zip",
+  "artifact_bytes": 113835,
+  "sha256": "1fbfa3850128202452b86d7c30ee3665bfb1d1124a642ed1d30ce9cafb39574d",
+  "expected_sha256_matches": true,
+  "verification_scope": "Local artifact contents only; no tests, source changes, Git writes, host commands, database access, or CI reruns.",
+  "xml_results": [
+    {
+      "member": "eligibility-backend.xml",
+      "sha256": "a8138b05bd02fb0790d99311883a3e7ce430bd1b26fe9bac3b8b71c453fd753c",
+      "advertised": {
+        "tests": 6843,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "testcase_elements": 6746,
+      "status_elements": {
+        "failure": 0,
+        "error": 0,
+        "skipped": 0
+      },
+      "testcases_without_failure_error_or_skipped": 6746,
+      "duplicate_classname_name_pairs": 0,
+      "advertised_minus_testcase_elements": 97,
+      "duration_seconds": "797.567",
+      "timestamp": "2026-11-26T03:19:44.874995+00:00"
+    }
+  ],
+  "members": [
+    "eligibility-backend.xml"
+  ],
+  "new_modules": {
+    "test_operational_balance_payment_read_view": {
+      "expected": 45,
+      "testcase_elements": 45,
+      "unique_classname_name_pairs": 45,
+      "matches_expected": true,
+      "status": "all without failure/error/skipped"
+    },
+    "test_operational_balance_option_authority": {
+      "expected": 63,
+      "testcase_elements": 63,
+      "unique_classname_name_pairs": 63,
+      "matches_expected": true,
+      "status": "all without failure/error/skipped"
+    },
+    "test_operational_balance_report_copy_lifetime": {
+      "expected": 7,
+      "testcase_elements": 7,
+      "unique_classname_name_pairs": 7,
+      "matches_expected": true,
+      "status": "all without failure/error/skipped"
+    },
+    "test_operational_balance_archive_checkpoint_boundaries": {
+      "expected": 32,
+      "testcase_elements": 32,
+      "unique_classname_name_pairs": 32,
+      "matches_expected": true,
+      "status": "all without failure/error/skipped"
+    }
+  },
+  "required_mongo_cases": [
+    {
+      "name": "test_actual_provider_payout_allocates_to_one_split_share_only_and_replay_is_idempotent",
+      "occurrences_in_backend_xml": 1,
+      "classname": "tests.test_operational_balance_split_tenders",
+      "status": "without failure/error/skipped"
+    },
+    {
+      "name": "test_frozen_split_order_does_not_turn_into_a_second_bank_receipt_or_cod_collection",
+      "occurrences_in_backend_xml": 1,
+      "classname": "tests.test_operational_balance_split_tenders",
+      "status": "without failure/error/skipped"
+    },
+    {
+      "name": "test_replayed_refresh_of_bank_and_bnpl_waits_for_original_bank_leg_date",
+      "occurrences_in_backend_xml": 1,
+      "classname": "tests.test_operational_balance_bank_tender_proof",
+      "status": "without failure/error/skipped"
+    },
+    {
+      "name": "test_existing_provider_share_can_coexist_only_when_proved_same_payment",
+      "occurrences_in_backend_xml": 1,
+      "classname": "tests.test_operational_balance_bank_tender_proof",
+      "status": "without failure/error/skipped"
+    }
+  ],
+  "all_requested_cases_present_once_per_backend_xml": true,
+  "all_requested_new_module_counts_match": true,
+  "no_failure_error_or_skipped_in_any_xml": true,
+  "limitations": [
+    "Advertised tests and actual testcase elements differ in the backend XML; both are recorded, and no cause is assigned.",
+    "Named Mongo cases are present and unskipped in XML; job logs establish the actual database environment.",
+    "These independent job artifacts each contain the four required Mongo cases once; executions across jobs must not be mistaken for duplicates inside a suite.",
+    "Stock artifact contains only XML and has no source identity text members; root job logs provide source identity."
+  ],
+  "artifact_declared_source": null
+}

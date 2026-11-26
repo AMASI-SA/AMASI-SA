@@ -42,8 +42,32 @@
   "source_tests": {
     "all_12_source_a_workflows_success": true,
     "source_a": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
-    "targeted_artifact_validation": "in progress",
-    "local_mongo_cases": "Four known local failures require exact-A Mongo CI proof; do not count as locally passed"
+    "targeted_artifact_validation": "passed",
+    "local_mongo_cases": "Four known local failures require exact-A Mongo CI proof; do not count as locally passed",
+    "stock": {
+      "run": 45748115051,
+      "job": 139669122546,
+      "testcases": 6746,
+      "subtests": 97,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "new_module_cases": 147,
+      "required_mongo_cases": 4
+    },
+    "web": {
+      "run": 45748115180,
+      "job": 139669125831,
+      "testcases": 8073,
+      "subtests": 151,
+      "demand_read": 106,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "new_module_cases": 147,
+      "required_mongo_cases": 4
+    },
+    "real_mongo": "Both exact-A jobs provisioned Mongo8.0.12 replica sets and required writable primaries; job logs and JUnit retained."
   },
   "diagnostic": {
     "script_sha256": "1cbda56ef7fd0ad64fb9a9b10c33f30cbc69111ea2d6e5c547293f91b3f21fff",

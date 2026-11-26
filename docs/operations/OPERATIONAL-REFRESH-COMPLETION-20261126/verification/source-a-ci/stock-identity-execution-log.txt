@@ -1,0 +1,19 @@
+2026-11-26T03:19:18.3645096Z   ref: 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:18.8072276Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:20.4281336Z  * branch            7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6 -> FETCH_HEAD
+2026-11-26T03:19:20.4478094Z [command]/usr/bin/git checkout --progress --force 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.0887339Z Note: switching to '7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6'.
+2026-11-26T03:19:21.1013105Z 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.1394580Z 7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:19:21.1412695Z f764cc59cf9eb2ad378656b5cbf0ded462481b2f
+2026-11-26T03:19:32.9423872Z [36;1mdocker run -d --name eligibility-rs -p 127.0.0.1:27462:27462 mongo:8.0.12 --port 27462 --replSet operationalphysical --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5[0m
+2026-11-26T03:19:32.9424868Z [36;1mdocker run -d --name eligibility-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all[0m
+2026-11-26T03:19:32.9428684Z [36;1m  if docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi[0m
+2026-11-26T03:19:32.9429876Z [36;1mdocker exec eligibility-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'[0m
+2026-11-26T03:19:32.9430730Z [36;1mdocker exec eligibility-standalone mongosh --port 27019 --quiet --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'[0m
+2026-11-26T03:33:04.0161347Z 6746 passed, 8 warnings, 97 subtests passed in 797.60s (0:13:17)
+2026-11-26T03:33:05.8075099Z [36;1mprint(f"Eligibility: {len(cases)} executed test cases, zero skips/failures/errors")[0m
+2026-11-26T03:33:05.8945916Z Eligibility: 6746 executed test cases, zero skips/failures/errors
+2026-11-26T03:33:05.9113881Z   name: eligibility-backend-7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6
+2026-11-26T03:33:07.3437370Z Artifact eligibility-backend-7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6.zip successfully finalized. Artifact ID 15084079732
+2026-11-26T03:33:07.3439857Z Artifact eligibility-backend-7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6 has been successfully uploaded! Final size is 113835 bytes. Artifact ID is 15084079732
