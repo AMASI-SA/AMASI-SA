@@ -143,3 +143,28 @@ def test_provider_balance_and_capture_conflicts_match_unindexed_context():
                 "customer_returns": [], "customer_exchanges": [],
             }
         assert _context(state(_indexed(facts)), row) == _context(state(dict(facts)), row)
+
+
+def test_custom_order_equality_under_other_family_forces_lazy_full_scan():
+    class StrangeOrder:
+        def __eq__(self, other):
+            raise ValueError("custom_order_identity")
+
+    strange = StrangeOrder()
+    facts = _indexed({
+        "other:custom": {"order_id": strange},
+        "capture:target": {"order_id": "target", "amount": "100"},
+    })
+    assert list(facts.facts_for(("capture:", "refund:", "provider_order_balance:"), "target")) == list(facts.items())
+
+
+def test_provider_fact_index_scales_with_matching_order_not_total_orders():
+    values = {
+        "capture:%04d" % i: {"order_id": "order-%04d" % i, "amount": "1"}
+        for i in range(2000)
+    }
+    values["provider_order_balance:target"] = {"order_id": "target", "paid": "0"}
+    facts = _indexed(values)
+    selected = list(facts.facts_for(("capture:", "refund:", "provider_order_balance:"), "target"))
+    assert selected == [("provider_order_balance:target", {"order_id": "target", "paid": "0"})]
+    assert len(values) == 2001
