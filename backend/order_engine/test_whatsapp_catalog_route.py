@@ -140,7 +140,7 @@ class SallaCatalogTest(unittest.TestCase):
         app.include_router(make_whatsapp_catalog_router(
             db=object(),fixed_owner_id="test_tenant",active_keys={KID:KEY},
             claim_nonce=lambda *_:True,now_fn=lambda:NOW),prefix="/api")
-        data=b'{"action":"search","keyword":"سوار"}'
+        data='{"action":"search","keyword":"سوار"}'.encode("utf-8")
         bad=signed(data)
         bad["x-amasi-signature"]="0"*64
         with patch("backend.order_engine.whatsapp_catalog_route.call_salla",fake):
