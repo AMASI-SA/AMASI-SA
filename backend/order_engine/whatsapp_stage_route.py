@@ -36,6 +36,7 @@ def make_whatsapp_stage_router(
     claim_nonce: Callable[[str, int], bool],
     resolve_verified_sender: Callable[[int, int], Awaitable[str]],
     source_freshness: Callable[[Any], Awaitable[bool]],
+    rate_limit: Callable[[str], bool] | None = None,
     now_fn: Callable[[], int] = lambda: int(time.time()),
 ) -> APIRouter:
     """No dependency here may be populated from ChatGPT/model instructions.
@@ -70,6 +71,16 @@ def make_whatsapp_stage_router(
             )
         except (StageServiceUnauthorized,ValueError):
             raise HTTPException(status_code=401,detail="service_unauthorized") from None
+
+        if rate_limit is not None:
+            try:
+                allowed=await asyncio.to_thread(rate_limit, request.headers.get("x-amasi-key-id",""))
+                if allowed is not True:
+                    raise HTTPException(status_code=429,detail="rate_limited")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=503,detail="rate_limit_unavailable") from None
 
         try:
             data=json.loads(body)
