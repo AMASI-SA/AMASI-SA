@@ -25,7 +25,7 @@ def fetch(request):
 
 
 def test_short_signed_body_read_with_matching_length():
-    assert fetch(FakeRequest([b'{"',b'"a":1}'],length=7)) == b'{"a":1}'
+    assert fetch(FakeRequest([b'{',b'"a":1}'],length=7)) == b'{"a":1}'
 
 
 def test_bounded_body_can_stream_without_content_length():
