@@ -115,7 +115,6 @@ def test_assembler_from_complete_private_facts():
     assert o.receiver.phone=="+966500000001"
     assert o.customer.mobile=="+966500000000"
     assert o.ship_to.geo_coordinates.lat==24.7
-    assert o.payment if False else True
     assert o.accepted_methods==["mada"]
 
 
