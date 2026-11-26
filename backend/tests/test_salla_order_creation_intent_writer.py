@@ -111,6 +111,8 @@ def create(db=None,o=None,now=NOW,enabled=True,**kwargs):
             target,user_id="owner",intent_id="intent-1234",
             inbox_id="2",conversation_id="3",
             order=o or order(), selected_rate_id=800,
+            source_message_id=kwargs.get("source_message_id"),
+            source_contact_id=kwargs.get("source_contact_id"),
             enabled=enabled, product_reader=kwargs.get("product_reader",read_product),
             rate_reader=kwargs.get("rate_reader",read_rates),
             methods_reader=kwargs.get("methods_reader",read_methods),
@@ -234,3 +236,24 @@ def test_nullable_international_address_survives_storage():
     assert persisted["ship_to"]["district"] is None
     assert persisted["ship_to"]["postal_code"] is None
     assert PendingOrder.model_validate(persisted).ship_to.district is None
+
+
+
+def test_signed_native_origin_is_immutable_with_order_intent():
+    db=DB()
+    _,first=create(db=db,source_message_id=501,source_contact_id=77)
+    row=db.salla_ai_order_quotes.rows[0]
+    assert row["source_message_id"]==501
+    assert row["source_contact_id"]==77
+    _,second=create(db=db,source_message_id=501,source_contact_id=77)
+    assert first==second
+    with pytest.raises(PrepareDenied,match="different_cart"):
+        create(db=db,source_message_id=502,source_contact_id=77)
+
+
+def test_signed_native_origin_requires_both_positive_ids():
+    for source_msg,source_contact in (
+        (501,None),(None,77),(0,77),(501,0),(True,77)
+    ):
+        with pytest.raises(PrepareDenied,match="invalid_signed_customer_origin"):
+            create(source_message_id=source_msg,source_contact_id=source_contact)
