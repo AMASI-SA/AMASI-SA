@@ -37,14 +37,15 @@ The sole manual refresh on PR2133 started at 02:41:38.999 UTC and returned `oper
 
 These stages overlap and must not be summed indiscriminately. All 19,151 primary orders completed under the explicit 20-second allowance; first row was 11.132 ms, application queue 0.033 ms, cursor close 51.534 ms. The unchanged 85-second outer budget expired before source conversion/reconciliation/save completed. Thus source read admission improved, but the live root-fix goal remains open.
 
-## Diagnosis in progress
+## Initial diagnosis and preserved decisions
 
 Read-only independent work is tracing the remaining order loop and bundle normalization, archive/native snapshot materialization, and the request's dependency graph. Native proof acquisition intentionally precedes primary order reads because adapters write version-bound source evidence. Profit already overlaps collection after primary reads. Do not substitute profit and operational cohorts or authority results without exact projection/freshness/correction parity.
 
 A concrete candidate for investigation is duplicate full validated financial/issue packet decoding: native gap preparation decodes packets, then aggregate unpack decodes the same contents again. Any request-local reuse must bind exact packet/owner/metadata, retain validation and authorization, own cancellation, and avoid mutable aliasing or retained stale data. No implementation decision or production speed claim is established yet.
 
-Current follow-up production source edits: none. New lease/publication/manual retry: none.
-Next safe action: identify and measure substantial repeated work, implement only a proved equivalent scoped optimization, run relevant regression and independent review, then create a fresh A/B with all required gates before any further authorized publication. Continue to live saved-calculation and historical-preservation acceptance.
+At the initial diagnosis checkpoint, no follow-up source change had been made.
+The verified implementations and current next action are recorded below. No new
+lease, publication or manual retry has occurred in this follow-up.
 
 Issue #1006 is at its comment cap; update this task document, its PR, and the evidence branch. Keep private financial reports outside GitHub.
 
@@ -99,3 +100,93 @@ Production remains the verified PR2133 runtime, whose sole post-publication
 manual refresh failed. Continue scoped implementation, independent review and
 complete affected verification before freezing a new A/B release. Do not retry
 the existing live refresh blindly or repeat the prior release.
+
+## Completed source implementation and candidate A
+
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/2134.
+Previous remote checkpoint: `7328d8e745eb0eff1109024995f1968a5a6c5964`.
+The next source checkpoint containing this section is the candidate source A;
+its exact commit/tree must be taken from Git metadata and retained in the
+separate release evidence. It is not permission to merge before its gates pass.
+
+Four narrowly scoped changes are complete:
+
+1. The adjacent audit checkpoint reduction described above.
+2. A successful option-catalog authority reused only during one source attempt.
+   All per-line prices, quantities, selected bindings, identities, currency and
+   failure paths remain outside the cache. The exact native catalog/binding
+   graph is observed and checked again before observations leave collection;
+   changes reject the whole attempt. The scope is cleared on every exit.
+3. An internal read-only payment-normalization view borrows only four unused
+   nonfinancial root branches. The public snapshot retains complete independent
+   copying; financial aliases/cycles and all admission rules are preserved.
+   Unsupported objects retain the old path.
+4. The report copier clears only its private recursive closure reference in a
+   `finally` block. This releases the keepalive memo promptly after success,
+   errors and cancellation while preserving any memo deliberately retained by a
+   custom deepcopy hook. No bundle-copy callsite changes were made.
+
+Option regression testing reproduced and fixed a real effectiveness issue:
+ordinary unprojected Mongo binding rows contain ObjectId/datetime metadata.
+Exact native metadata now participates correctly; ObjectId's replaceable byte
+slot is observed, and custom time zones/subclasses retain fallback. The author
+ran 176 cases (63 new and 113 existing), all passing in 3.75 seconds. Independent
+review compared original catalog/admission/token blocks by AST and reviewed all
+new cases without rerunning them; no blocker remained.
+
+Payment tests: 45 new cases passed in 1.08 seconds. The wider local run passed
+430 cases plus 184 subtests but could not execute four real-Mongo scenarios
+because the local Mongo listener was absent. The unchanged JUnit is retained as
+`evidence/payment_contracts_local_mongo_unavailable.xml`, not presented as green.
+Both strict Operational Balance CI environments provision real replica sets and
+must execute those cases with no skips, failures or errors. The new payment test
+was renamed to `test_operational_balance_payment_read_view.py` with identical
+content so those existing CI discovery lists actually execute it.
+
+Copier lifetime controls first produced 5 intended failures and 2 passes on the
+old source; the complete targeted set then passed 74 cases in 3.810 seconds with
+no skips/errors/failures. The root reviewer read the final tail-only source diff
+and all seven weakref/hook cases. Audit-boundary evidence remains 119 passes,
+with its 11 explicitly deselected local integration cases still required in CI.
+
+### Actual-runtime paired source measurement
+
+The final synthetic pair uses the actual option and payment implementations,
+native BSON-shaped binding metadata, 19,151 orders, 76,604 items and 128 products.
+The same frozen runtime is used for both modes; the baseline explicitly disables
+the two opt-ins. Complete output equality, serialized output, inputs, query
+sequence and runtime source hashes all match. No database query was added.
+
+| Measured work | Opt-ins disabled | Actual candidate |
+| --- | ---: | ---: |
+| Source-order stage | 14,216.590 ms | 10,576.560 ms |
+| Option token validation | 3,202.092 ms | 1,133.941 ms |
+| Native catalog constructions | 19,152 | 128 |
+| Payment payload copying | 1,938.521 ms | 649.026 ms |
+| Whole source collection | 30,566.549 ms | 25,070.153 ms |
+
+The unchanged bundle stage also varied by about 1.816 seconds, so the entire
+5.496-second collector difference is not attributed to the opt-ins. This is one
+bounded synthetic pair, not a production latency claim. The authority build
+took 19.770 ms and final validation 8.976 ms. Its measured auxiliary object
+representation is 1,424,776 bytes before caching and 2,310,654 bytes including
+128 catalog results, excluding borrowed source graphs; this is not RSS. The
+sequential process high-water figures are not comparable isolated memory peaks.
+The copier lifetime fix is identical in both modes. Evidence is retained in
+`evidence/measure_option_payment_candidate.py` and its result/findings.
+
+### Remaining required gates and live acceptance
+
+No follow-up Production change has occurred yet. Freeze exact candidate A,
+require its complete applicable CI and reviewed intent artifact, create only
+intent commit B, require B CI and clean-clone rehearsals, merge ordinarily to a
+tree-equivalent D, and require the applicable Production push gates. Preserve
+the unchanged original Release Guard v5 and fresh original-host preservation
+baseline. Execute one authorized direct publication only after those checks.
+
+After official three-probe verification, require an actually advanced saved
+calculation and a fresh recovery report. Compare retained historical movements,
+original dates, bank receipt approval state, delivery/courier obligations,
+advertising and collections against the private baseline. Existing warnings
+about source completeness are not silently converted into verified sources.
+If the live refresh still fails, preserve its trace and keep this task open.

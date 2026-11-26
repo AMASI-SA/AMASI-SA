@@ -870,20 +870,8 @@ def _catalog_identity(value):
     return isinstance(value, (str, int)) and not isinstance(value, bool) and bool(str(value).strip())
 
 
-def _verified_option_tokens(data, product_id, item, bindings, tokens):
-    if not bindings:
-        return tokens
-    if not tokens:
-        raise ValueError('mz2_cost_option_value_unverified')
-    if not any(_option_needs_catalog(bindings, token) for token in tokens):
-        return tokens
-    _catalog_recovery_preserves_ids(item)
-    product = item.get('product') if isinstance(item.get('product'), dict) else {}
-    native_product = item.get('parent_product_id') or item.get('product_id') or product.get('id')
-    if not _catalog_identity(native_product) or str(native_product) != product_id:
-        raise ValueError('mz2_cost_option_catalog_unverified')
-    if product_id in data.get('_option_catalog_errors', set()):
-        raise ValueError('mz2_cost_option_catalog_unverified')
+def _option_catalog_authority(data, product_id, bindings):
+    """Prepare only native catalog/binding identity; never price a selection."""
     candidates = [p for p in data.get('mezan_products_v2', []) if isinstance(p, dict)
                   and _catalog_identity(p.get('salla_product_id')) and str(p['salla_product_id']) == product_id]
     if len(candidates) != 1:
@@ -928,6 +916,25 @@ def _verified_option_tokens(data, product_id, item, bindings, tokens):
             catalog[option]['labels'].add(_option_label(binding['option_name']))
         if binding.get('value_name'):
             catalog[option]['values'][value].add(_option_value_label(binding['value_name']))
+    return catalog, bound
+
+
+def _verified_option_tokens(data, product_id, item, bindings, tokens, *, option_authority=None):
+    if not bindings:
+        return tokens
+    if not tokens:
+        raise ValueError('mz2_cost_option_value_unverified')
+    if not any(_option_needs_catalog(bindings, token) for token in tokens):
+        return tokens
+    _catalog_recovery_preserves_ids(item)
+    product = item.get('product') if isinstance(item.get('product'), dict) else {}
+    native_product = item.get('parent_product_id') or item.get('product_id') or product.get('id')
+    if not _catalog_identity(native_product) or str(native_product) != product_id:
+        raise ValueError('mz2_cost_option_catalog_unverified')
+    if product_id in data.get('_option_catalog_errors', set()):
+        raise ValueError('mz2_cost_option_catalog_unverified')
+    catalog, bound = (_option_catalog_authority(data, product_id, bindings) if option_authority is None else
+                      option_authority.prepare(data, product_id, bindings, _option_catalog_authority))
     resolved = set()
     for token in tokens:
         option, value, name, label, origin = token
@@ -1042,7 +1049,7 @@ async def _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bun
             data['mezan_products_v2'].append(record)
 
 
-def cost_components(data, product_id, item, profile, *, catalog_index=None):
+def cost_components(data, product_id, item, profile, *, catalog_index=None, option_authority=None):
     """Resolve only MZ2-authoritative amounts; services retain independent identity."""
     from operational_product_cost_policy import require_sar_cost
     require_sar_cost(profile)
@@ -1055,7 +1062,7 @@ def cost_components(data, product_id, item, profile, *, catalog_index=None):
              [dict(r, mode='resource') for r in data['mezan_product_resource_bindings_v2'] if str(r.get('salla_product_id')) == product_id])
     bindings = (catalog_index.option_rows(product_id) if catalog_index is not None else
                 [r for r in data['mezan_product_option_cost_bindings_v2'] if str(r.get('salla_product_id')) == product_id])
-    tokens = _verified_option_tokens(data, product_id, item, bindings, tokens)
+    tokens = _verified_option_tokens(data, product_id, item, bindings, tokens, option_authority=option_authority)
     links += selected_cost_options(bindings, tokens)
     seen, services, resource_costs = set(), {}, {}
     for link in links:
@@ -1515,7 +1522,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     with refresh_stage('source_option_catalog'):
         await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
     from operational_retained_payment_index import RetainedPaymentFactScope
-    with refresh_stage('source_orders'), RetainedPaymentFactScope(operational_state) as retained_fact_scope:
+    from operational_option_authority import OptionAuthorityScope
+    with refresh_stage('source_orders'), RetainedPaymentFactScope(operational_state) as retained_fact_scope, \
+            OptionAuthorityScope(data) as option_authority_scope:
         from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
         customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
         customer_tenders["paypal_provider_recognized"] = True
@@ -1537,6 +1546,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             data['_assignment_index'] = assignment_index
             data['_collection_index'] = await prepare_in_thread(build_delivery_collection_index, data['store_delivery_collections'], owner)
             cost_catalog_index = await prepare_in_thread(build_cost_catalog_index, data, unique_index)
+            option_authority = await prepare_in_thread(option_authority_scope.build)
             courier_hold_lookup = await prepare_in_thread(build_courier_hold_lookup, operational_state)
             retained_fact_index = await prepare_in_thread(retained_fact_scope.build)
         service_candidates = {}
@@ -1726,7 +1736,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         continue
                     profile = profiles.get(product_id, {})
                     try:
-                        cost, services = cost_components(data, product_id, item, profile, catalog_index=cost_catalog_index)
+                        cost, services = cost_components(data, product_id, item, profile, catalog_index=cost_catalog_index,
+                                                         option_authority=option_authority)
                         quantity = number(item.get('quantity'))
                     except ValueError as exc:
                         order['items_complete'] = False
@@ -1756,7 +1767,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 total = number(total_value)
                 normalized_payment, payment_issues = normalize_operational_payment(
                     raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
-                    provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source)
+                    provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source, read_only=True)
                 if identity in statement_refund_index:
                     order['statement_refund_observation'] = statement_refund_observation(operational_state, raw,
                         owner=owner, order_id=identity, order_number=order_number,
@@ -1959,6 +1970,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         # Outside per-order recovery: a changed attempt must never return
         # partially accepted financial observations or enter reconciliation.
         await prepare_in_thread(retained_fact_scope.validate)
+        await prepare_in_thread(option_authority_scope.validate)
     with refresh_stage('source_invoices'):
         # An issued, approved MZ2 invoice is the sole confirmation authority.
         # Current piece state may have changed after invoicing and cannot revoke it.

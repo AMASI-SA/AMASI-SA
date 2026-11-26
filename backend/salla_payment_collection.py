@@ -4,6 +4,11 @@ from decimal import Decimal, InvalidOperation
 
 
 def settled_payment_snapshot(payload):
+    return _settled_payment_payload(payload, deepcopy)
+
+
+def _settled_payment_payload(payload, copy_payload):
+    """Shared admission/overlay; ordinary callers retain the independent copy."""
     actions = payload.get("payment_actions")
     remaining = actions.get("remaining_action") if isinstance(actions, dict) else None
     if not isinstance(remaining, dict) or remaining.get("has_remaining_amount") is not False:
@@ -17,7 +22,7 @@ def settled_payment_snapshot(payload):
         return payload
     if not amount.is_finite() or amount <= 0:
         return payload
-    result = deepcopy(payload)
+    result = copy_payload(payload)
     result["payment_actions"]["remaining_action"].update(
         remaining_amount=0, has_remaining_amount=False, checkout_url="")
     result.update(paid_amount=float(amount), remaining_amount=0,
