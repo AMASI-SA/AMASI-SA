@@ -125,6 +125,11 @@ def _is_customer_confirmed(confirmation: dict | None, quote: dict, *,
         ("source", "chatwoot_customer_inbound_v1"),
     )):
         return False
+    # New encrypted private-field quotes must be approved by the same
+    # Chatwoot contact that supplied the customer order details.
+    if (quote.get("source_contact_id") is not None and
+            confirmation.get("source_contact_id") != quote.get("source_contact_id")):
+        return False
     if not isinstance(confirmation.get("message_id"), (str, int)) or not str(
         confirmation["message_id"]
     ).strip():
