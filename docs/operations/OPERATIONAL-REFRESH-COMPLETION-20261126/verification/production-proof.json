@@ -2,7 +2,7 @@
   "schema": 1,
   "phase": "production_verified_exact_preservation_review_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
-  "production_changed": false,
+  "production_changed": true,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
   "source_a": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
   "source_a_tree": "c8e2297bcccf65b545a0aa0b3c798944232234dd",
@@ -842,7 +842,8 @@
       "stderr_bytes": 0,
       "final_guard_status": {
         "active": false
-      }
+      },
+      "full_proof_preserved": true
     },
     "retained_receipt": {
       "phase": "production_verified_local_restore_pending",
@@ -874,5 +875,6 @@
     "workflows_and_jobs_sha256": "0a9d85b545930593809848746dcaba2cbc556d1fba1ce06cda59f581e91d65a3",
     "clean_clone_verification_sha256": "dc082c59106fbfa1436182fc945b9945231faac4ac4bc7d0ea82a57cff98a521",
     "web_stock_push_not_applicable": true
-  }
+  },
+  "live_acceptance_plan": "Observe the existing next natural scheduler attempt on the verified new release; no new manual financial calculation has been triggered. Accept only a fresh saved report and privately reviewed preservation/duplication comparison."
 }

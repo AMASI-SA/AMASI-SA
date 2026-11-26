@@ -1,192 +1,32 @@
-# Operational refresh completion — 2026-11-26
+# Operational refresh completion — current handoff
 
-## Authority and current verified state
+Task remains OPEN until a fresh production calculation saves and private financial acceptance succeeds.
 
-The merchant authorized resolving the underlying accounting refresh problem, merging, publishing directly to Production, and continuing testing until resolved. Preserve historical movements, original dates, bank evidence, financial formulas and idempotency. Keep Mezan light: no extra recurring jobs, query fan-out, blind refresh retries, invented transactions, paid Emergent agent chat or Preview. The unchanged original Release Guard v5 remains mandatory.
+## Immutable release
 
-Repository: AMASI-SA/AMASI-SA. Follow-up branch: `codex/operational-refresh-completion-20261126`.
-Verified current production/base D: `317dc183485566ba9e05c5afca5d4ea1b84e291e`, tree `a8aedd1be45cf7dcb26b31078a6c5e580709e30f`.
-PR2133 source A: `50cbe07da4e29fa41c7a184addffdeb8d2169f1a`; intent B: `4067edbfbfd0739382a1c390784bc238a7f00b7f`.
-Runtime release: `rg5-5064eab0115d74d39ba29eeed04f13511f5a27156260c0cc5a3a4bc2045e1fb5`.
+- PR2134 merged ordinarily into `hotfix/prod-snap-meta-final`.
+- Source A: `b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d`.
+- Intent-only B: `a59e6ee18f41d13baaa0e863de2ed5810dd43319`.
+- Deployment D: `33be2d0e1b51faa355d55707c0c374f4c1d6bbe2`.
+- B/D tree: `57601ee93838dde732e122354f0766c7e7414301`.
+- Runtime: `rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86`.
 
-PR2133 was merged, passed exact A/B/D CI, clean-clone rehearsals and the original-host adapter/package checks, and was published exactly once as provider version `bad38ff` at 05:17 Asia/Riyadh. The original verifier ran once, passed all three exact identity/frontend probes, and closed its lease at 02:34 UTC. Raw proof SHA256: `108220774d22e0074127aa10d63b1dbd5e35afbaaf87998ac14c6bed37da6c4b`.
+All13 applicable A and B workflows passed. All3 exact-D push workflows and11 jobs passed, including both clean-clone rehearsals. The branch-specific TikTok job is inapplicable. No workflow, guard, financial formula, cohort, deadline or polling changes.
 
-The task-stopped local Backend was restored at 02:41:22.858577 UTC. A separately reviewed continuation retained the original failed preservation receipt: all 432 untracked paths remain, 431 records are identical, and one platform bookkeeping file retained its original prefix with 378 appended bytes. One credential-file inode replacement is recorded using metadata only. Its contents were not read/hashed/copied/modified, and no actor attribution is established. Original baseline and guard were not changed.
+## Production changed: YES
 
-Durable prior-release evidence: `codex/operational-refresh-source-publication-evidence-20261126` at `7ddf136d875cf325189b47f2887de9892405edd5`, path `docs/operations/OPERATIONAL-REFRESH-SOURCE-ROOT-FIX-20261126/verification/production-proof.json`. That documentation-only branch must never be merged or deployed. Do not repeat PR2133's publication or verifier.
+Original-host rehearsal and preservation passed. Original v5 prepare/prepublish exited0. One direct publication was clicked at2026-11-26T04:53:18.827Z. The provider showed a newer green `Deployment finished`, Nov26 08:03 Asia/Riyadh, new version `bff6a19`; observation05:04:26.562UTC. The UI caps its published-version counter at100; no101st-counter claim.
 
-## Live acceptance failure
+One unchanged official verifier ran05:05:09.532939→05:18:45.614482UTC, exit0, verified=true, checks=3, exact A/D/runtime, and closed the matching lease. Full proof `verification/original-host/guard-verify.json`,43129bytes, SHA256 `6e6534130c99d75433c08e2f281a444fb72c441873e2229c25949bd238ad761b`.
 
-The sole manual refresh on PR2133 started at 02:41:38.999 UTC and returned `operational_refresh_timeout` at 02:43:06.228 UTC. The previous saved snapshot remains in use; no new successful financial calculation or recovery report was accepted.
+## Local restoration remains pending
 
-| Stage | Observed milliseconds | Outcome |
-| --- | ---: | --- |
-| Native evidence | 11142.523 | complete |
-| Raw aggregate read | 119.896 | complete |
-| Aggregate unpack | 16287.066 | complete |
-| Redundant copy preparation | 0.012 | complete |
-| Primary orders cursor | 18058.509 | complete |
-| Primary source reads | 18124.681 | complete |
-| Bundles | 14857.234 | complete |
-| Option cost catalog | 2616.166 | complete |
-| Order indexes | 1512.510 | complete |
-| Source order loop | 17848.574 | cancelled |
-| Total source collection | 57312.655 | cancelled |
-| Aggregate | 73830.229 | cancelled |
-| Profit snapshot | 25845.285 | complete with product authority cancelled |
+The original wrapper correctly retained its refusal: the credential file kept its inode and all other checked metadata exceptmtime; the bookkeeping file appended378bytes with the original prefix preserved. All59 foreign-root identities and431of432 untracked records were unchanged. Credential content was not read, hashed, copied, modified or claimed equal, and the actor is not attributed.
 
-These stages overlap and must not be summed indiscriminately. All 19,151 primary orders completed under the explicit 20-second allowance; first row was 11.132 ms, application queue 0.033 ms, cursor close 51.534 ms. The unchanged 85-second outer budget expired before source conversion/reconciliation/save completed. Thus source read admission improved, but the live root-fix goal remains open.
+Retained original receipt SHA256 `8974eba82cad7ecd859c3e1b4dced8406daafd2758b39c2a0609f20296c365a1`; exact observation SHA256 `31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d`. Do not edit these files or broaden the original wrapper. A separate exact-observation, one-use restore-only continuation is being independently reviewed. Root alone may execute it after review/checkpoint, and only for the local Backend this task stopped.
 
-## Initial diagnosis and preserved decisions
+## Next safe action
 
-Read-only independent work is tracing the remaining order loop and bundle normalization, archive/native snapshot materialization, and the request's dependency graph. Native proof acquisition intentionally precedes primary order reads because adapters write version-bound source evidence. Profit already overlaps collection after primary reads. Do not substitute profit and operational cohorts or authority results without exact projection/freshness/correction parity.
+Finish the exact restoration review and restore the owed local Backend once. Observe the existing next natural scheduler attempt on the verified release; no manual financial refresh has been triggered. Download its new private recovery report only after a fresh save, verify original-cohort continuity/no new duplication and review financial/date warnings plus bank/delivery/courier samples. If the calculation fails, retain its new trace and continue the task. Do not repeat successful publication or official verification.
 
-A concrete candidate for investigation is duplicate full validated financial/issue packet decoding: native gap preparation decodes packets, then aggregate unpack decodes the same contents again. Any request-local reuse must bind exact packet/owner/metadata, retain validation and authorization, own cancellation, and avoid mutable aliasing or retained stale data. No implementation decision or production speed claim is established yet.
-
-At the initial diagnosis checkpoint, no follow-up source change had been made.
-The verified implementations and current next action are recorded below. No new
-lease, publication or manual retry has occurred in this follow-up.
-
-Issue #1006 is at its comment cap; update this task document, its PR, and the evidence branch. Keep private financial reports outside GitHub.
-
-## Verified audit-boundary checkpoint and measured decisions
-
-The first scoped implementation removes only the immediately repeated admission
-checkpoint at each internal eight-page audit boundary. Both serial and four-page
-prefetch readers retain fresh first/every-eight/final authorization and lease
-renewal, all per-page validation and cooperative cancellation, exact queries,
-complete history and joined cleanup. The preceding completion checkpoint is
-also the next group's admission; no read, await or processing intervenes.
-
-The new 32-case regression first produced 16 expected duplicate-boundary
-failures and 16 passes on the old source. After the two predicate changes,
-119 focused cases passed in 4.845 seconds with 11 real-Mongo/socket cases
-explicitly deselected. Independent source/test/evidence review found no blocker.
-The 64-page synthetic count falls from 16 to 9 audit checkpoints (whole packed
-unpack 22 to 15), with exactly the same 64 page reads, full-state equality,
-unchanged stored input, zero nonlease writes and no orphan tasks. These are
-operation counts, not measured production latency. Evidence is in
-`evidence/audit_boundary_findings.md` and its linked scripts/JSON/JUnit.
-
-The proposed native-to-aggregate decoded-packet handoff is **rejected/deferred**.
-A dense 49.02 MiB financial packet plus 0.96 MiB issues, with 19,151 synthetic
-orders, produced an optimistic A/B/B/A median saving of 935.645 ms for avoiding
-the second decode. Native-stage retained allocations increased by 37.69 MiB;
-traced peak remained approximately 319.36 MiB. Exact native/full-state BSON
-parity and source/input hashes passed. This saving does not justify additional
-retention and alias ownership complexity. No request-local snapshot cache is
-implemented. See `evidence/native_decode_reuse_measure_result.json`.
-
-Separate full-source synthetic profiling found repeated per-line option-catalog
-construction and full order copying during pure payment normalization. An
-experimental combined run fell from 29.992 to 24.731 seconds with identical
-full outputs, input/source hashes and query sequence. It also included a
-rejected blanket small-item copier substitution whose isolated copy/GC cost
-increased, so that combined percentage is not attributed to the selected fixes
-or claimed as a production gain. A scoped per-attempt option authority and
-read-only payment view are under implementation/review; the general public
-payment snapshot must retain its independent-copy behavior.
-
-A separate copier-lifetime prototype identified an avoidable private recursive
-closure cycle retaining the original graph through its memo until cyclic GC.
-Breaking only that private closure reference on every exit preserved values,
-aliases/cycles, BSON/custom-hook behavior and escaped-memo contents. It released
-the original immediately under GC-disabled weakref probes. A narrow lifetime
-fix is under implementation; no blanket bundle-copy replacement is authorized
-by these measurements.
-
-This checkpoint is **not final source A and not ready to merge or publish**.
-Production remains the verified PR2133 runtime, whose sole post-publication
-manual refresh failed. Continue scoped implementation, independent review and
-complete affected verification before freezing a new A/B release. Do not retry
-the existing live refresh blindly or repeat the prior release.
-
-## Completed source implementation and candidate A
-
-PR: https://github.com/AMASI-SA/AMASI-SA/pull/2134.
-Previous remote checkpoint: `7328d8e745eb0eff1109024995f1968a5a6c5964`.
-The next source checkpoint containing this section is the candidate source A;
-its exact commit/tree must be taken from Git metadata and retained in the
-separate release evidence. It is not permission to merge before its gates pass.
-
-Four narrowly scoped changes are complete:
-
-1. The adjacent audit checkpoint reduction described above.
-2. A successful option-catalog authority reused only during one source attempt.
-   All per-line prices, quantities, selected bindings, identities, currency and
-   failure paths remain outside the cache. The exact native catalog/binding
-   graph is observed and checked again before observations leave collection;
-   changes reject the whole attempt. The scope is cleared on every exit.
-3. An internal read-only payment-normalization view borrows only four unused
-   nonfinancial root branches. The public snapshot retains complete independent
-   copying; financial aliases/cycles and all admission rules are preserved.
-   Unsupported objects retain the old path.
-4. The report copier clears only its private recursive closure reference in a
-   `finally` block. This releases the keepalive memo promptly after success,
-   errors and cancellation while preserving any memo deliberately retained by a
-   custom deepcopy hook. No bundle-copy callsite changes were made.
-
-Option regression testing reproduced and fixed a real effectiveness issue:
-ordinary unprojected Mongo binding rows contain ObjectId/datetime metadata.
-Exact native metadata now participates correctly; ObjectId's replaceable byte
-slot is observed, and custom time zones/subclasses retain fallback. The author
-ran 176 cases (63 new and 113 existing), all passing in 3.75 seconds. Independent
-review compared original catalog/admission/token blocks by AST and reviewed all
-new cases without rerunning them; no blocker remained.
-
-Payment tests: 45 new cases passed in 1.08 seconds. The wider local run passed
-430 cases plus 184 subtests but could not execute four real-Mongo scenarios
-because the local Mongo listener was absent. The unchanged JUnit is retained as
-`evidence/payment_contracts_local_mongo_unavailable.xml`, not presented as green.
-Both strict Operational Balance CI environments provision real replica sets and
-must execute those cases with no skips, failures or errors. The new payment test
-was renamed to `test_operational_balance_payment_read_view.py` with identical
-content so those existing CI discovery lists actually execute it.
-
-Copier lifetime controls first produced 5 intended failures and 2 passes on the
-old source; the complete targeted set then passed 74 cases in 3.810 seconds with
-no skips/errors/failures. The root reviewer read the final tail-only source diff
-and all seven weakref/hook cases. Audit-boundary evidence remains 119 passes,
-with its 11 explicitly deselected local integration cases still required in CI.
-
-### Actual-runtime paired source measurement
-
-The final synthetic pair uses the actual option and payment implementations,
-native BSON-shaped binding metadata, 19,151 orders, 76,604 items and 128 products.
-The same frozen runtime is used for both modes; the baseline explicitly disables
-the two opt-ins. Complete output equality, serialized output, inputs, query
-sequence and runtime source hashes all match. No database query was added.
-
-| Measured work | Opt-ins disabled | Actual candidate |
-| --- | ---: | ---: |
-| Source-order stage | 14,216.590 ms | 10,576.560 ms |
-| Option token validation | 3,202.092 ms | 1,133.941 ms |
-| Native catalog constructions | 19,152 | 128 |
-| Payment payload copying | 1,938.521 ms | 649.026 ms |
-| Whole source collection | 30,566.549 ms | 25,070.153 ms |
-
-The unchanged bundle stage also varied by about 1.816 seconds, so the entire
-5.496-second collector difference is not attributed to the opt-ins. This is one
-bounded synthetic pair, not a production latency claim. The authority build
-took 19.770 ms and final validation 8.976 ms. Its measured auxiliary object
-representation is 1,424,776 bytes before caching and 2,310,654 bytes including
-128 catalog results, excluding borrowed source graphs; this is not RSS. The
-sequential process high-water figures are not comparable isolated memory peaks.
-The copier lifetime fix is identical in both modes. Evidence is retained in
-`evidence/measure_option_payment_candidate.py` and its result/findings.
-
-### Remaining required gates and live acceptance
-
-No follow-up Production change has occurred yet. Freeze exact candidate A,
-require its complete applicable CI and reviewed intent artifact, create only
-intent commit B, require B CI and clean-clone rehearsals, merge ordinarily to a
-tree-equivalent D, and require the applicable Production push gates. Preserve
-the unchanged original Release Guard v5 and fresh original-host preservation
-baseline. Execute one authorized direct publication only after those checks.
-
-After official three-probe verification, require an actually advanced saved
-calculation and a fresh recovery report. Compare retained historical movements,
-original dates, bank receipt approval state, delivery/courier obligations,
-advertising and collections against the private baseline. Existing warnings
-about source completeness are not silently converted into verified sources.
-If the live refresh still fails, preserve its trace and keep this task open.
+This documentation-only evidence branch must NEVER be merged or deployed. Frozen governed source stays untouched. Full rolling evidence is in `verification/production-proof.json`; private financial reports remain outside GitHub. Issue1006 is at its comment cap and must not receive another comment.
