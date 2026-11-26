@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "phase": "source_candidate_a_ci_pending",
+  "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
+  "production_changed": false,
+  "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+  "source_a": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+  "source_a_tree": "f764cc59cf9eb2ad378656b5cbf0ded462481b2f",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2134",
+  "candidate_validation": {
+    "valid": true,
+    "validator": "load_candidate_release_intent",
+    "source_git_sha": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+    "source_base_git_sha": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+    "release_id": "rg5-a243b3a7b2b67a6e46a31c4d1d1941091d4893d7fccf9f055af9972a0b7aa01f",
+    "candidate_sha256": "435be906ff7e58f0d8948cde52e20bcc78067406ca252f68578aa40a9cb080e3",
+    "frontend_artifact": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+    "backend_files": 1389,
+    "backend_added": 2,
+    "backend_modified": 6,
+    "backend_deleted": 0,
+    "release_control_files": 331,
+    "release_control_modified": 0
+  },
+  "original_host_readonly_preflight": {
+    "observed_at": "2026-11-26T03:23:00Z",
+    "time_precision": "approximate minute; UI command output not separately timestamped",
+    "head": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+    "tree": "a8aedd1be45cf7dcb26b31078a6c5e580709e30f",
+    "tracked_clean": true,
+    "untracked_count": 432,
+    "free_bytes": 172650496,
+    "guard_active": false,
+    "receipt_sha256": "0ef141cb905ebd2ca3593cd3bc42d0d78578652e9712637cd6e090816d343d53",
+    "continuation_sha256": "143827cc19bccacb84fbfea33cf31e8e08f52765275b653460d85f4e3d20f959",
+    "continuation_phase": "production_verified_local_backend_restored",
+    "backend_state": "RUNNING",
+    "backend_pid": 27769,
+    "generated_backup_bytes": 95817277,
+    "changed": false
+  },
+  "source_tests": "Exact-A Operational Balance/Stock gates pending; local Mongo-unavailable cases are not counted as passed.",
+  "diagnostic": {
+    "script_sha256": "1cbda56ef7fd0ad64fb9a9b10c33f30cbc69111ea2d6e5c547293f91b3f21fff",
+    "executed": false,
+    "reason": "Older live attempt exhausted its deadline during reconciliation; bounded offline valid-state tail profile before final publication decision."
+  },
+  "next": "Complete exact-A CI and bounded diagnostic; create fresh B only after required acceptance gates. This evidence branch must never be merged or deployed."
+}
