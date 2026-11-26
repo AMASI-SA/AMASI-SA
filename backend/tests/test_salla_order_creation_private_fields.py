@@ -277,3 +277,22 @@ def test_oversized_engraving_or_html_is_not_accepted(cipher):
         save(db,cipher,field="option_text_501",value="أ"*501)
     with pytest.raises(PrivateOrderFieldDenied):
         save(db,cipher,field="option_text_501",value="<script>")
+
+
+
+def test_short_street_number_and_private_geo_coordinates_stored_encrypted(cipher):
+    db=DB()
+    save(db,cipher,field="street_number",value="11")
+    save(db,cipher,field="geo_lat",value="24.7000",message_id=102)
+    save(db,cipher,field="geo_lng",value="46.7000",message_id=103)
+    values=load(db,cipher)
+    assert values["street_number"]=="11"
+    assert values["geo_lat"]=="24.7000"
+    assert values["geo_lng"]=="46.7000"
+    assert "24.7000" not in str(db.salla_ai_private_order_fields.rows[0])
+
+
+def test_out_of_range_encrypted_geo_coordinates_denied(cipher):
+    db=DB()
+    with pytest.raises(PrivateOrderFieldDenied):
+        save(db,cipher,field="geo_lat",value="100.01")
