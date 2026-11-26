@@ -40,7 +40,12 @@ rollback rebuilds the map once, rather than copying it for every order.
         return None
 
     def _index_add(self, key, value):
-        if self._index_facts and (type(key) is not str or (isinstance(value, dict) and type(value) is not dict)):
+        if self._index_facts and (type(key) is not str or (
+                isinstance(value, dict) and (type(value) is not dict or
+                    type(value.get("order_id")) not in (str, type(None), int, bool, float)))):
+            # Nonstandard values under unrelated keys can still participate in
+            # the original lazy comparison before the prefix check. Do not
+            # suppress their equality side effects or malformed-data errors.
             self._unsafe_facts.add(key)
         family = self._family(key) if self._index_facts else None
         if family is None:
