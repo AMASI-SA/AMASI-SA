@@ -82,10 +82,11 @@ def quote_pricing_mode(quote: dict | None) -> str | None:
             and quote.get("state") == "authorized_for_pending_creation"
             and quote.get("post_create_salla_total") is True
             and quote.get("pricing_verified") is False
+            and quote.get("shipping_price_verified") is False
             and quote.get("online_only") is True
             and quote.get("total_sar") is None
             and all(quote.get(k) is True for k in (
-                "products_verified", "shipping_verified",
+                "products_verified", "carrier_eligibility_verified",
                 "payment_methods_verified",
             ))):
         # The final amount must be read back from the same Salla order in
