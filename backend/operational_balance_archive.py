@@ -8,7 +8,7 @@ updated or expired, so a concurrent reader can finish reading an old revision.
 import zlib
 from hashlib import sha256
 
-from bson import BSON
+from bson import BSON, decode as decode_bson
 from bson.errors import InvalidBSON
 from pymongo.errors import DuplicateKeyError
 from pymongo.read_concern import ReadConcern
@@ -90,7 +90,7 @@ def unpack_issues(state):
         if (len(data) != packet["size"] or not decoder.eof or decoder.unused_data
                 or sha256(data).hexdigest() != packet.get("sha256")):
             raise ArchiveError("incomplete diagnostic packet")
-        restored = BSON(data).decode()
+        restored = decode_bson(data)
         _checkpoint()
         entries = restored.get("issues")
         if restored.get("owner_id") != state["owner_id"] or not isinstance(entries, list):
@@ -179,7 +179,7 @@ def unpack_financial_snapshot(state, *, selected=None):
         if (len(data) != packet["size"] or not decoder.eof or decoder.unused_data
                 or sha256(data).hexdigest() != packet.get("sha256")):
             raise ArchiveError("incomplete financial snapshot packet")
-        restored = BSON(data).decode()
+        restored = decode_bson(data)
         _checkpoint()
         values = restored.get("fields")
         if (restored.get("owner_id") != state["owner_id"] or not isinstance(values, dict)
