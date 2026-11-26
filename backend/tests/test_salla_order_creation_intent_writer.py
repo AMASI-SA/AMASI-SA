@@ -4,6 +4,15 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from cryptography.fernet import Fernet
+from salla_order_creation.quote_cipher import decrypt_order_payload
+
+@pytest.fixture(autouse=True)
+def synthetic_encryption_key(monkeypatch):
+    monkeypatch.setenv(
+        "MEZAN_ASSISTED_SALLA_PRIVATE_FIELDS_KEY",
+        Fernet.generate_key().decode("ascii"),
+    )
 
 from salla_order_creation.intent_writer import (
     PrepareDenied, prepare_salla_unpaid_order_intent,
@@ -137,7 +146,14 @@ def test_verified_cart_input_without_invented_total():
     assert persisted["carrier_eligibility_verified"] is True
     assert persisted["post_create_salla_total"] is True
     assert persisted["total_sar"] is None
-    assert persisted["order_payload"]["accepted_methods"] == ["mada"]
+    assert "order_payload" not in persisted
+    assert isinstance(persisted["encrypted_order_payload"], bytes)
+    assert b"Synthetic Recipient" not in persisted["encrypted_order_payload"]
+    recovered = decrypt_order_payload(
+        persisted["encrypted_order_payload"],
+        owner_id="owner",intent_id="intent-1234",
+    )
+    assert recovered.accepted_methods == ["mada"]
     assert persisted["purge_after"]>persisted["expires_at"]
 
 
@@ -220,7 +236,10 @@ def test_default_off_requires_explicit_owner_activation():
 
 def test_saved_order_retains_required_nullable_address_fields_for_create():
     db,out=create()
-    stored=db.salla_ai_order_quotes.rows[0]["order_payload"]
+    stored=decrypt_order_payload(
+        db.salla_ai_order_quotes.rows[0]["encrypted_order_payload"],
+        owner_id="owner",intent_id="intent-1234",
+    ).model_dump()
     assert "block" in stored["ship_to"] and stored["ship_to"]["block"] is None
     assert PendingOrder.model_validate(stored).model_dump() == order().model_dump()
 
@@ -232,7 +251,10 @@ def test_nullable_international_address_survives_storage():
     custom.ship_to.block=None
     custom.ship_to.postal_code=None
     db,result=create(o=custom)
-    persisted=db.salla_ai_order_quotes.rows[0]["order_payload"]
+    persisted=decrypt_order_payload(
+        db.salla_ai_order_quotes.rows[0]["encrypted_order_payload"],
+        owner_id="owner",intent_id="intent-1234",
+    ).model_dump()
     assert persisted["ship_to"]["district"] is None
     assert persisted["ship_to"]["postal_code"] is None
     assert PendingOrder.model_validate(persisted).ship_to.district is None
