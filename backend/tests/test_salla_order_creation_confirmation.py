@@ -197,3 +197,17 @@ def test_bad_tenant_environment_fails_closed():
             db, owner_id="", expected_account_id=1,
             expected_inbox_id=2, action=signed(action()), now=NOW,
         ))
+
+
+def test_utc_naive_mongo_quote_timestamp_is_interpreted_as_utc():
+    q=valid_quote()
+    q["verified_at"]=q["verified_at"].replace(tzinfo=None)
+    q["expires_at"]=q["expires_at"].replace(tzinfo=None)
+    db=DB(q)
+    result=asyncio.run(persist(db))
+    assert result["state"]=="recorded"
+
+
+def test_extreme_future_message_time_is_rejected_before_datetime_conversion():
+    with pytest.raises(SignatureDenied):
+        signed(action(message_created_at=4_102_444_801))
