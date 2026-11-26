@@ -18,7 +18,7 @@ from .service import intent_storage_id
 
 ReadOrder = Callable[[str, str], Awaitable[Any]]
 ALLOWED_STATUS = frozenset({
-    "waiting", "waiting_payment", "pending_payment", "awaiting_payment",
+    "waiting", "waiting payment", "pending payment", "awaiting payment",
     "بانتظار الدفع",
 })
 UNSAFE_REDIRECT_KEYS = frozenset({
