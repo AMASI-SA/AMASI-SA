@@ -1083,11 +1083,14 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             collection_status = "paid"
         else:
             collection_status = "unknown"
+    order_urls = _dict(raw_order.get("urls"))
     checkout_url = _text(
         _first(
             raw_order.get("payment_checkout_url"),
             payment_raw.get("checkout_url"),
             remaining_action.get("checkout_url"),
+            order_urls.get("checkout"),
+            raw_order.get("checkout_url"),
         )
     )
     receipt_url = (
