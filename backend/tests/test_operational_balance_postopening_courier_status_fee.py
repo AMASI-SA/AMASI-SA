@@ -320,3 +320,20 @@ def test_canonical_payout_guard_preserves_existing_company_settlements(payout_al
     if payout_allocation == "settled_previous_invoice":
         assert after["engine"]["obligations"]["shipping:prior-order:base_shipping"] == previous["engine"]["obligations"]["shipping:prior-order:base_shipping"]
     assert reconcile(deepcopy(after), deepcopy(sources), OBSERVED) == after
+
+
+@pytest.mark.parametrize("party", ["imile", "smsa"])
+def test_observed_fee_is_visible_as_one_automatic_courier_delivery(party):
+    """A fee-only observation must appear in the operating delivery history."""
+    from operational_workspace_projection import automatic_source
+    state = reconcile(saved(), {"orders": [new_order(party=party)]}, OBSERVED)
+    key = "shipping:synthetic-postopening-100:base_shipping"
+    recorded = state["engine"]["obligations"][key]
+    assert automatic_source(state, recorded) == (
+        "delivery", "shipping:synthetic-postopening-100")
+    corrupted = deepcopy(state)
+    corrupted["engine"]["facts"][PROOF + "synthetic-postopening-100"]["amount"] = "999.00"
+    assert automatic_source(corrupted, recorded) == (None, None)
+    corrupted["engine"]["facts"][PROOF + "synthetic-postopening-100"]["amount"] = "17.25"
+    corrupted["engine"]["facts"][PROOF + "synthetic-postopening-100"]["party_id"] = "other"
+    assert automatic_source(corrupted, recorded) == (None, None)
