@@ -13,7 +13,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from salla_integration.service import call_salla
+from salla_integration.service import call_salla, get_integration
 
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order
@@ -32,6 +32,29 @@ def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    @router.get("/capabilities")
+    async def get_capabilities(user: dict = Depends(current_user)) -> dict:
+        role = str((user or {}).get("role") or "").strip().lower()
+        if not user or (role != "owner" and user.get("is_owner") is not True):
+            raise HTTPException(status_code=403, detail={"code": "owner_only"})
+        doc = await get_integration(db, str(user["id"]))
+        scopes = set(str((doc or {}).get("scope") or "").split())
+        return {
+            "connected": bool(doc and doc.get("status") == "connected"),
+            "orders_create_scope": "orders.read_write" in scopes,
+            "catalog_read_scope": bool(
+                {"products.read", "products.read_write"} & scopes
+            ),
+            "shipping_read_scope": bool(
+                {"shipping.read", "shipping.read_write"} & scopes
+            ),
+            "creation_feature_enabled": (
+                os.environ.get("MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED", "0") == "1"
+            ),
+            "proof_writers_integrated": False,
+            "note": "Scope is a stored token claim, not live API authorization proof.",
+        }
 
     @router.post("/create-confirmed")
     async def create_confirmed(
