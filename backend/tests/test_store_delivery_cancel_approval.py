@@ -323,3 +323,27 @@ async def test_capability_stays_disabled_until_backend_activation(monkeypatch):
         assert response["salla_canceled_slug"] == "canceled"
     finally:
         await cleanup(client, db)
+
+
+@pytest.mark.asyncio
+async def test_unresolved_noncash_provider_attempt_blocks_salla_cancellation(monkeypatch):
+    """A pending provider delivery may have succeeded despite lost response."""
+    monkeypatch.setenv("AMASI_COURIER_CANCELLATION_APPROVAL_ENABLED", "1")
+    client, db = await scenario()
+    try:
+        await db[ASSIGNMENTS].update_one({"id": ASSIGNMENT_ID}, {"$set": {
+            "noncash_delivery_attempt": {"state": "dispatching", "token": "synthetic-token"},
+        }})
+        state, call = fake_salla()
+        monkeypatch.setattr(cancellation, "_call_salla", call)
+        with pytest.raises(HTTPException) as error:
+            await endpoint(db)(ASSIGNMENT_ID, payload(), user=OWNER)
+        assert error.value.status_code == 409
+        assert error.value.detail["code"] == "cancel_financial_evidence_requires_review"
+        assert state["posts"] == 0
+        assert await db[ASSIGNMENTS].count_documents({
+            "id": ASSIGNMENT_ID, "active": True, "status": "out_for_delivery",
+            "cancel_approval_state": {"$ne": "reserved"},
+        }) == 1
+    finally:
+        await cleanup(client, db)
