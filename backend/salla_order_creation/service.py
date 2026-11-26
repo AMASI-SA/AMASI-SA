@@ -151,6 +151,7 @@ async def create_confirmed_salla_order(
 
     record = {
         "_id": storage_id, "user_id": user_id, "intent_id": intent_id,
+        "inbox_id": inbox_id, "conversation_id": conversation_id,
         "actor_id": actor_id, "state": "sending", "payload_digest": digest,
         "quote_version": quote["version"],
         "confirmation_message_id": str(confirmation["message_id"]),
