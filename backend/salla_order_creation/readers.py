@@ -206,3 +206,46 @@ async def read_shipping_rate_candidates(
             "is_final_cart_quote": False,
         })
     return rates
+
+
+
+async def read_checkout_payment_methods(
+    db: Any, user_id: str,
+    *, request: Callable[..., Awaitable[dict]] | None = None,
+    integration_reader: Callable[..., Awaitable[dict]] | None = None,
+) -> dict:
+    """Read methods enabled on the merchant; not proof of carrier eligibility.
+
+    Salla's Create Order currently accepts only card/mada/bank/cod for
+    `payment.accepted_methods`. The Payment Methods API exposes additional
+    gateway slugs (Apple Pay, STC Pay, BNPL), but the latter cannot be sent
+    as unsupported values in that Create Order field.
+    """
+    request, integration_reader = _resolve_salla_readers(request, integration_reader)
+    await _scope(db, user_id, "payments.read", integration_reader)
+    response = await request(db, user_id, "GET", "/payment/methods")
+    rows = _reply_data(response, expected_list=True)
+    if len(rows) > 100:
+        raise SourceUnavailable("too_many_payment_methods")
+    supported = {"credit_card", "mada", "bank", "cod"}
+    seen = set()
+    extras = set()
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("slug"), str):
+            raise SourceUnavailable("invalid_payment_method_response")
+        method = row["slug"].strip().lower()
+        if not method or len(method) > 100:
+            raise SourceUnavailable("invalid_payment_method_slug")
+        if method in supported:
+            if method in seen:
+                raise SourceUnavailable("duplicate_payment_method")
+            seen.add(method)
+        else:
+            extras.add(method)
+    return {
+        "eligible_create_order_method_candidates": sorted(seen),
+        "additional_store_gateway_methods_not_in_create_order_enum": sorted(extras),
+        "source": "salla_payment_methods",
+        "verified_carrier_eligibility": False,
+        "can_create_order": False,
+    }
