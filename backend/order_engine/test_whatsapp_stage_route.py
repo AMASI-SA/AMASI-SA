@@ -53,7 +53,7 @@ class OrderStageRouteTest(unittest.TestCase):
             repository=object(),fixed_owner_id="fixed_test_tenant",
             active_keys={KID:KEY},claim_nonce=claim,
             resolve_verified_sender=verified,source_freshness=freshness,
-            now_fn=lambda:NOW))
+            now_fn=lambda:NOW),prefix="/api")
         return TestClient(app)
 
     def test_verified_only_minimal_status_and_replay(self):
