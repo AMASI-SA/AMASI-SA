@@ -1643,12 +1643,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         courier_issue(out, code, raw, source, setup=setup, owner=owner)
                 order_numbers[order_number] = identity
                 if created <= start:
-                    # The retained November order register intentionally covers
-                    # orders created after opening. It must not suppress an
-                    # older order whose *actual, source-proven delivery* occurred
-                    # after the owner's operational cutover. The existing dated
-                    # evidence path below does not replay sales, supplier or
-                    # provider effects, and preserves immutable shipping fees.
+                    if retained:
+                        continue
                     from operational_delivery_evidence import resolve_delivery_event
                     event = resolve_delivery_event(raw, source=source, owner=owner,
                         assignments=data['store_delivery_assignments'], setup=setup,
