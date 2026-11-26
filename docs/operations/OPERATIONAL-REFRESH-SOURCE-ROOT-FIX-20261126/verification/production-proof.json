@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-SOURCE-ROOT-FIX-20261126",
-  "phase": "publication_running",
-  "updated_utc": "2026-11-26T02:08:18.428Z",
+  "phase": "production_published_original_verification_running",
+  "updated_utc": "2026-11-26T02:23:16.162Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2133,
   "task_branch": "codex/operational-refresh-source-root-fix-20261126",
   "source_A": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
   "source_tree": "995ca22369e7b09328999e5b2e3142e6ac133013",
   "source_base": "570b173d1dc6438624c39a5c511311f2a33be9a3",
-  "production_changed": false,
+  "production_changed": true,
   "publication_action_count": 1,
   "lease_created": true,
   "evidence_branch": "codex/operational-refresh-source-publication-evidence-20261126",
@@ -62,6 +62,25 @@
       "snapshot_unpack_ms": 11883.575,
       "snapshot_copy_prepare_ms": 0.002,
       "aggregate_ms": 27849.789
+    },
+    "last_old_runtime_attempt": {
+      "attempt_riyadh": "2026-11-26 05:12",
+      "before_new_publish": true,
+      "last_saved_riyadh": "2026-11-26 01:51",
+      "next_scheduled_riyadh": "2026-11-26 06:34",
+      "scheduler_interval_hours": 2,
+      "code": "operational_refresh_timeout",
+      "native_evidence_ms": 8364.849,
+      "snapshot_unpack_ms": 11955.058,
+      "copy_prepare_ms": 0.003,
+      "orders_cursor_ms": 10918.471,
+      "orders_rows": 19150,
+      "orders_budget_ms": 15000,
+      "source_primary_ms": 10938.336,
+      "source_bundles_ms": 15363.802,
+      "source_orders_ms": 21101.134,
+      "reconciliation_cancelled_ms": 7203.891,
+      "aggregate_cancelled_ms": 76764.627
     }
   },
   "ci": {
@@ -558,7 +577,7 @@
       ]
     }
   },
-  "next_safe_action": "Do not publish again. Wait for newer explicit Deployment Succeeded/version, record receipt phase publication_succeeded, run the retained original verifier wrapper once, require all three official probes and closed lease, then fresh live accounting save and private proof comparison.",
+  "next_safe_action": "Do not publish or invoke verification again. Observe retained original verifier until three probes pass, lease closes and Backend is restored; then one visible owner refresh and private receipt comparison.",
   "candidate_intent": {
     "artifact_id": 15079120933,
     "run_id": 45735625726,
@@ -638,6 +657,22 @@
     "observed_ui": "Preparing Environment",
     "previous_version": "1f3e141",
     "previous_publish_ordinal": 100,
-    "destination": "https://mezansalla.com"
+    "destination": "https://mezansalla.com",
+    "version": "bad38ff",
+    "finished_ui": "Nov 26, 05:17 AM",
+    "provider_evidence": "New listed published version bad38ff plus green Deployment finished event",
+    "runtime_logs": {
+      "error_count": 0,
+      "warning_count": 7,
+      "warning_scope": "Existing production stability worker-disable notices; full outer Cloud Build argv/cwd remains unobserved."
+    }
+  },
+  "verification": {
+    "wrapper_pid": 25412,
+    "invocations": 1,
+    "original_guard_unchanged": true,
+    "phase": "started",
+    "expected_source": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
+    "expected_deployment": "317dc183485566ba9e05c5afca5d4ea1b84e291e"
   }
 }
