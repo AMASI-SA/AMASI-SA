@@ -22,6 +22,7 @@ from order_engine.service import get_order, OrderNotFoundError
 from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
 from .checkout_readback import resolve_synced_checkout, verify_checkout_read
 from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
+from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
@@ -253,6 +254,26 @@ def make_assisted_salla_order_router(
         if (action.account_id != int(account)
                 or action.inbox_id != int(inbox)):
             raise HTTPException(status_code=403, detail={"code": "outside_approved_inbox"})
+
+        # An API-created order can have a numeric Salla ID before the
+        # human-facing order reference is present in the initial response.
+        # Recover that reference using an authenticated Salla GET only.
+        # This never makes a second Salla POST or changes payment state.
+        try:
+            recovery = await recover_salla_reference(
+                db, user_id=owner_id, intent_id=action.intent_id,
+                provider_get=call_salla,
+            )
+        except ReferenceUnverified:
+            return {
+                "state": "order_reference_unverified",
+                "checkout_url": None, "amount_verified": False,
+            }
+        if recovery["state"] == "reference_not_yet_available":
+            return {
+                "state": "waiting_for_salla_reference",
+                "checkout_url": None, "amount_verified": False,
+            }
 
         async def read_existing_mezan_order(user_id: str, ref: str):
             try:
