@@ -10,7 +10,7 @@ import os
 import re
 import time
 
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from .repository import MongoOrderRepository
@@ -40,6 +40,33 @@ class MongoNonceClaim:
             return True
         except DuplicateKeyError:
             return False
+        except PyMongoError:
+            return False
+
+
+class MongoAssistantRateLimit:
+    """Atomic shared per-service request ceiling. No customer identifiers."""
+    def __init__(self,mongo_url: str,db_name: str,*,max_per_minute=30):
+        self._client=MongoClient(mongo_url,serverSelectionTimeoutMS=1500,
+                                 socketTimeoutMS=1500)
+        self._collection=self._client[db_name]["wa_assistant_rate_limit_v1"]
+        self._collection.create_index("expires_at",expireAfterSeconds=0)
+        self._max=max_per_minute
+
+    def __call__(self,key_id: str) -> bool:
+        if type(key_id) is not str or len(key_id)>64:
+            return False
+        import hashlib
+        bucket=int(time.time())//60
+        marker=hashlib.sha256((key_id+":"+str(bucket)).encode()).hexdigest()
+        try:
+            row=self._collection.find_one_and_update(
+                {"_id":marker},
+                {"$inc":{"count":1},"$setOnInsert":{
+                    "expires_at":datetime.now(timezone.utc)+timedelta(seconds=180)
+                }},
+                upsert=True,return_document=ReturnDocument.AFTER)
+            return bool(row and row["count"]<=self._max)
         except PyMongoError:
             return False
 
@@ -91,11 +118,13 @@ def mount_if_enabled(api_router, db):
         base_url="https://"+host,approved_hostname=host,
         agentbot_token=fields["AMASI_CHATWOOT_BOT_TOKEN"])
     nonce=MongoNonceClaim(fields["MONGO_URL"],fields["DB_NAME"])
+    limit=MongoAssistantRateLimit(fields["MONGO_URL"],fields["DB_NAME"])
     router=make_whatsapp_stage_router(
         repository=MongoOrderRepository(db),
         fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
         active_keys={fields["AMASI_WHATSAPP_STAGE_KEY_ID"]:key},
         claim_nonce=nonce,
+        rate_limit=limit,
         resolve_verified_sender=reader,
         source_freshness=_fresh_salla_source)
     api_router.include_router(router)
@@ -104,5 +133,6 @@ def mount_if_enabled(api_router, db):
         fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
         active_keys={fields["AMASI_WHATSAPP_STAGE_KEY_ID"]:key},
         claim_nonce=nonce,
+        rate_limit=limit,
     ))
     return True
