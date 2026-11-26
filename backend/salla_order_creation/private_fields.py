@@ -29,7 +29,7 @@ FIELDS = frozenset({
     "recipient_name", "recipient_phone",
     "address_line", "street_number", "postal_code",
     "short_address", "building_number", "additional_number",
-    "district_name", "city_name",
+    "district_name", "city_name", "geo_lat", "geo_lng",
 })
 INTENT_MAX_AGE = timedelta(days=7)
 _PRIVATE_TTL_NAME = "salla_assisted_private_fields_ttl_v1"
@@ -92,6 +92,18 @@ def _safe_value(field: str, value: str) -> str:
         if len(text) > 254 or not MAIL.fullmatch(text):
             raise PrivateOrderFieldDenied("invalid_private_email")
         return text.casefold()
+    if field in ("geo_lat", "geo_lng"):
+        from decimal import Decimal, InvalidOperation
+        try:
+            coord = Decimal(text)
+        except InvalidOperation as exc:
+            raise PrivateOrderFieldDenied("invalid_private_coordinates") from exc
+        limit = 90 if field == "geo_lat" else 180
+        if not coord.is_finite() or coord < -limit or coord > limit:
+            raise PrivateOrderFieldDenied("invalid_private_coordinates")
+        if coord.as_tuple().exponent < -8:
+            raise PrivateOrderFieldDenied("private_coordinates_too_precise")
+        return str(coord)
     if field in ("postal_code", "short_address",
                  "building_number", "additional_number", "street_number"):
         if not CODE.fullmatch(text):
