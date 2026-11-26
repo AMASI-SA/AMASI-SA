@@ -1,0 +1,167 @@
+{
+  "schema": "local-ci-artifact-summary-v2",
+  "repository": "AMASI-SA/AMASI-SA",
+  "run_id": 45752783259,
+  "job_id": 139684258289,
+  "artifact_id": 15087580172,
+  "artifact": "web-15087580172.zip",
+  "artifact_bytes": 149092,
+  "artifact_sha256": "ad0b0999e5d4f3546bc4c78b66fed7b5fc62755a6116be26d7c2f0d5e3ec6d1f",
+  "expected_artifact_sha256_matches": true,
+  "xml_results": [
+    {
+      "member": "operational-backend.xml",
+      "sha256": "3c54807ef95b43f326c94606eb2006f14bbf4e3d9b620b3709909b9727666e35",
+      "advertised": {
+        "tests": 8258,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "testcase_elements": 8107,
+      "status_elements": {
+        "failure": 0,
+        "error": 0,
+        "skipped": 0
+      },
+      "duplicate_classname_name_pairs": 0,
+      "duration_seconds": "941.570",
+      "timestamp": "2026-11-26T04:04:14.935890+00:00",
+      "job_log_counts": {
+        "passed": 8107,
+        "subtests_passed": 151,
+        "warnings": 12
+      },
+      "count_difference_explanation": "151 passing subtests explicitly reported by job log"
+    },
+    {
+      "member": "operational-demand-read.xml",
+      "sha256": "404d8923ab0db67b21552c08b346bcde4864b76a9da29c5ed7c8cc927884150f",
+      "advertised": {
+        "tests": 106,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "testcase_elements": 106,
+      "status_elements": {
+        "failure": 0,
+        "error": 0,
+        "skipped": 0
+      },
+      "duplicate_classname_name_pairs": 0,
+      "duration_seconds": "70.816",
+      "timestamp": "2026-11-26T04:19:59.679805+00:00",
+      "job_log_counts": {
+        "passed": 106,
+        "subtests_passed_reported": false,
+        "warnings": 5
+      },
+      "count_difference_explanation": "Advertised and testcase counts both 106; no separate subtest total is reported."
+    }
+  ],
+  "verification_scope": "Read-only artifact and one decoded job-log fetch; no tests, CI reruns, source or Git changes, host or browser actions.",
+  "members": [
+    "operational-backend.xml",
+    "operational-demand-read.xml",
+    "operational-demand-read-benchmark.json",
+    "operational-demand-register-benchmark.json",
+    "operational-source-sha.txt",
+    "operational-source-tree.txt"
+  ],
+  "source_identity": {
+    "commit": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "tree": "c8e2297bcccf65b545a0aa0b3c798944232234dd",
+    "matches_expected": true,
+    "source_members": [
+      "operational-source-sha.txt",
+      "operational-source-tree.txt"
+    ],
+    "job_log_confirms_exact_checkout_and_source_assertion": true
+  },
+  "new_modules": {
+    "test_operational_balance_archive_checkpoint_boundaries": {
+      "expected": 32,
+      "testcase_elements": 32,
+      "unique_identities": 32,
+      "matches_expected": true,
+      "failure_error_skip_count": 0
+    },
+    "test_operational_balance_option_authority": {
+      "expected": 63,
+      "testcase_elements": 63,
+      "unique_identities": 63,
+      "matches_expected": true,
+      "failure_error_skip_count": 0
+    },
+    "test_operational_balance_payment_read_view": {
+      "expected": 45,
+      "testcase_elements": 45,
+      "unique_identities": 45,
+      "matches_expected": true,
+      "failure_error_skip_count": 0
+    },
+    "test_operational_balance_report_copy_lifetime": {
+      "expected": 7,
+      "testcase_elements": 7,
+      "unique_identities": 7,
+      "matches_expected": true,
+      "failure_error_skip_count": 0
+    },
+    "test_operational_balance_bundle_item_view": {
+      "expected": 34,
+      "testcase_elements": 34,
+      "unique_identities": 34,
+      "matches_expected": true,
+      "failure_error_skip_count": 0
+    }
+  },
+  "new_module_testcase_total": 181,
+  "required_mongo_cases": [
+    {
+      "name": "test_actual_provider_payout_allocates_to_one_split_share_only_and_replay_is_idempotent",
+      "classname": "backend.tests.test_operational_balance_split_tenders",
+      "occurrences": 1,
+      "status": "passed_without_failure_error_skip"
+    },
+    {
+      "name": "test_frozen_split_order_does_not_turn_into_a_second_bank_receipt_or_cod_collection",
+      "classname": "backend.tests.test_operational_balance_split_tenders",
+      "occurrences": 1,
+      "status": "passed_without_failure_error_skip"
+    },
+    {
+      "name": "test_replayed_refresh_of_bank_and_bnpl_waits_for_original_bank_leg_date",
+      "classname": "backend.tests.test_operational_balance_bank_tender_proof",
+      "occurrences": 1,
+      "status": "passed_without_failure_error_skip"
+    },
+    {
+      "name": "test_existing_provider_share_can_coexist_only_when_proved_same_payment",
+      "classname": "backend.tests.test_operational_balance_bank_tender_proof",
+      "occurrences": 1,
+      "status": "passed_without_failure_error_skip"
+    }
+  ],
+  "acceptance": {
+    "zip_digest_matches": true,
+    "exact_source_sha_and_tree_match": true,
+    "no_errors_failures_skips": true,
+    "new_modules_exact_181": true,
+    "four_required_mongo_cases_each_once": true,
+    "demand_read_exact_106": true,
+    "backend_reported_total_explained_by_logged_subtests": true
+  },
+  "job_log_evidence": {
+    "file": "job-log-evidence.json",
+    "sha256": "9148681d222b3e1f4fc7a1ad387a6d3938e36a7b5964c150aa11ce01763c762d",
+    "raw_decoded_log_utf8_sha256": "f93522b83e5e01c5892c52b601d827e92b41d3ce4d2f7c77f993684a3071449a",
+    "read_count": 1,
+    "mongo_evidence": "Job creates MongoDB 8.0.12 replica set operationalprojection, requires writable primary, and supplies the loopback replica-set test URI. Required case execution/status is verified separately in XML."
+  },
+  "limitations": [
+    "CI evidence does not certify production latency, source completeness, or live financial preservation.",
+    "Warnings are recorded separately: backend 12 and demand read 5; they are not failures or skips.",
+    "Shipping SSOT log-only result (16 passed + 18 subtests passed) is retained in log excerpts but not added to XML totals."
+  ]
+}

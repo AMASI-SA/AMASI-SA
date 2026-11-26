@@ -1,0 +1,171 @@
+{
+  "repository": "AMASI-SA/AMASI-SA",
+  "run_id": 45752783259,
+  "job_id": 139684258289,
+  "read_count": 1,
+  "total_lines": 913,
+  "excerpts": [
+    {
+      "line": 37,
+      "text": "2026-11-26T04:03:44.4042421Z   ref: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+    },
+    {
+      "line": 109,
+      "text": "2026-11-26T04:03:52.1204522Z [command]/usr/bin/git checkout --progress --force b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+    },
+    {
+      "line": 130,
+      "text": "2026-11-26T04:03:52.7719169Z b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+    },
+    {
+      "line": 315,
+      "text": "2026-11-26T04:04:03.0438289Z Successfully installed PyJWT-2.15.0 PyMuPDF-1.28.2 annotated-doc-0.0.7 annotated-types-0.8.0 anyio-4.16.0 bcrypt-4.1.3 certifi-2026.11.20 cffi-2.1.1 charset-normalizer-3.5.3 cryptography-50.0.0 dnspython-2.9.2 email-validator-2.3.0 et-xmlfile-2.0.0 fastapi-0.142.2 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 mongomock-4.3.0 mongomock-motor-0.0.36 motor-3.7.1 openpyxl-3.1.5 opentelemetry-api-1.45.2 packaging-26.4 pillow-13.0.0 pluggy-1.7.0 pycparser-3.12 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pymongo-4.18.3 pytest-9.1.1 pytest-asyncio-1.3.0 python-dotenv-1.2.2 python-multipart-0.0.32 pytz-2026.6 qrcode-8.2 reportlab-4.5.1 sentinels-1.1.1 starlette-1.10.0 typing-extensions-4.16.0 typing-inspection-0.4.5"
+    },
+    {
+      "line": 316,
+      "text": "2026-11-26T04:04:03.2609109Z ##[group]Run set -euo pipefail"
+    },
+    {
+      "line": 317,
+      "text": "2026-11-26T04:04:03.2609525Z set -euo pipefail"
+    },
+    {
+      "line": 318,
+      "text": "2026-11-26T04:04:03.2610406Z docker run -d --name operational-projection-rs -p 127.0.0.1:27305:27305 mongo:8.0.12 --port 27305 --replSet operationalprojection --bind_ip_all --wiredTigerCacheSizeGB 1"
+    },
+    {
+      "line": 319,
+      "text": "2026-11-26T04:04:03.2611343Z for attempt in $(seq 1 40); do"
+    },
+    {
+      "line": 320,
+      "text": "2026-11-26T04:04:03.2612050Z   if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi"
+    },
+    {
+      "line": 321,
+      "text": "2026-11-26T04:04:03.2612735Z   sleep 1"
+    },
+    {
+      "line": 322,
+      "text": "2026-11-26T04:04:03.2612973Z done"
+    },
+    {
+      "line": 323,
+      "text": "2026-11-26T04:04:03.2613933Z docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'rs.initiate({_id:\"operationalprojection\",members:[{_id:0,host:\"127.0.0.1:27305\"}]})'"
+    },
+    {
+      "line": 324,
+      "text": "2026-11-26T04:04:03.2614814Z for attempt in $(seq 1 40); do"
+    },
+    {
+      "line": 325,
+      "text": "2026-11-26T04:04:03.2615598Z   if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi"
+    },
+    {
+      "line": 326,
+      "text": "2026-11-26T04:04:03.2616335Z   sleep 1"
+    },
+    {
+      "line": 327,
+      "text": "2026-11-26T04:04:03.2616574Z done"
+    },
+    {
+      "line": 328,
+      "text": "2026-11-26T04:04:03.2617339Z docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'"
+    },
+    {
+      "line": 371,
+      "text": "2026-11-26T04:04:09.2819542Z Digest: sha256:95a98776f273721a295b03098578b06bc10281bb56aa828c77e9f60ecc70b150"
+    },
+    {
+      "line": 372,
+      "text": "2026-11-26T04:04:09.2820616Z Status: Downloaded newer image for mongo:8.0.12"
+    },
+    {
+      "line": 373,
+      "text": "2026-11-26T04:04:11.8749752Z 39d03912559a3d6600ae73dbfea7c8747a66daf0a32a52ed49ceae4ad3acb8fd"
+    },
+    {
+      "line": 374,
+      "text": "2026-11-26T04:04:12.5607600Z { ok: 1 }"
+    },
+    {
+      "line": 375,
+      "text": "2026-11-26T04:04:13.0625836Z {"
+    },
+    {
+      "line": 376,
+      "text": "2026-11-26T04:04:13.0627216Z   ok: 1,"
+    },
+    {
+      "line": 386,
+      "text": "2026-11-26T04:04:14.0357510Z ##[group]Run test \"$(git rev-parse HEAD)\" = \"$EXPECTED_SOURCE\""
+    },
+    {
+      "line": 387,
+      "text": "2026-11-26T04:04:14.0358078Z test \"$(git rev-parse HEAD)\" = \"$EXPECTED_SOURCE\""
+    },
+    {
+      "line": 388,
+      "text": "2026-11-26T04:04:14.0358560Z git rev-parse HEAD > operational-source-sha.txt"
+    },
+    {
+      "line": 389,
+      "text": "2026-11-26T04:04:14.0359279Z git rev-parse HEAD^{tree} > operational-source-tree.txt"
+    },
+    {
+      "line": 390,
+      "text": "2026-11-26T04:04:14.0393767Z shell: /usr/bin/bash -e {0}"
+    },
+    {
+      "line": 403,
+      "text": "2026-11-26T04:04:14.0400609Z   EXPECTED_SOURCE: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+    },
+    {
+      "line": 404,
+      "text": "2026-11-26T04:04:14.0401037Z ##[endgroup]"
+    },
+    {
+      "line": 411,
+      "text": "2026-11-26T04:04:14.0642153Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection"
+    },
+    {
+      "line": 412,
+      "text": "2026-11-26T04:04:14.0642968Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection"
+    },
+    {
+      "line": 413,
+      "text": "2026-11-26T04:04:14.0643657Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection"
+    },
+    {
+      "line": 585,
+      "text": "2026-11-26T04:19:57.3730847Z 8107 passed, 12 warnings, 151 subtests passed in 941.62s (0:15:41)"
+    },
+    {
+      "line": 628,
+      "text": "2026-11-26T04:21:10.8372526Z 106 passed, 5 warnings in 70.81s (0:01:10)"
+    },
+    {
+      "line": 646,
+      "text": "2026-11-26T04:21:12.4036985Z 16 passed, 18 subtests passed in 0.64s"
+    }
+  ],
+  "claimed_counts": {
+    "backend": {
+      "passed": 8107,
+      "subtests_passed": 151,
+      "warnings": 12
+    },
+    "demand_read": {
+      "passed": 106,
+      "warnings": 5
+    },
+    "shipping_ssot_log_only": {
+      "passed": 16,
+      "subtests_passed": 18
+    }
+  },
+  "mongo_evidence": "Job creates MongoDB 8.0.12 replica set operationalprojection, requires writable primary, and supplies the loopback replica-set test URI. Required case execution/status is verified separately in XML.",
+  "raw_decoded_log_utf8_sha256": "f93522b83e5e01c5892c52b601d827e92b41d3ce4d2f7c77f993684a3071449a",
+  "raw_decoded_log_utf8_bytes": 97759
+}

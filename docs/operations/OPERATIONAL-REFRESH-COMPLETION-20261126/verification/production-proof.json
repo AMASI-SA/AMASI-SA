@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "final_source_A_last_gate_pending",
+  "phase": "reviewed_intent_B_ci_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -42,7 +42,7 @@
     "changed": false
   },
   "source_tests": {
-    "status": "fresh_final_A_workflows_in_progress",
+    "status": "all_13_final_A_workflows_success",
     "workflows": 13,
     "release_readiness_run": 45752783383,
     "web_run": 45752783259,
@@ -133,12 +133,6 @@
         "conclusion": "success"
       },
       {
-        "id": 45752783259,
-        "name": "Operational Balance Web",
-        "status": "in_progress",
-        "conclusion": null
-      },
-      {
         "id": 45752783383,
         "name": "Mezan Release Readiness",
         "status": "completed",
@@ -197,8 +191,28 @@
         "name": "Supplier cost report performance",
         "status": "completed",
         "conclusion": "success"
+      },
+      {
+        "id": 45752783259,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
       }
-    ]
+    ],
+    "web": {
+      "run": 45752783259,
+      "job": 139684258289,
+      "testcases": 8107,
+      "subtests": 151,
+      "demand_read": 106,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "new_module_cases": 181,
+      "required_mongo_cases": 4,
+      "artifact": 15087580172,
+      "artifact_sha256": "ad0b0999e5d4f3546bc4c78b66fed7b5fc62755a6116be26d7c2f0d5e3ec6d1f"
+    }
   },
   "diagnostic": {
     "script_sha256": "1cbda56ef7fd0ad64fb9a9b10c33f30cbc69111ea2d6e5c547293f91b3f21fff",
@@ -434,5 +448,23 @@
     "ui_reconnection": "One Reload Window recovered original IDE; new process observed, actor attribution not established; no source/service control command executed.",
     "production_provider_version": "bad38ff",
     "new_publication_actions": 0
+  },
+  "intent_b": {
+    "sha": "a59e6ee18f41d13baaa0e863de2ed5810dd43319",
+    "tree": "57601ee93838dde732e122354f0766c7e7414301",
+    "parent": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "local_official_validator_passed": true,
+    "local_checkout_clean": true,
+    "runtime_release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+    "ci_status": "pending",
+    "readiness_run": 45754802916,
+    "expected_skip": {
+      "workflow": "TikTok Creator Release Candidate",
+      "run": 45754803015,
+      "reason": "Unchanged job requires head_ref codex/tiktok-content-ci-20261011; current branch differs."
+    }
   }
 }
