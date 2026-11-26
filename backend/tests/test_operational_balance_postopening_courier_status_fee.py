@@ -253,13 +253,17 @@ def test_legacy_aggregate_courier_base_is_not_charged_again():
     assert result["movements"] == []
 
 
-@pytest.mark.parametrize("payout_at,should_accrue", [
-    ("2026-11-20T00:00:00+00:00", True),
-    ("2026-11-23T00:00:00+00:00", False),
-    (None, False),
+
+@pytest.mark.parametrize("payout_allocation,should_accrue", [
+    ("unallocated", False),
+    ("settled_previous_invoice", True),
 ])
-def test_canonical_new_order_prior_company_payout_has_bounded_hold(payout_at, should_accrue):
-    """The existing courier hold must not block an order not yet created."""
+def test_canonical_payout_guard_preserves_existing_company_settlements(payout_allocation, should_accrue):
+    """An unallocated company payment may be an advance for a new order.
+
+    Only an explicitly allocated old payable can be excluded from the
+    candidate's own fee. The earlier movement itself is never changed.
+    """
     from test_operational_balance_sources import HardBoundaryDB, run
     from test_operational_balance_source_fixes import shipping_data
     from operational_balance_sources import collect_sources
@@ -281,14 +285,27 @@ def test_canonical_new_order_prior_company_payout_has_bounded_hold(payout_at, sh
         courier_key="imile", name="iMile", salla_carrier_keys=["imile"])
     setup["contracts"][0]["party_id"] = "imile"
 
+
     previous = saved()
+    if payout_allocation == "settled_previous_invoice":
+        previous["engine"]["obligations"] = {
+            "shipping:prior-order:base_shipping": {
+                "id": "shipping:prior-order:base_shipping",
+                "kind": "shipping", "party_type": "courier",
+                "party_id": "imile", "currency": "SAR", "direction": "payable",
+                "business_date": "2026-11-15", "expected": "0.00", "confirmed": "35.00",
+            }
+        }
     previous["movements"] = [{
         "id": "synthetic-prior-company-payout", "party_type": "courier",
         "party_id": "imile", "direction": "outgoing", "kind": "payment",
-        "currency": "SAR", "amount": "35.00", "allocations": [],
-        **({"occurred_at": payout_at} if payout_at else {}),
+        "currency": "SAR", "amount": "35.00",
+        "allocations": [{"obligation_id": "shipping:prior-order:base_shipping",
+                         "amount": "35.00"}] if payout_allocation == "settled_previous_invoice" else [],
+        "settlement_scope": "account" if payout_allocation == "unallocated" else "payable",
+        "occurred_at": "2026-11-20T00:00:00+00:00",
     }]
-    movement_before = deepcopy(previous["movements"])
+    originals = deepcopy(previous["movements"])
     sources = run(collect_sources(
         HardBoundaryDB(data), "owner", START, OBSERVED,
         operational_state=previous,
@@ -296,8 +313,10 @@ def test_canonical_new_order_prior_company_payout_has_bounded_hold(payout_at, sh
     order = sources["orders"][0]
     assert order["delivery_event"]["schema"] == "operational_delivery_status_v1"
     assert (order["carrier"].get("fee_recognition_held") is not True) == should_accrue
-    updated = reconcile(deepcopy(previous), deepcopy(sources), OBSERVED)
-    assert updated["movements"] == movement_before
-    charge = updated["engine"]["obligations"].get("shipping:100:base_shipping")
+    after = reconcile(deepcopy(previous), deepcopy(sources), OBSERVED)
+    assert after["movements"] == originals
+    charge = after["engine"]["obligations"].get("shipping:100:base_shipping")
     assert (charge is not None and charge.get("confirmed") == "10.00") == should_accrue
-    assert reconcile(deepcopy(updated), deepcopy(sources), OBSERVED) == updated
+    if payout_allocation == "settled_previous_invoice":
+        assert after["engine"]["obligations"]["shipping:prior-order:base_shipping"] == previous["engine"]["obligations"]["shipping:prior-order:base_shipping"]
+    assert reconcile(deepcopy(after), deepcopy(sources), OBSERVED) == after
