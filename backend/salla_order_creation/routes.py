@@ -22,6 +22,7 @@ from order_engine.service import get_order, OrderNotFoundError
 from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
 from .checkout_readback import resolve_synced_checkout, verify_checkout_read
 from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
+from .prepare_action import verify_prepare_unpaid_order
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
@@ -52,6 +53,63 @@ def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    @router.post("/signed-prepare")
+    async def signed_prepare(request: Request) -> dict:
+        """Authorize trusted Chatwoot service to prepare an UNPAID order.
+
+        This never POSTs to Salla. All catalog, carrier and payment-method
+        facts are re-read by Mezan. A separate verified inbound customer
+        confirmation and an independent create-order permission are required
+        before the real order is created.
+        """
+        if os.environ.get("MEZAN_ASSISTED_SALLA_SIGNED_PREPARE_ENABLED", "0") != "1":
+            raise HTTPException(status_code=503, detail={"code": "signed_prepare_disabled"})
+        owner_id = str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_PREPARE_HMAC_SECRET") or "").encode()
+        account = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
+        inbox = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
+        if (not owner_id or len(secret) < 32 or not account.isdigit()
+                or not inbox.isdigit()):
+            raise HTTPException(status_code=503, detail={"code": "prepare_scope_not_configured"})
+        try:
+            raw = await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(
+                status_code=413, detail={"code": exc.args[0]}
+            ) from exc
+        try:
+            verified = verify_prepare_unpaid_order(
+                raw,
+                request.headers.get("x-mezan-action-timestamp", ""),
+                request.headers.get("x-mezan-action-delivery", ""),
+                request.headers.get("x-mezan-action-signature", ""),
+                secret,
+            )
+        except SignatureDenied as exc:
+            raise HTTPException(status_code=401, detail={"code": exc.args[0]}) from exc
+        if (verified.account_id != int(account)
+                or verified.inbox_id != int(inbox)):
+            raise HTTPException(status_code=403, detail={"code": "outside_approved_inbox"})
+        try:
+            return await prepare_salla_unpaid_order_intent(
+                db,
+                user_id=owner_id, intent_id=verified.intent_id,
+                inbox_id=str(verified.inbox_id),
+                conversation_id=str(verified.conversation_id),
+                source_message_id=verified.source_message_id,
+                source_contact_id=verified.source_contact_id,
+                order=verified.order,
+                selected_rate_id=verified.selected_rate_id,
+                enabled=(
+                    os.environ.get("MEZAN_ASSISTED_SALLA_QUOTE_WRITE_ENABLED", "0")
+                    == "1"
+                ),
+            )
+        except PrepareDenied as exc:
+            raise HTTPException(
+                status_code=exc.status_code, detail={"code": str(exc)}
+            ) from exc
 
     @router.post("/prepare-unpaid-intent")
     async def prepare_unpaid_order_intent(
