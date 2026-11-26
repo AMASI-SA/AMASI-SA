@@ -143,3 +143,17 @@ A read-only authorized Salla catalog inspection found Amasi **service-type perso
 - Scope checks and provisional price/payment methods also remained green at this test checkpoint. This is still an isolated unit suite, **not a live Salla POST / chat-to-order acceptance**.
 
 Open: validate that the official Create Order API accepts each required Amasi product text/conditional option representation in a separately approved synthetic integration, match the final Salla total, and verify the existing Mezan checkout URL sync. Do not deploy or enable order creation until final quote source and owner go-live approvals exist.
+
+## 2026-11-27 — Owner decision: verify Mezan total, then reuse its checkout link
+
+After Mezan creates a single pending_payment Salla order, wait for that SAME order in Mezan sync. Verify actual Salla order ID/reference, waiting-payment status, SAR total matching customer-approved value (max difference 0.01 SAR), and an existing checkout URL for the merchant-approved HTTPS host. Then send it to the same WhatsApp conversation. Never generate links or duplicate the Salla POST.
+
+New backend/salla_order_creation/checkout_readback.py resolves only owner+inbox+conversation+intent+quote/approval scoped order references, and reads the current canonical Mezan Order Engine model. The signed-checkout POST is READ-ONLY, independently gated by MEZAN_ASSISTED_SALLA_CHECKOUT_READ_ENABLED=1, secret MEZAN_ASSISTED_SALLA_CHECKOUT_HMAC_SECRET and exact approved hosts MEZAN_ASSISTED_SALLA_CHECKOUT_ALLOWED_HOSTS. All default OFF; no credentials provided in GitHub.
+
+Missing Salla/Mezan sync or link returns waiting with no URL; mismatch/paid/foreign order or untrusted URL returns an exception state with no URL; never manufacture link or retry create.
+
+Verified GitHub Actions run: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45905261993 — 229 synthetic tests PASS at commit bc681d0f389782cb4068935208048c205af6c662. No live Salla create or actual WhatsApp send tested.
+
+CSA draft PR #104 adds ai/mezan_checkout_readback.py and ai/salla_checkout_delivery.py. Uses signed Mezan read first, native guarded Chatwoot send second, durable once-only SQLite send ledger. CSA exact-head run https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/actions/runs/45905528538 FAILED, and job-log retrieval is blocked by GitHub BlobNotFound; split matrix run 45905726267 also FAILED without retrievable logs. THESE TESTS ARE NOT YET ACCEPTED. No live worker hookup or production release.
+
+Remaining: final-price policy and quote writer, verification of current OAuth scopes/real payment host, signed native worker integration, safe staging one-order E2E and explicit go-live approval. No production deployment and no actual customer order.
