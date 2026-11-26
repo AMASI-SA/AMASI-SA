@@ -23,7 +23,7 @@ One unchanged official verifier ran05:05:09.532939→05:18:45.614482UTC, exit0, 
 
 The original wrapper correctly retained its refusal: the credential file kept its inode and all other checked metadata exceptmtime; the bookkeeping file appended378bytes with the original prefix preserved. All59 foreign-root identities and431of432 untracked records were unchanged. Credential content was not read, hashed, copied, modified or claimed equal, and the actor is not attributed.
 
-Retained original receipt SHA256 `8974eba82cad7ecd859c3e1b4dced8406daafd2758b39c2a0609f20296c365a1`; exact observation SHA256 `31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d`. Do not edit these files or broaden the original wrapper. A separate exact-observation, one-use restore-only continuation is being independently reviewed. Root alone may execute it after review/checkpoint, and only for the local Backend this task stopped.
+Retained original receipt SHA256 `8974eba82cad7ecd859c3e1b4dced8406daafd2758b39c2a0609f20296c365a1`; exact observation SHA256 `31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d`. Do not edit these files or broaden the original wrapper. A separate exact-observation, one-use restore-only continuation passed root and independent review at SHA256 `5f1ff13c969d9a86beaa7f73105762b4b86109195a024d8ddb0811194bdd408f`. All22 bounded checks passed with0 real subprocesses/host actions/service starts. It is ready for a separate exact-byte upload and one invocation. Root alone may execute it after review/checkpoint, and only for the local Backend this task stopped.
 
 ## Next safe action
 

@@ -1,0 +1,100 @@
+{
+  "source_sha256": "5f1ff13c969d9a86beaa7f73105762b4b86109195a024d8ddb0811194bdd408f",
+  "checks": [
+    {
+      "name": "exact_raw_observation_and_integer_nanoseconds",
+      "passed": true
+    },
+    {
+      "name": "changed_credential_inode",
+      "passed": true
+    },
+    {
+      "name": "changed_credential_size",
+      "passed": true
+    },
+    {
+      "name": "credential_digest_forbidden",
+      "passed": true
+    },
+    {
+      "name": "original_refusal_must_remain",
+      "passed": true
+    },
+    {
+      "name": "sole_violation_must_remain",
+      "passed": true
+    },
+    {
+      "name": "full_root_count",
+      "passed": true
+    },
+    {
+      "name": "full_untracked_count",
+      "passed": true
+    },
+    {
+      "name": "exact_append_size",
+      "passed": true
+    },
+    {
+      "name": "prefix_proof_required",
+      "passed": true
+    },
+    {
+      "name": "whole_raw_file_digest_required",
+      "passed": true
+    },
+    {
+      "name": "pinned_evidence_symlink_refused",
+      "passed": true
+    },
+    {
+      "name": "success_once",
+      "passed": true
+    },
+    {
+      "name": "replay_refused",
+      "passed": true
+    },
+    {
+      "name": "fresh_observation_differs",
+      "passed": true
+    },
+    {
+      "name": "already_running",
+      "passed": true
+    },
+    {
+      "name": "guard_active",
+      "passed": true
+    },
+    {
+      "name": "start_failure",
+      "passed": true
+    },
+    {
+      "name": "start_interruption",
+      "passed": true
+    },
+    {
+      "name": "post_start_observation_differs",
+      "passed": true
+    },
+    {
+      "name": "owned_child_cleanup_on_timeout",
+      "passed": true
+    },
+    {
+      "name": "owned_child_cleanup_on_interrupt",
+      "passed": true
+    }
+  ],
+  "passed": 22,
+  "real_subprocesses": 0,
+  "host_actions": 0,
+  "services_started": 0,
+  "credential_contents_accessed": false,
+  "original_observation_unchanged": true,
+  "scope": "Pure exact-pattern/raw-byte checks and mocked restoration/control-flow checks; no production execution."
+}
