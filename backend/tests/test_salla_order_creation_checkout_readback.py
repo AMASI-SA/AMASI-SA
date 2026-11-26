@@ -291,3 +291,13 @@ def test_salla_post_create_untrusted_non_sar_total_denied():
     o = mezan_order()
     o.totals.currency = "KWD"
     assert check(db=db, result=o)["state"] == "payment_or_currency_not_verified"
+
+
+
+def test_created_salla_id_with_missing_reference_waits_without_checkout_link():
+    db=DB()
+    db.salla_ai_order_intents.rows[0]["reference_id"]=None
+    row=check(db=db)
+    assert row["state"]=="waiting_for_salla_reference"
+    assert row["checkout_url"] is None
+    assert row["salla_order_id"]==9876
