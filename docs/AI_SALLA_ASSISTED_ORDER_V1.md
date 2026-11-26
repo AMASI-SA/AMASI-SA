@@ -1,5 +1,23 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Encrypted private customer fields and PII-free catalog/quote bridge (DRAFT)
+
+**Privacy decision:** Keep buyer name/mobile/email, recipient name/mobile, delivery address, map coordinates and personalized engraving text within Mezan only; do NOT pass them to an OpenAI model. The native WhatsApp worker still runs its existing privacy/human-takeover guard by default.
+
+New Mezan modules on draft PR #2140:
+- `private_fields.py`: AES/HMAC authenticated Fernet encryption at rest in `salla_ai_private_order_fields`, scoped by tenant/account/inbox/conversation/intent/contact, immutable source message IDs, CAS revision fencing, seven-day purge_after, and a mandatory, operator-installed Mongo TTL index. Uses a NEW independent `MEZAN_ASSISTED_SALLA_PRIVATE_FIELDS_KEY` (optionally _OLD for rotation), not Salla OAuth key. Missing/expired TTL and wrong contact fail closed.
+- `private_field_action.py` and default-OFF `/orders-v2/assisted-salla/signed-private-field`: narrow purpose-specific HMAC, exact field allowlist plus dynamic `option_text_<Salla option id>`, no payment/card/checkout/paid mutation; response contains only safe field names, revision and state, never value.
+- `quote_cipher.py`: full pending-order payload in temporary `salla_ai_order_quotes` is now **encrypted**, not plain Mongo JSON. Signed order creation decrypts it privately and verifies merchant/intent binding and immutable cart digest. Legacy *preverified* quote source has an isolated transitional plaintext fallback; new post-create quote sources MUST be encrypted.
+- `private_order_builder.py` and `private_vault_action.py`: a distinct signed `/orders-v2/assisted-salla/signed-prepare-private` reads customer private fields server-side, combines only approved Salla country/city/district/carrier/product/option IDs, independently validates catalog/stock/shipping/method with the existing Salla token, and creates an UNPRICED electronic pending-order quote. The Chatwoot action never supplies buyer name, phone, street, email, actual engraved name or link.
+- Personalized text uses opaque `private.option_text_<Salla option id>` in the public selection; Mezan resolves the actual name from the encrypted vault and validates text option visibility, required fields and provider text limits. No raw engraving is echoed to AI.
+- `confirmation.py` and `service.py` now bind the signed customer approval `source_contact_id` to the *same* scoped original Chatwoot contact whose private fields the quote used. Wrong contact cannot authorize Salla POST.
+- Strict source IDs and quote TTL protect edits after confirmation. Protected field updates freeze as soon as a quote/order exists. No real customer PII, OAuth secret, payment URL or card data were put into GitHub files/tests.
+
+**Acceptance:** New synthetic suites added for encrypted field vault and TTL, signed field/purpose, quote encryption & tamper, vault-only order builder, personalized private text and cross-contact consent denial. GitHub Actions at the **LATEST HEAD is QUEUED** as of this note; do not report these new tests as passed. The previously confirmed 297 PASS in run 45911507595 covers older code, not the new vault.
+
+**Not live:** Independent private-field/quote vault keys, TTL index migrations, Salla product/payment read scopes, verified country/cart pricing and real checkout allowed hosts remain unconfigured. No customer PII can flow to the LLM; no live private-field collection, no Salla POST, no WhatsApp send, no production merge/deployment. CSA counterpart draft PR #104 adds a default-OFF native-worker private intake hook and protected field sender; its Actions runner is blocked (#122). See CSA privacy #124 and Mezan OAuth #2149.
+
+
 **Date:** 2026-11-26 Riyadh · **Status:** DRAFT, no production enablement
 
 Owner tasks: [Mezan #2139](https://github.com/AMASI-SA/AMASI-SA/issues/2139), [CSA #96](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/96), discovery [CSA #100](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/100).
