@@ -10,7 +10,6 @@ fees may change the final payable amount. This module never records a
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 from typing import Mapping, Sequence
 
 from .catalog_validation import validate_selected_cart
