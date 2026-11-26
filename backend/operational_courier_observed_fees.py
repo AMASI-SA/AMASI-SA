@@ -67,13 +67,28 @@ def apply_observed_courier_base(state, order, start, now, put, fact, issue, allo
             or facts.get("shipping_fee:" + oid) is not None
             or (facts.get(root) or {}).get("cost") is not None):
         return True
+    # Check old aggregate and explicit per-component/deferred/prepaid fee
+    # identities, not only this new component ID. An old posted base at the
+    # aggregate root must never be followed by a second component charge.
+    old_fee_keys = (root, key, "shipping-prepaid:" + oid, "shipping-completed:" + oid)
     existing = obligations.get(key)
-    if existing and Decimal(str(existing.get("confirmed", "0"))) > 0:
-        # Keep the exact old amount/date. Source changes need their own
-        # review; a fresh calculator must never rewrite a paid fee.
-        if existing.get("party_id") != carrier["id"] or existing.get("currency") != "SAR":
+    for old_key in old_fee_keys:
+        old_row = obligations.get(old_key)
+        if old_row is None:
+            continue
+        try:
+            already_earned = Decimal(str(old_row.get("confirmed", "0"))) > 0
+        except (InvalidOperation, TypeError, ValueError):
             issue("operational_courier_observed_fee_saved_conflict", oid)
-        return True
+            return False
+        if already_earned:
+            # Keep the exact old amount/date, even if the current quote has
+            # changed. Owner review must resolve any new identity conflict.
+            if (old_row.get("party_type") != "courier"
+                    or old_row.get("party_id") != carrier["id"]
+                    or old_row.get("currency") != "SAR"):
+                issue("operational_courier_observed_fee_saved_conflict", oid)
+            return True
     if (root in allocations or key in allocations
             or (existing and Decimal(str(existing.get("confirmed", "0"))) != 0)
             or facts.get(key) is not None):
