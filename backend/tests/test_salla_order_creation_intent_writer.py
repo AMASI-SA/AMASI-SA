@@ -213,3 +213,24 @@ def test_failed_product_read_never_writes_verified_quote():
 def test_default_off_requires_explicit_owner_activation():
     with pytest.raises(PrepareDenied):
         create(enabled=False)
+
+
+
+def test_saved_order_retains_required_nullable_address_fields_for_create():
+    db,out=create()
+    stored=db.salla_ai_order_quotes.rows[0]["order_payload"]
+    assert "block" in stored["ship_to"] and stored["ship_to"]["block"] is None
+    assert PendingOrder.model_validate(stored).model_dump() == order().model_dump()
+
+
+def test_nullable_international_address_survives_storage():
+    custom=order()
+    custom.receiver.country_code="KW"
+    custom.ship_to.district=None
+    custom.ship_to.block=None
+    custom.ship_to.postal_code=None
+    db,result=create(o=custom)
+    persisted=db.salla_ai_order_quotes.rows[0]["order_payload"]
+    assert persisted["ship_to"]["district"] is None
+    assert persisted["ship_to"]["postal_code"] is None
+    assert PendingOrder.model_validate(persisted).ship_to.district is None
