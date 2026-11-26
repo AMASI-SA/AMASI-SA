@@ -111,3 +111,15 @@ The proof writers are **not implemented** in this checkpoint; therefore this end
 - Branch has documentation-only commits after this tested implementation; feature flags still OFF and no real orders have been created.
 - Outstanding gate remains a **server-controlled, customer-specific final cart quote** incorporating actual option/variant pricing, VAT, discounts, carrier shipping and COD fee, or another authoritative Salla supported final quote. A standalone carrier estimate MUST NEVER be marked as an eligible final order quote.
 
+
+## 2026-11-26 — Honest preview (no premature final cart total)
+
+The buyer-facing flow now has an isolated, source-restricted **read-only estimate** path:
+
+- `backend/salla_order_creation/quote_preview.py` combines validated product option/variant identities with the destination-specific, carrier-specific Salla *estimate*; it returns visible line-price hints and carrier estimate but deliberately returns `verified_grand_total_sar: null`, `is_final_cart_quote: false`, `can_create_order: false`. It never invents a payable amount or creates a checkout/payment URL.
+- `backend/salla_order_creation/readers.py` checks the actual stored merchant OAuth grants for either `products.read`/`products.read_write` and `shipping.read`/`shipping.read_write`; it does not infer installed grants from requested defaults.
+- New read-only `read_checkout_payment_methods` uses Salla's `GET /payment/methods` with `payments.read` and distinguishes store-enabled candidates in the Create Order allowed enum (`mada`, `credit_card`, `bank`, `cod`) from other store gateways (Apple Pay, BNPL, etc.). A payment option's presence does **not** establish COD eligibility for the selected carrier/branch. Actual `payments.read` token scope is **not yet checked**.
+- Official docs checked on 2026-11-26: [Create Order](https://docs.salla.dev/5394145e0), [Product Details](https://docs.salla.dev/product/product-details), [List Estimate Rates](https://docs.salla.dev/6899590e0), [Available Payment Methods](https://docs.salla.dev/payments/available-methods), and [Twilight cart SDK](https://docs.salla.dev/twilight/react/sdk/cart). The merchant Create Order API is confirmed; a supported **merchant server-side final-cart pricing endpoint** with exact shipping/discount/tax rules was **not identified in these sources**. Twilight's cart SDK is a customer/storefront flow, and `priceQuote` asks guests to log in; it is **not** a drop-in backend quote for independent Chatwoot service.
+- New offline tests cover preview uncertainty and method filtering. Exact-head CI for the new tests is **pending**, not yet claimed successful.
+
+**Still blocked:** server-authored, authoritative final price for the exact customer checkout cart. Never label a subtotal of product listings + carrier estimate as final or sign it into `salla_ai_order_quotes`. An owner-reviewed manual pilot quote (if separately authorized in the future) would be an interim mode, not autonomous AI pricing. No feature flags were enabled, no real order placed, no existing financial/accounting entry changed.
