@@ -1,0 +1,514 @@
+{
+  "experiment": "single_fresh_process_private_bundle_item_view_pair",
+  "source_commit": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+  "script_sha256": "684aaef8fd0149b3aa1d42fe28c3f035feff1efc0d6dcf227965196c14520735",
+  "complete_output_equal": true,
+  "complete_serialized_output_equal": true,
+  "input_hashes_equal_and_preserved": true,
+  "query_sequences_equal": true,
+  "source_hashes_equal_and_preserved": true,
+  "both_children_joined": true,
+  "unchanged": [
+    "all source query/projection/cap/cohort contracts",
+    "actual option authority and payment read-view opt-ins",
+    "all option/custom-field normalizers and selection/fingerprint helpers",
+    "authority, receipt/unit mapping and final financial projection"
+  ],
+  "limitations": [
+    "Synthetic cohort; actual live item shapes and bundle/history frequencies are unknown.",
+    "No selected physical/financial bundle or supplier history in this large timing fixture.",
+    "One fresh-process A/B pair; no repeated-sample stability or production guarantee.",
+    "GC stays enabled; explicit untimed gc.collect precedes each collector.",
+    "Inclusive helper/stage timings overlap and must not be summed.",
+    "Per-process RSS includes imports/fixture construction, not isolated normalization allocation.",
+    "Avoided nested container clone count applies only to admitted exact acyclic JSON trees.",
+    "No full graph mutation snapshot or retained cross-request cache is created.",
+    "No real Mongo transport, concurrent profit/native evidence, reconciliation or financial save.",
+    "The85s limit bounds a synthetic source call, not the complete production request.",
+    "Runtime adoption still requires populated financial, malformed, alias/hook and cancellation parity."
+  ],
+  "raw_result_bytes": 354847,
+  "raw_result_sha256": "8f9321f986e49580ac9e45756a940b8c7ada426c3a207986f7478af016c492a6",
+  "runs": [
+    {
+      "mode": "baseline",
+      "helpers": {
+        "native_option_normalization": {
+          "calls": 76604,
+          "wall_ms": 6132.455,
+          "thread_cpu_ms": 6143.214
+        },
+        "bundle_item_copy": {
+          "calls": 76604,
+          "wall_ms": 5171.776,
+          "thread_cpu_ms": 5195.227
+        },
+        "bundle_normalized_orders": {
+          "calls": 1,
+          "wall_ms": 12352.526,
+          "thread_cpu_ms": 12336.251
+        },
+        "verified_option_tokens": {
+          "calls": 76604,
+          "wall_ms": 1162.438,
+          "thread_cpu_ms": 1164.647
+        },
+        "cost_components": {
+          "calls": 76604,
+          "wall_ms": 4460.968,
+          "thread_cpu_ms": 4441.523
+        },
+        "catalog_options": {
+          "calls": 128,
+          "wall_ms": 7.992,
+          "thread_cpu_ms": 8.019
+        }
+      },
+      "stages": {
+        "orders_cursor_build": {
+          "wall_ms": 10.000679,
+          "thread_cpu_ms": 10.004808
+        },
+        "orders_cursor_read": {
+          "wall_ms": 0.818133,
+          "thread_cpu_ms": 0.819931
+        },
+        "orders_rows_validate": {
+          "wall_ms": 4.735638,
+          "thread_cpu_ms": 4.690127
+        },
+        "source_primary_reads": {
+          "wall_ms": 45.62197,
+          "thread_cpu_ms": 31.477687
+        },
+        "source_fee_settings": {
+          "wall_ms": 0.021521,
+          "thread_cpu_ms": 0.02171
+        },
+        "source_setup": {
+          "wall_ms": 28.568278,
+          "thread_cpu_ms": 28.421091
+        },
+        "source_statements": {
+          "wall_ms": 103.473208,
+          "thread_cpu_ms": 103.393301
+        },
+        "source_delivery_history": {
+          "wall_ms": 604.177298,
+          "thread_cpu_ms": 134.196611
+        },
+        "source_transactions": {
+          "wall_ms": 155.381242,
+          "thread_cpu_ms": 155.385909
+        },
+        "source_native_links": {
+          "wall_ms": 146.284255,
+          "thread_cpu_ms": 146.288963
+        },
+        "bundle_order_normalization": {
+          "wall_ms": 12352.539997,
+          "thread_cpu_ms": 12336.301522
+        },
+        "bundle_cost_authority": {
+          "wall_ms": 548.264974,
+          "thread_cpu_ms": 544.404158
+        },
+        "source_bundles": {
+          "wall_ms": 13359.166665,
+          "thread_cpu_ms": 13326.245574
+        },
+        "source_option_catalog": {
+          "wall_ms": 772.279806,
+          "thread_cpu_ms": 769.647296
+        },
+        "source_order_indexes": {
+          "wall_ms": 46.144913,
+          "thread_cpu_ms": 24.694141
+        },
+        "source_orders": {
+          "wall_ms": 11897.955216,
+          "thread_cpu_ms": 11716.077475
+        },
+        "source_invoices": {
+          "wall_ms": 2.671778,
+          "thread_cpu_ms": 2.673993
+        },
+        "source_other_sources": {
+          "wall_ms": 0.558827,
+          "thread_cpu_ms": 0.37455
+        },
+        "source_native_overlaps": {
+          "wall_ms": 5.26527,
+          "thread_cpu_ms": 5.267484
+        },
+        "source_finalize": {
+          "wall_ms": 138.698523,
+          "thread_cpu_ms": 33.692992
+        }
+      },
+      "gc_before": [
+        {
+          "collections": 2973,
+          "collected": 643,
+          "uncollectable": 0
+        },
+        {
+          "collections": 270,
+          "collected": 25,
+          "uncollectable": 0
+        },
+        {
+          "collections": 12,
+          "collected": 8,
+          "uncollectable": 0
+        }
+      ],
+      "wall_ms": 27274.038071,
+      "process_cpu_ms": 27712.822509,
+      "copy_counts": {
+        "calls": 76604,
+        "borrowed_items": 0,
+        "full_item_deepcopies": 76604,
+        "containers_examined": 0,
+        "max_containers_per_item": 0,
+        "nested_container_clones_avoided": 0,
+        "fallback_reasons": {}
+      },
+      "gc_after": [
+        {
+          "collections": 7151,
+          "collected": 643,
+          "uncollectable": 0
+        },
+        {
+          "collections": 649,
+          "collected": 60,
+          "uncollectable": 0
+        },
+        {
+          "collections": 15,
+          "collected": 8,
+          "uncollectable": 0
+        }
+      ],
+      "gc_wall_ms": 4268.406249,
+      "gc_collections": {
+        "0": 4178,
+        "1": 379,
+        "2": 3
+      },
+      "process_high_water_rss_kib": 942020,
+      "output_orders": 19151,
+      "output_items": 76604,
+      "output_issues": {},
+      "queries_by_collection": {
+        "unified_orders": 1,
+        "mezan_ad_account_cost_settings_v2": 1,
+        "mezan_cost_resources_v2": 1,
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "mezan_google_ads_performance_daily_v2": 1,
+        "mezan_integration_accounts_v2": 1,
+        "mezan_meta_performance_daily_v2": 1,
+        "mezan_preparation_pieces_v1": 1,
+        "mezan_product_cost_profiles_v2": 1,
+        "mezan_product_option_cost_bindings_v2": 1,
+        "mezan_product_resource_bindings_v2": 1,
+        "mezan_snapchat_daily_projections_v2": 1,
+        "mezan_supplier_invoices_v2": 1,
+        "mezan_suppliers_v2": 1,
+        "mezan_tiktok_performance_daily_v2": 1,
+        "mz2_ad_account_bindings_v2": 1,
+        "mz2_ad_automation_policies_v2": 1,
+        "mz2_ad_fx_snapshots_v2": 1,
+        "mz2_bank_transfer_bindings": 1,
+        "mz2_external_persons_v2": 1,
+        "mz2_financial_accounts": 1,
+        "mz2_operational_owner_beneficiaries_v2": 1,
+        "mz2_provider_fee_policies_v2": 1,
+        "mz2_shipping_setup_v2": 1,
+        "operating_recurring_invoices_v2": 1,
+        "operating_recurring_obligations_v2": 1,
+        "store_delivery_assignments": 1,
+        "store_delivery_collections": 1,
+        "store_delivery_driver_earnings": 1,
+        "store_delivery_driver_settlements": 1,
+        "store_drivers": 1,
+        "settings": 1,
+        "order_activity_events_v2": 77,
+        "order_payment_transactions_v2": 116,
+        "mezan_bundle_definitions_v2": 1,
+        "mezan_order_item_cost_snapshots_v2": 77,
+        "mezan_component_order_lifecycle_v1": 77,
+        "mezan_component_consumption_plans_v1": 77,
+        "mezan_component_consumption_units_v1": 77,
+        "mezan_products_v2": 2
+      },
+      "query_sequence_sha256": "ada563f25ef95250e3c6ea92a65c71054d149d68256f79fd1f7a872a28071cf1",
+      "output": {
+        "sha256": "23e16abfbe0855486632c08b70d2dc71008febd99c30c55c88282104949a6339",
+        "pickle_bytes": 10593735
+      },
+      "input_sha256": "c08140d7a748e979d6cb11c406ee43120c662ae5f576fbd2dce8b577e521c24e",
+      "source_bson_bytes": {
+        "mezan_cost_resources_v2": 0,
+        "mezan_product_cost_profiles_v2": 11666,
+        "mezan_product_option_cost_bindings_v2": 109804,
+        "mezan_product_resource_bindings_v2": 0,
+        "mezan_products_v2": 170386,
+        "unified_orders": 92268810
+      },
+      "source_input_unchanged": true,
+      "original_state_unchanged": true,
+      "public_copy_restored": true,
+      "owned_async_tasks_joined": true,
+      "source_commit": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+      "runtime_unchanged": true,
+      "guard_controls": {
+        "native_tree_admitted": true,
+        "aliases_cycles_custom_types_rejected": true,
+        "original_deepcopy_fallback_preserved": true
+      }
+    },
+    {
+      "mode": "private_view",
+      "helpers": {
+        "native_option_normalization": {
+          "calls": 76604,
+          "wall_ms": 3947.142,
+          "thread_cpu_ms": 3925.449
+        },
+        "bundle_item_copy": {
+          "calls": 76604,
+          "wall_ms": 1708.274,
+          "thread_cpu_ms": 1707.759
+        },
+        "bundle_normalized_orders": {
+          "calls": 1,
+          "wall_ms": 8041.547,
+          "thread_cpu_ms": 7947.913
+        },
+        "verified_option_tokens": {
+          "calls": 76604,
+          "wall_ms": 1134.846,
+          "thread_cpu_ms": 1146.168
+        },
+        "cost_components": {
+          "calls": 76604,
+          "wall_ms": 4378.471,
+          "thread_cpu_ms": 4363.356
+        },
+        "catalog_options": {
+          "calls": 128,
+          "wall_ms": 7.55,
+          "thread_cpu_ms": 7.576
+        }
+      },
+      "stages": {
+        "orders_cursor_build": {
+          "wall_ms": 9.378802,
+          "thread_cpu_ms": 9.379761
+        },
+        "orders_cursor_read": {
+          "wall_ms": 0.71487,
+          "thread_cpu_ms": 0.71759
+        },
+        "orders_rows_validate": {
+          "wall_ms": 4.307785,
+          "thread_cpu_ms": 4.309977
+        },
+        "source_primary_reads": {
+          "wall_ms": 30.903171,
+          "thread_cpu_ms": 30.902112
+        },
+        "source_fee_settings": {
+          "wall_ms": 0.020208,
+          "thread_cpu_ms": 0.020478
+        },
+        "source_setup": {
+          "wall_ms": 36.647339,
+          "thread_cpu_ms": 36.439291
+        },
+        "source_statements": {
+          "wall_ms": 89.537005,
+          "thread_cpu_ms": 89.539535
+        },
+        "source_delivery_history": {
+          "wall_ms": 627.418737,
+          "thread_cpu_ms": 152.433778
+        },
+        "source_transactions": {
+          "wall_ms": 141.331069,
+          "thread_cpu_ms": 141.335495
+        },
+        "source_native_links": {
+          "wall_ms": 134.532063,
+          "thread_cpu_ms": 134.536422
+        },
+        "bundle_order_normalization": {
+          "wall_ms": 8041.560772,
+          "thread_cpu_ms": 7947.996397
+        },
+        "bundle_cost_authority": {
+          "wall_ms": 2061.318727,
+          "thread_cpu_ms": 2050.556344
+        },
+        "source_bundles": {
+          "wall_ms": 10388.357351,
+          "thread_cpu_ms": 10283.951789
+        },
+        "source_option_catalog": {
+          "wall_ms": 778.039343,
+          "thread_cpu_ms": 778.004595
+        },
+        "source_order_indexes": {
+          "wall_ms": 42.274993,
+          "thread_cpu_ms": 24.688583
+        },
+        "source_orders": {
+          "wall_ms": 11578.576199,
+          "thread_cpu_ms": 11463.372046
+        },
+        "source_invoices": {
+          "wall_ms": 5.451329,
+          "thread_cpu_ms": 5.460475
+        },
+        "source_other_sources": {
+          "wall_ms": 1.614757,
+          "thread_cpu_ms": 1.503748
+        },
+        "source_native_overlaps": {
+          "wall_ms": 8.415184,
+          "thread_cpu_ms": 8.420561
+        },
+        "source_finalize": {
+          "wall_ms": 168.576365,
+          "thread_cpu_ms": 51.009542
+        }
+      },
+      "gc_before": [
+        {
+          "collections": 2973,
+          "collected": 643,
+          "uncollectable": 0
+        },
+        {
+          "collections": 270,
+          "collected": 25,
+          "uncollectable": 0
+        },
+        {
+          "collections": 12,
+          "collected": 8,
+          "uncollectable": 0
+        }
+      ],
+      "wall_ms": 24006.110097,
+      "process_cpu_ms": 24587.306353,
+      "copy_counts": {
+        "calls": 76604,
+        "borrowed_items": 76604,
+        "full_item_deepcopies": 0,
+        "containers_examined": 1627832,
+        "max_containers_per_item": 22,
+        "nested_container_clones_avoided": 1551228,
+        "fallback_reasons": {}
+      },
+      "gc_after": [
+        {
+          "collections": 5319,
+          "collected": 643,
+          "uncollectable": 0
+        },
+        {
+          "collections": 483,
+          "collected": 60,
+          "uncollectable": 0
+        },
+        {
+          "collections": 14,
+          "collected": 8,
+          "uncollectable": 0
+        }
+      ],
+      "gc_wall_ms": 2877.616613,
+      "gc_collections": {
+        "0": 2346,
+        "1": 213,
+        "2": 2
+      },
+      "process_high_water_rss_kib": 719188,
+      "output_orders": 19151,
+      "output_items": 76604,
+      "output_issues": {},
+      "queries_by_collection": {
+        "unified_orders": 1,
+        "mezan_ad_account_cost_settings_v2": 1,
+        "mezan_cost_resources_v2": 1,
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "mezan_google_ads_performance_daily_v2": 1,
+        "mezan_integration_accounts_v2": 1,
+        "mezan_meta_performance_daily_v2": 1,
+        "mezan_preparation_pieces_v1": 1,
+        "mezan_product_cost_profiles_v2": 1,
+        "mezan_product_option_cost_bindings_v2": 1,
+        "mezan_product_resource_bindings_v2": 1,
+        "mezan_snapchat_daily_projections_v2": 1,
+        "mezan_supplier_invoices_v2": 1,
+        "mezan_suppliers_v2": 1,
+        "mezan_tiktok_performance_daily_v2": 1,
+        "mz2_ad_account_bindings_v2": 1,
+        "mz2_ad_automation_policies_v2": 1,
+        "mz2_ad_fx_snapshots_v2": 1,
+        "mz2_bank_transfer_bindings": 1,
+        "mz2_external_persons_v2": 1,
+        "mz2_financial_accounts": 1,
+        "mz2_operational_owner_beneficiaries_v2": 1,
+        "mz2_provider_fee_policies_v2": 1,
+        "mz2_shipping_setup_v2": 1,
+        "operating_recurring_invoices_v2": 1,
+        "operating_recurring_obligations_v2": 1,
+        "store_delivery_assignments": 1,
+        "store_delivery_collections": 1,
+        "store_delivery_driver_earnings": 1,
+        "store_delivery_driver_settlements": 1,
+        "store_drivers": 1,
+        "settings": 1,
+        "order_activity_events_v2": 77,
+        "order_payment_transactions_v2": 116,
+        "mezan_bundle_definitions_v2": 1,
+        "mezan_order_item_cost_snapshots_v2": 77,
+        "mezan_component_order_lifecycle_v1": 77,
+        "mezan_component_consumption_plans_v1": 77,
+        "mezan_component_consumption_units_v1": 77,
+        "mezan_products_v2": 2
+      },
+      "query_sequence_sha256": "ada563f25ef95250e3c6ea92a65c71054d149d68256f79fd1f7a872a28071cf1",
+      "output": {
+        "sha256": "23e16abfbe0855486632c08b70d2dc71008febd99c30c55c88282104949a6339",
+        "pickle_bytes": 10593735
+      },
+      "input_sha256": "c08140d7a748e979d6cb11c406ee43120c662ae5f576fbd2dce8b577e521c24e",
+      "source_bson_bytes": {
+        "mezan_cost_resources_v2": 0,
+        "mezan_product_cost_profiles_v2": 11666,
+        "mezan_product_option_cost_bindings_v2": 109804,
+        "mezan_product_resource_bindings_v2": 0,
+        "mezan_products_v2": 170386,
+        "unified_orders": 92268810
+      },
+      "source_input_unchanged": true,
+      "original_state_unchanged": true,
+      "public_copy_restored": true,
+      "owned_async_tasks_joined": true,
+      "source_commit": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+      "runtime_unchanged": true,
+      "guard_controls": {
+        "native_tree_admitted": true,
+        "aliases_cycles_custom_types_rejected": true,
+        "original_deepcopy_fallback_preserved": true
+      }
+    }
+  ]
+}
