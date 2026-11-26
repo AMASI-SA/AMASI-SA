@@ -653,9 +653,11 @@ def reconcile(state, sources, as_of):
                 # observed status* time, never at a fabricated delivery time.
                 # Keep the delivery/COD/bank hold below unchanged. Legacy
                 # orders and non-courier statuses remain excluded here.
-                from operational_courier_observed_fees import apply_observed_courier_base
-                apply_observed_courier_base(
-                    result, order, start, now, put, fact, issue, shipping_allocations)
+                from operational_delivery_register import uses_retained_deliveries
+                if uses_retained_deliveries(now):
+                    from operational_courier_observed_fees import apply_observed_courier_base
+                    apply_observed_courier_base(
+                        result, order, start, now, put, fact, issue, shipping_allocations)
                 from operational_driver_original_dates import apply_undated_fee
                 apply_undated_fee(result, order, start, now, put, fact, issue, shipping_allocations)
                 # Hold only this source family. Do not freeze an observation as
