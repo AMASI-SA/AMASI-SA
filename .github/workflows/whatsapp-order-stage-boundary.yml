@@ -23,4 +23,5 @@ jobs:
             backend/order_engine/test_whatsapp_stage_service_auth.py \
             backend/order_engine/test_whatsapp_stage_projection.py \
             backend/order_engine/test_whatsapp_stage_route.py \
-            backend/order_engine/test_whatsapp_sender_reader.py
+            backend/order_engine/test_whatsapp_sender_reader.py \
+            backend/order_engine/test_whatsapp_stage_mount.py
