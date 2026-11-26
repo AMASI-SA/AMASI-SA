@@ -4,7 +4,7 @@ import asyncio
 import pytest
 
 from salla_order_creation.readers import (
-    SourceUnavailable, read_exact_product, read_shipping_rate_candidates,
+    SourceUnavailable, read_exact_product, read_shipping_rate_candidates, read_checkout_payment_methods,
 )
 
 
@@ -183,3 +183,72 @@ def test_shipping_read_only_scope_can_read_estimates_without_write():
     ))
     assert len(quotes) == 1
     assert quotes[0]["is_final_cart_quote"] is False
+
+
+
+def test_payment_method_reader_uses_store_scope_and_allowlisted_create_order_enum():
+    calls = []
+    async def get(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"success": True, "data": [
+            {"slug": "mada", "id": 1}, {"slug": "bank", "id": 2},
+            {"slug": "tamara_installment", "id": 3},
+            {"slug": "apple_pay", "id": 4},
+        ]}
+    data = asyncio.run(read_checkout_payment_methods(
+        None, "owner", request=get,
+        integration_reader=integration("payments.read orders.read_write"),
+    ))
+    assert calls[0][0][2:] == ("GET", "/payment/methods")
+    assert data["eligible_create_order_method_candidates"] == ["bank", "mada"]
+    assert data["additional_store_gateway_methods_not_in_create_order_enum"] == [
+        "apple_pay", "tamara_installment",
+    ]
+    assert data["can_create_order"] is False
+    assert data["verified_carrier_eligibility"] is False
+
+
+def test_payment_methods_missing_scope_denied_before_http():
+    async def no_network(*args, **kwargs):
+        raise AssertionError("HTTP must not be called")
+    with pytest.raises(SourceUnavailable, match="payments.read_not_granted"):
+        asyncio.run(read_checkout_payment_methods(
+            None, "owner", request=no_network,
+            integration_reader=integration("orders.read_write"),
+        ))
+
+
+def test_payment_read_write_scope_accepted_as_read_grant():
+    async def get(*args, **kwargs):
+        return {"success": True, "data": [{"slug": "cod"}]}
+    data = asyncio.run(read_checkout_payment_methods(
+        None, "owner", request=get,
+        integration_reader=integration("payments.read_write"),
+    ))
+    assert data["eligible_create_order_method_candidates"] == ["cod"]
+
+
+def test_payment_method_reader_rejects_bad_provider_reply():
+    async def invalid(*args, **kwargs):
+        return {"success": False, "data": [{"slug": "mada"}]}
+    with pytest.raises(SourceUnavailable, match="salla_read_unsuccessful"):
+        asyncio.run(read_checkout_payment_methods(
+            None, "owner", request=invalid,
+            integration_reader=integration("payments.read"),
+        ))
+
+
+def test_payment_method_reader_rejects_duplicates_and_malformed_values():
+    for rows in (
+        [{"slug": "mada"}, {"slug": "mada"}],
+        [{"id": 1}],
+        [{"slug": None}],
+        [{"slug": ""}],
+    ):
+        async def get(*args, **kwargs):
+            return {"success": True, "data": rows}
+        with pytest.raises(SourceUnavailable):
+            asyncio.run(read_checkout_payment_methods(
+                None, "owner", request=get,
+                integration_reader=integration("payments.read"),
+            ))
