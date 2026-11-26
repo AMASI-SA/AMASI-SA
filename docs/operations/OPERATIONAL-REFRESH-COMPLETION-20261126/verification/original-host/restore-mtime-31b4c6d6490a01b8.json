@@ -1,0 +1,136 @@
+{
+  "backend_restore_required": false,
+  "backend_stopped_by_this_task": true,
+  "created_at": "2026-11-26T05:30:06.614768+00:00",
+  "credential_content_equality_verified": false,
+  "credential_contents_read_hashed_copied_or_modified_by_continuation": false,
+  "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+  "development_backend_restored": true,
+  "exact_saved_observation": {
+    "credential_metadata_only_after": {
+      "device": 66321,
+      "gid": 0,
+      "inode": 139030,
+      "mode": 33152,
+      "mtime_ns": 1795670237245429582,
+      "nlink": 1,
+      "path": "backend/.env",
+      "size": 4226,
+      "uid": 0
+    },
+    "credential_metadata_only_before": {
+      "device": 66321,
+      "gid": 0,
+      "inode": 139030,
+      "mode": 33152,
+      "mtime_ns": 1795667716979434587,
+      "nlink": 1,
+      "path": "backend/.env",
+      "size": 4226,
+      "uid": 0
+    },
+    "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+    "eligible_for_exact_review": false,
+    "eligible_variances": [
+      {
+        "after": {
+          "device": 66321,
+          "gid": 0,
+          "inode": 169292,
+          "mode": 33188,
+          "mtime_ns": 1795670237255429582,
+          "nlink": 1,
+          "path": ".emergent/stripped_env_names",
+          "sha256": "864e662d4de60a7b394c5e876adc4c2c69212089a47ab97b4c8be0da8e4eae8c",
+          "size": 124992,
+          "uid": 0
+        },
+        "appended_bytes": 378,
+        "before": {
+          "device": 66321,
+          "gid": 0,
+          "inode": 169292,
+          "mode": 33188,
+          "mtime_ns": 1795667716987434587,
+          "nlink": 1,
+          "path": ".emergent/stripped_env_names",
+          "sha256": "e093d5da319b53bd01f8ea6936f59d167fa4511ef87ca2d4fdb80134390961fc",
+          "size": 124614,
+          "uid": 0
+        },
+        "kind": "bookkeeping_append",
+        "original_prefix_preserved": true,
+        "original_prefix_sha256": "e093d5da319b53bd01f8ea6936f59d167fa4511ef87ca2d4fdb80134390961fc",
+        "path": ".emergent/stripped_env_names"
+      }
+    ],
+    "foreign_root_changes": [],
+    "foreign_root_count": 59,
+    "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+    "schema": "operational_preservation_observation_v1",
+    "source": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "strictly_preserved": false,
+    "untracked_changes": [
+      {
+        "after": {
+          "device": 66321,
+          "gid": 0,
+          "inode": 169292,
+          "mode": 33188,
+          "mtime_ns": 1795670237255429582,
+          "nlink": 1,
+          "path": ".emergent/stripped_env_names",
+          "sha256": "864e662d4de60a7b394c5e876adc4c2c69212089a47ab97b4c8be0da8e4eae8c",
+          "size": 124992,
+          "uid": 0
+        },
+        "before": {
+          "device": 66321,
+          "gid": 0,
+          "inode": 169292,
+          "mode": 33188,
+          "mtime_ns": 1795667716987434587,
+          "nlink": 1,
+          "path": ".emergent/stripped_env_names",
+          "sha256": "e093d5da319b53bd01f8ea6936f59d167fa4511ef87ca2d4fdb80134390961fc",
+          "size": 124614,
+          "uid": 0
+        }
+      }
+    ],
+    "untracked_count": 432,
+    "variance_actor_attribution": "not established",
+    "violations": [
+      "credential_change_is_not_the_reviewed_replacement_pattern"
+    ]
+  },
+  "intent": "a59e6ee18f41d13baaa0e863de2ed5810dd43319",
+  "operator_acknowledged_observation_sha256": "31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d",
+  "operator_config_sha256": "e0bc4866e20131aef7ea53b35a916234d19bf258b2a9b5e7f2d05ea969516fa5",
+  "operator_manifest_sha256": "a9f98d8f90c22617995d25cb7cd7a223d71e53343092daf326ee649e27db817c",
+  "original_eligibility_and_violation_retained": true,
+  "original_guard_active": false,
+  "original_guard_proof_sha256": "6e6534130c99d75433c08e2f281a444fb72c441873e2229c25949bd238ad761b",
+  "original_observation_unchanged": true,
+  "original_receipt_sha256": "8974eba82cad7ecd859c3e1b4dced8406daafd2758b39c2a0609f20296c365a1",
+  "original_receipt_unchanged": true,
+  "phase": "production_verified_local_backend_restored",
+  "preservation_observation_sha256": "31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d",
+  "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+  "restored_at": "2026-11-26T05:30:08.326434+00:00",
+  "review_basis": "Separate one-use continuation for the pinned observation; original refusal is not rewritten.",
+  "schema": "operational_backend_exact_mtime_restore_v1",
+  "service_start_attempts": 1,
+  "source": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+  "start_requested_at": "2026-11-26T05:30:06.980422+00:00",
+  "supervisor_after_restore": {
+    "exit_code": 0,
+    "state": "RUNNING"
+  },
+  "supervisor_before_restore": {
+    "exit_code": 3,
+    "state": "STOPPED"
+  },
+  "tree": "57601ee93838dde732e122354f0766c7e7414301",
+  "variance_actor_attribution": "not established"
+}

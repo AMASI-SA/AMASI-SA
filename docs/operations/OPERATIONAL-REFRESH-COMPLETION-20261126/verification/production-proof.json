@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "production_verified_exact_restore_ready",
+  "phase": "production_verified_local_restored_live_acceptance_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": true,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,7 +691,7 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "Fresh original guard status must be inactive, then upload exact separate continuation and invoke once with its pinned observation acknowledgement. Preserve original refusal; observe existing natural scheduler attempt afterward.",
+  "next_safe_action": "Observe the existing next natural scheduler attempt on verified Production; read/download fresh report only after save and run private financial preservation/duplication/identity-date review. No manual refresh has been triggered.",
   "original_host_current_attempt": {
     "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
     "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
@@ -712,7 +712,7 @@
       "cache_quarantine",
       "cache_quarantined"
     ],
-    "backend_restore_required": true,
+    "backend_restore_required": false,
     "lease_created": true,
     "publication_count": 1,
     "local_verification": {
@@ -866,14 +866,28 @@
       "checks": 22,
       "check_runtime_seconds": 0.103,
       "real_subprocesses_in_checks": 0,
-      "host_actions": 0,
-      "service_starts": 0,
+      "host_actions": 1,
+      "service_starts": 1,
       "check_source_sha256": "ff82237a101c34fb342a9bd885392f8c037cc70d8de498fee82af3d0fe7fd940",
       "check_result_sha256": "56a4636723bf2069281f071180f66eb8719a7397f661951630542291283949e4",
       "journal": "restore-mtime-31b4c6d6490a01b8.json",
       "observation_sha256": "31b4c6d6490a01b86c66663fadacfa182db060014ef752c9d034401bad12d29d",
       "credential_content_equality_verified": false,
-      "variance_actor_attribution": "not established"
+      "variance_actor_attribution": "not established",
+      "host_invocations": 1,
+      "restored_at": "2026-11-26T05:30:08.326434+00:00",
+      "phase": "production_verified_local_backend_restored",
+      "journal_bytes": 4966,
+      "journal_sha256": "d27acc37c2c6cd495c3f935c478c24299c007a140a8ad7f899befbdf6f3e9e71",
+      "original_receipt_unchanged": true,
+      "original_observation_unchanged": true,
+      "original_guard_active": false,
+      "supervisor_after_restore": {
+        "exit_code": 0,
+        "state": "RUNNING"
+      },
+      "backend_restore_required": false,
+      "operator_checkpoint": "bdf0ad4c991ead32d7fc7286a00c88ab8e15de1f"
     }
   },
   "deployment_ci": {
