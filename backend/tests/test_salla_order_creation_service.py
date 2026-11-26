@@ -114,6 +114,8 @@ def test_exactly_one_post_and_replay(salla_pending_order):
     }
     assert second["replayed"] is True
     assert second["salla_order_id"] == 90001
+    assert second["amount_confirmed"] is True
+    assert second["pricing_mode"] == "preverified"
     assert len(calls) == 1
     assert calls[0][0][2:] == ("POST", "/orders")
     assert calls[0][1]["json"]["payment"]["status"] == "pending_payment"
@@ -318,6 +320,12 @@ def test_post_create_salla_pricing_allows_only_unpaid_online_order(salla_pending
     assert result["amount_confirmed"] is False
     assert result["salla_order_id"] == 90701
     assert result["pricing_mode"] == "salla_post_create"
+    assert calls == [1]
+    replay = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert replay["replayed"] is True
+    assert replay["pricing_mode"] == "salla_post_create"
+    assert replay["amount_confirmed"] is False
+    assert replay["salla_order_id"] == 90701
     assert calls == [1]
     assert db.salla_ai_order_intents.rows[0]["pricing_mode"] == "salla_post_create"
     assert db.salla_ai_order_intents.rows[0]["inbox_id"] == "inbox-1"
