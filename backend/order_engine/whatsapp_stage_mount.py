@@ -15,6 +15,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from .repository import MongoOrderRepository
 from .whatsapp_stage_route import make_whatsapp_stage_router
+from .whatsapp_catalog_route import make_whatsapp_catalog_router
 from .whatsapp_sender_reader import ChatwootVerifiedSenderReader
 
 FRESH_SECONDS = 24 * 3600
@@ -98,4 +99,10 @@ def mount_if_enabled(api_router, db):
         resolve_verified_sender=reader,
         source_freshness=_fresh_salla_source)
     api_router.include_router(router)
+    api_router.include_router(make_whatsapp_catalog_router(
+        db=db,
+        fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
+        active_keys={fields["AMASI_WHATSAPP_STAGE_KEY_ID"]:key},
+        claim_nonce=nonce,
+    ))
     return True
