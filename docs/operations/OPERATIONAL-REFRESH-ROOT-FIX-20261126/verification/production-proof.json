@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "reviewed_intent_waiting_for_exact_B_CI",
-  "updated_utc": "2026-11-25T23:50:30Z",
+  "phase": "merged_awaiting_original_host_build",
+  "updated_utc": "2026-11-26 00:01:52 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -35,10 +35,19 @@
     "mongo_archive_cases_executed": 10,
     "mongo_ad_correction_cases_executed": 18,
     "real_mongo_version": "8.0.12",
-    "counts_are_overlapping": true
+    "counts_are_overlapping": true,
+    "intent_B_all_required_workflows_passed": 12,
+    "original_ci_host_rehearsals": [
+      "Node20.20.2",
+      "Node24.19.0"
+    ]
   },
-  "exact_B_ci": "pending",
-  "merge": "not_performed",
+  "exact_B_ci": "all_required_passed",
+  "merge": {
+    "sha": "570b173d1dc6438624c39a5c511311f2a33be9a3",
+    "method": "merge",
+    "tree_matches_B": true
+  },
   "production_changed": false,
   "publication_action_count": 0,
   "lease_created": false,
@@ -51,8 +60,12 @@
     "untracked_count": 432,
     "untracked_files_untouched": true,
     "planned_stage": "/app/.git/operational-refresh-2132-d7ea8f0d",
-    "planned_stage_created": false
+    "planned_stage_created": false,
+    "last_guard_observed_utc": "2026-11-26T00:00:12.319890+00:00",
+    "free_mib_before": 383,
+    "host_node": "v24.19.0",
+    "host_yarn": "1.22.22"
   },
   "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Require all exact-B workflows and both Node20/Node24 clean-clone adapter rehearsals. Verify current production ref and PR head, merge without squash/rebase, check original guard inactive, fast-forward original /app preserving unrelated files, run original adapter and package verification before lease. Then prepare/prepublish, publish once, require newer explicit Deployment Succeeded and original guard verify with three probes, then verify a new saved financial refresh and private preservation baseline."
+  "next_safe_action": "Fast-forward original /app to verified D, retaining unrelated files and task-owned generated provenance; run unchanged actual adapter without a lease, verify frontend/package artifacts, then prepare/prepublish and direct Production publication."
 }
