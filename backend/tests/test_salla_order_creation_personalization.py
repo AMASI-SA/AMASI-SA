@@ -7,6 +7,7 @@ This is NOT a live Salla API creation acceptance test.
 
 from datetime import datetime, timezone
 import pytest
+from pydantic import ValidationError
 
 from salla_order_creation.catalog_validation import (
     CartUnverified, validate_selected_cart,
@@ -140,12 +141,14 @@ def test_unconditional_required_personalization_cannot_be_omitted():
     "", "   ", "<script>", "سارة\nرنا", "أ" * 121, "ح" * 41,
 ])
 def test_personalization_rejects_empty_unsafe_and_oversized_values(bad_text):
-    o = order([
-        {"id": 1001, "value": ["هدية عائلية"]},
-        {"id": 1002, "value": ["2001"]},
-        {"id": 1003, "value": [bad_text]},
-    ])
-    with pytest.raises(CartUnverified):
+    # Empty input is already rejected by the strict PendingOrder model;
+    # valid-shape but unsafe/oversized text is rejected at catalog preflight.
+    with pytest.raises((ValidationError, CartUnverified)):
+        o = order([
+            {"id": 1001, "value": ["هدية عائلية"]},
+            {"id": 1002, "value": ["2001"]},
+            {"id": 1003, "value": [bad_text]},
+        ])
         check(o)
 
 
