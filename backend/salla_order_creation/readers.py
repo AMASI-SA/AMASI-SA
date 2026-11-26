@@ -53,8 +53,16 @@ async def _scope(db: Any, user_id: str, scope: str, read_integration) -> None:
     if not user_id:
         raise SourceUnavailable("merchant_scope_missing")
     record = await read_integration(db, user_id)
-    scopes = str((record or {}).get("scope") or "").split()
-    if not record or record.get("status") != "connected" or scope not in scopes:
+    scopes = set(str((record or {}).get("scope") or "").split())
+    # A read_write OAuth grant permits the corresponding read. Check the
+    # actual stored merchant token scope, NOT the app's requested scopes.
+    accepted = {scope}
+    if scope.endswith(".read"):
+        accepted.add(scope.removesuffix(".read") + ".read_write")
+    elif scope.endswith(".read_write"):
+        accepted.add(scope.removesuffix(".read_write") + ".read")
+    if (not record or record.get("status") != "connected"
+            or not scopes.intersection(accepted)):
         raise SourceUnavailable(f"{scope}_not_granted")
 
 
