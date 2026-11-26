@@ -497,7 +497,8 @@ def test_prior_payout_exception_requires_positive_exact_time_payment_and_same_ne
         {"order_number": "101"},
     ):
         prior = state(started_at="2026-10-03T00:00:00+03:00", movements=[
-            movement(amount="100", allocations=[], occurred_at="2026-11-20T00:00:00+00:00", **change),
+            movement(**{"amount": "100", "allocations": [],
+                        "occurred_at": "2026-11-20T00:00:00+00:00", **change}),
         ])
         delivered = event(schema="operational_delivery_status_v1",
                           order_created_at="2026-11-23T09:00:00+00:00")
