@@ -11,7 +11,8 @@ This module does not create a Salla order or generate a payment URL.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Awaitable, Callable
+from datetime import datetime
 
 from .payload import PendingOrder
 from .private_fields import PrivateOrderFieldDenied, load_private_order_fields
@@ -127,6 +128,10 @@ async def prepare_from_private_vault(
     accepted_methods: list[str],
     branch_id: int | None = None,
     enabled: bool = False,
+    product_reader: Callable[..., Awaitable[dict]] | None = None,
+    rate_reader: Callable[..., Awaitable[list[dict]]] | None = None,
+    methods_reader: Callable[..., Awaitable[dict]] | None = None,
+    now: datetime | None = None,
 ) -> dict:
     """Read private scope from Mezan then use provider-backed quote verifier.
 
@@ -141,6 +146,7 @@ async def prepare_from_private_vault(
             account_id=account_id, inbox_id=inbox_id,
             conversation_id=conversation_id,
             intent_id=intent_id, contact_id=contact_id,
+            now=now,
         )
     except PrivateOrderFieldDenied as exc:
         raise PrivateOrderAssemblyDenied("private_order_fields_unavailable") from exc
@@ -158,4 +164,8 @@ async def prepare_from_private_vault(
         source_contact_id=contact_id,
         order=payload, selected_rate_id=selected_rate_id,
         enabled=enabled,
+        **({"product_reader": product_reader} if product_reader else {}),
+        **({"rate_reader": rate_reader} if rate_reader else {}),
+        **({"methods_reader": methods_reader} if methods_reader else {}),
+        **({"now": now} if now else {}),
     )
