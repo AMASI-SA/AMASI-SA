@@ -31,6 +31,12 @@ FIELDS = frozenset({
     "short_address", "building_number", "additional_number",
     "district_name", "city_name", "geo_lat", "geo_lng",
 })
+OPTION_TEXT = re.compile(r"^option_text_([1-9][0-9]{0,17})$")
+def allowed_private_field_name(name: Any) -> bool:
+    return type(name) is str and (
+        name in FIELDS or OPTION_TEXT.fullmatch(name) is not None
+    )
+
 INTENT_MAX_AGE = timedelta(days=7)
 _PRIVATE_TTL_NAME = "salla_assisted_private_fields_ttl_v1"
 MAIL = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
@@ -73,10 +79,11 @@ def _fernet_from_env() -> MultiFernet:
 
 
 def _safe_value(field: str, value: str) -> str:
-    if field not in FIELDS or type(value) is not str:
+    if not allowed_private_field_name(field) or type(value) is not str:
         raise PrivateOrderFieldDenied("untrusted_private_order_field")
     text = value.strip()
-    if (not text or len(text) > 180 or
+    max_chars = 500 if OPTION_TEXT.fullmatch(field) else 180
+    if (not text or len(text) > max_chars or
             any(ord(ch) < 32 or ord(ch) == 127 for ch in text) or
             "<" in text or ">" in text or SENSITIVE_PAYMENT.search(text)):
         raise PrivateOrderFieldDenied("unsafe_private_order_field")
@@ -118,8 +125,9 @@ def _decode(cipher: Any, sealed: Any) -> dict:
         payload = json.loads(cipher.decrypt(sealed).decode("utf-8"))
     except (InvalidToken, ValueError, UnicodeError) as exc:
         raise PrivateOrderFieldDenied("private_field_integrity_failure") from exc
-    if (type(payload) is not dict or not set(payload).issubset(FIELDS)
-            or any(type(x) is not str for x in payload.values())):
+    if (type(payload) is not dict or
+            any(not allowed_private_field_name(k) for k in payload) or
+            any(type(x) is not str for x in payload.values())):
         raise PrivateOrderFieldDenied("private_field_payload_invalid")
     return payload
 
