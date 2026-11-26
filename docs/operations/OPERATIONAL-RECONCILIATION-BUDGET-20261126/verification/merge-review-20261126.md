@@ -25,3 +25,11 @@ The owner explicitly requested to continue, merge and publish the accounting-ref
 
 ## Current result
 Source merge into WIP task branch: **yes**. Production merge: **no**. Intent B: **not yet committed**. Original-host prepare/publish/verify: **not run**. Live saved accounting recovery: **not yet proven**. Never claim that green GitHub checks by themselves mean financial recovery.
+
+## Intent-only B created and verified
+
+On the user's explicit instruction to merge and publish, exact merged-source A completed all **12/12** relevant workflows successfully. Backend: **8,136 passed +151 subtests**; Stock: **6,809 passed +97 subtests**, no skips/errors/failures.
+
+A GitHub blob was created from the **exact** 1,549,194-byte reviewed CI artifact, with Git blob SHA1 `9c849e33bcf597e4f96869202e5f86efb889b0ec` matching independent local calculation and SHA256 `85184ff1370039178ea1fdaceb95bc65d923965de9a0d49014deed3dd5174f1e`. Source A root tree `c9bc07ed03f5b9d66909e751d8ed443ccc68b2a1` was used to construct new B tree `e6e537b469f9da634b4336249616572ada456860`, replacing only `release/release-intent-v5.json`. Intent B commit: `66836b54e02b67bfc29f2f34cb9fefe70bd7c4ed`, direct parent A `99aa895e63656599d4d89cc335a3371eb8c93ebf`. A...B compare returned **one modified path, no other source changes**, ahead=1, behind=0; remote file SHA matched exact reviewed blob. Branch `codex/operational-reconciliation-intent-b-20261126` points to B.
+
+Production-targeted **draft** PR #2138 opened from B to `hotfix/prod-snap-meta-final`. B CI underway at checkpoint, including release-readiness and required Node clean-clone handoff; **no Production merge or publish yet**. Original-host Release Guard lease status remains unobserved by this chat. Do not mark release accepted without exact B checks, D push checks, governed host publication and a fresh saved financial report.
