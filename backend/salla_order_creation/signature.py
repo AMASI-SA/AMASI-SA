@@ -63,7 +63,7 @@ def sign_action(raw: bytes, timestamp: str, delivery: str, secret: bytes) -> str
     return "sha256=" + hmac.new(secret, signed, hashlib.sha256).hexdigest()
 
 
-def verify_action(
+def verify_signed_json(
     raw: bytes,
     timestamp: str,
     delivery: str,
@@ -71,7 +71,12 @@ def verify_action(
     secret: bytes,
     *,
     now: int | None = None,
-) -> AssistedAction:
+) -> dict:
+    """Verify signed raw JSON without trusting a caller-selected action.
+
+    Specific consumers MUST validate the strict action model after this
+    verification. Do not use this alone as authorization.
+    """
     if type(raw) is not bytes or not (0 < len(raw) <= MAX_BODY):
         raise SignatureDenied("action_body_size")
     if type(timestamp) is not str or not STAMP.fullmatch(timestamp):
@@ -93,11 +98,30 @@ def verify_action(
     ):
         raise SignatureDenied("invalid_action_signature")
     try:
-        body = json.loads(
+        parsed = json.loads(
             raw.decode("utf-8"), object_pairs_hook=_unique_pairs,
             parse_constant=_invalid_number,
         )
-        return AssistedAction.model_validate(body)
-    except (UnicodeError, json.JSONDecodeError, ValidationError,
-            TypeError, ValueError) as exc:
+        if type(parsed) is not dict:
+            raise TypeError("expected JSON object")
+        return parsed
+    except (UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise SignatureDenied("invalid_action_body") from exc
+
+
+def verify_action(
+    raw: bytes,
+    timestamp: str,
+    delivery: str,
+    signature: str,
+    secret: bytes,
+    *,
+    now: int | None = None,
+) -> AssistedAction:
+    parsed = verify_signed_json(
+        raw, timestamp, delivery, signature, secret, now=now
+    )
+    try:
+        return AssistedAction.model_validate(parsed)
+    except ValidationError as exc:
         raise SignatureDenied("invalid_action_body") from exc
