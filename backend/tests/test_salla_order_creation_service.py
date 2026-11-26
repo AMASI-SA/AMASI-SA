@@ -271,3 +271,19 @@ def test_provider_failure_duplicate_intent_cannot_post_again(salla_pending_order
     assert first["state"] == "unknown"
     assert second["replayed"] is True
     assert len(sent) == 1
+
+
+def test_mongo_naive_utc_proofs_work_without_local_timezone(salla_pending_order):
+    db=fixture_db(salla_pending_order)
+    quote=db.salla_ai_order_quotes.rows[0]
+    confirmation=db.salla_ai_order_confirmations.rows[0]
+    for key in ("verified_at","expires_at"):
+        quote[key]=quote[key].replace(tzinfo=None)
+    confirmation["confirmed_at"]=confirmation["confirmed_at"].replace(tzinfo=None)
+    async def salla(*args,**kwargs):
+        return {"success": True, "data": {
+            "id": 90111, "amounts": {"total": {"amount": 200, "currency": "SAR"}},
+        }}
+    result=asyncio.run(call_create(db,salla_pending_order,salla))
+    assert result["state"]=="created"
+    assert result["amount_confirmed"] is True
