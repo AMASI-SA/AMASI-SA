@@ -100,11 +100,23 @@ def prepare(args):
     payload = args.input_dir / 'retained-and-sources.pickle'
     with payload.open('xb') as stream:
         pickle.dump(pair, stream, protocol=5)
+    with payload.open('rb') as stream:
+        loaded_state, loaded_sources = pickle.load(stream)
+    # Pickle is not a canonical identity encoding: loading can coalesce atomic
+    # identities even when the complete values are unchanged. Bind the exact
+    # pair bytes and prove round-trip value equality, then compare fresh-loaded
+    # graphs consistently in both measured children. The focused regression
+    # tests separately prove aliases/cycles/custom-copy semantics of the runtime.
+    assert (loaded_state, loaded_sources) == pair, 'fixture round trip changed complete values'
+    assert profile.counts(loaded_state) == counts
     assert profile.runtime_hashes() == runtime and git('rev-parse', 'HEAD') == args.expected_head
     write_json(args.input_dir / 'fixture.json', {
         'expected_head': args.expected_head, 'payload_sha256': sha(payload),
         'runtime': runtime, 'collector': collector, 'counts': counts,
-        'retained_state': profile.fingerprint(retained), 'sources': profile.fingerprint(sources),
+        'retained_state': profile.fingerprint(loaded_state), 'sources': profile.fingerprint(loaded_sources),
+        'before_serialization_retained_state': profile.fingerprint(retained),
+        'before_serialization_sources': profile.fingerprint(sources),
+        'complete_serialization_roundtrip_values_equal': True,
         'first_state_uses_standard_retained_map_copy': True,
     })
     print('Prepared one actual-collector retained fixture; no owned async tasks remain.', flush=True)
@@ -287,6 +299,8 @@ def pair(args):
                 'One baseline then one candidate in fresh processes; no repeated variance estimate.',
                 'One fixed 19,151-order synthetic cohort; live financial/history mix differs.',
                 'Actual first reducer state contains 90,968 obligations and audits; it is not padded.',
+                'Serialization round-trip values are fully equal; admission fingerprints describe fresh-loaded graphs.',
+                'Pickle may coalesce atomic identities; original alias/cycle/custom-copy contracts are covered by focused tests.',
                 'Preparation/collector transport is excluded; only retained reducer replay is timed.',
                 'Normal GC stays enabled with no explicit child GC collection or disable.',
                 'RSS is sampled every 10 ms and may miss shorter peaks; process high-water is also recorded.',
