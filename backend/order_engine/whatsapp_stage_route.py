@@ -8,6 +8,7 @@ message, no muted/blocked or staff takeover. Never take sender from request.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -59,7 +60,7 @@ def make_whatsapp_stage_router(
             body=await request.body()
             if len(body)>MAX_JSON_BYTES:
                 raise ValueError("oversize")
-            verify_stage_service_request(
+            await asyncio.to_thread(verify_stage_service_request,
                 method=request.method, path=request.url.path, body=body,
                 timestamp=request.headers.get("x-amasi-timestamp",""),
                 nonce=request.headers.get("x-amasi-nonce",""),
