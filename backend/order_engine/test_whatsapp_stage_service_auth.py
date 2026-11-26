@@ -12,7 +12,7 @@ KEY = b"K" * 32
 BODY = b'{"order_ref":"synthetic"}'
 TS = "1800000000"
 NONCE = "abcdefghijklmnopqrstuvwx"
-PATH = "/internal/whatsapp/order-stage/read"
+PATH = "/api/internal/whatsapp/order-stage/read"
 KID = "whatsapp-v1"
 
 
