@@ -21,6 +21,7 @@ from order_engine.service import get_order, OrderNotFoundError
 
 from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
 from .checkout_readback import resolve_synced_checkout, verify_checkout_read
+from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
@@ -36,10 +37,53 @@ class AssistedCreateRequest(BaseModel):
     order: PendingOrder
 
 
+class AssistedPrepareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intent_id: str = Field(min_length=8, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
+    inbox_id: str = Field(min_length=1, max_length=80)
+    conversation_id: str = Field(min_length=1, max_length=80)
+    selected_rate_id: int = Field(gt=0)
+    order: PendingOrder
+
+
 def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    @router.post("/prepare-unpaid-intent")
+    async def prepare_unpaid_order_intent(
+        request: AssistedPrepareRequest,
+        user: dict = Depends(current_user),
+    ) -> dict:
+        """Owner-only synthetic pilot: verify Salla cart inputs BEFORE order.
+
+        Creation and checkout are separately gated. Do not give owner auth
+        to CSA agents. Production chat integration requires a scoped service
+        endpoint and signed contact/recipient identity proof.
+        """
+        role = str((user or {}).get("role") or "").strip().lower()
+        if not user or (role != "owner" and user.get("is_owner") is not True):
+            raise HTTPException(status_code=403, detail={"code": "owner_only"})
+        try:
+            return await prepare_salla_unpaid_order_intent(
+                db,
+                user_id=str(user["id"]),
+                intent_id=request.intent_id,
+                inbox_id=request.inbox_id,
+                conversation_id=request.conversation_id,
+                order=request.order,
+                selected_rate_id=request.selected_rate_id,
+                enabled=(
+                    os.environ.get("MEZAN_ASSISTED_SALLA_QUOTE_WRITE_ENABLED", "0")
+                    == "1"
+                ),
+            )
+        except PrepareDenied as exc:
+            raise HTTPException(
+                status_code=exc.status_code, detail={"code": str(exc)}
+            ) from exc
 
     @router.get("/capabilities")
     async def get_capabilities(user: dict = Depends(current_user)) -> dict:
