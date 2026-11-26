@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from .payload import Customer
 
-_EMAIL = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,40}$")
+_EMAIL = re.compile(r"^[A-Za-z0-9._%+\\-]{1,64}@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,24}$")
 _SA = re.compile(r"^(?:\+966|00966|966|0)?(5[0-9]{8})$")
 _E164 = re.compile(r"^\+[1-9][0-9]{7,14}$")
 
@@ -89,7 +89,10 @@ def resolve_salla_buyer(
     if not buyer_email or type(buyer_email) is not str:
         raise CustomerIdentityUnavailable("new_buyer_email_required")
     email = buyer_email.strip().lower()
-    if len(email) > 254 or not _EMAIL.fullmatch(email):
+    if (len(email) > 254 or not _EMAIL.fullmatch(email) or
+            ".." in email or email.startswith(".") or
+            any(label.startswith("-") or label.endswith("-")
+                for label in email.rsplit("@",1)[-1].split("."))):
         raise CustomerIdentityUnavailable("invalid_new_buyer_email")
     return ResolvedBuyer(
         Customer(name=buyer_name.strip(),mobile=number,email=email),
