@@ -22,8 +22,9 @@ rollback rebuilds the map once, rather than copying it for every order.
         self._positions = {}
         self._next_position = len(self)
         self._index_facts = index_facts
-        self._groups = {"capture:": {}, "refund:": {}}
-        self._unindexed = {"capture:": set(), "refund:": set()}
+        self._groups = {"capture:": {}, "refund:": {}, "provider_order_balance:": {}}
+        self._unindexed = {"capture:": set(), "refund:": set(), "provider_order_balance:": set()}
+        self._unsafe_facts = set()
         for position, (key, value) in enumerate(dict.items(self)):
             if position % 256 == 0:
                 checkpoint()
@@ -33,12 +34,19 @@ rollback rebuilds the map once, rather than copying it for every order.
     @staticmethod
     def _family(key):
         if isinstance(key, str):
-            for prefix in ("capture:", "refund:"):
+            for prefix in ("capture:", "refund:", "provider_order_balance:"):
                 if key.startswith(prefix):
                     return prefix
         return None
 
     def _index_add(self, key, value):
+        if self._index_facts and (type(key) is not str or (
+                isinstance(value, dict) and (type(value) is not dict or
+                    type(value.get("order_id")) not in (str, type(None), int, bool, float)))):
+            # Nonstandard values under unrelated keys can still participate in
+            # the original lazy comparison before the prefix check. Do not
+            # suppress their equality side effects or malformed-data errors.
+            self._unsafe_facts.add(key)
         family = self._family(key) if self._index_facts else None
         if family is None:
             return
@@ -50,6 +58,7 @@ rollback rebuilds the map once, rather than copying it for every order.
             self._groups[family].setdefault(value["order_id"], set()).add(key)
 
     def _index_remove(self, key, value):
+        self._unsafe_facts.discard(key)
         family = self._family(key) if self._index_facts else None
         if family is None:
             return
@@ -154,7 +163,7 @@ rollback rebuilds the map once, rather than copying it for every order.
 
     def facts_for(self, family, order_id):
         families = (family,) if isinstance(family, str) else family
-        if any(self._unindexed[prefix] for prefix in families):
+        if self._unsafe_facts or any(self._unindexed[prefix] for prefix in families):
             return self.items()
         keys = set().union(*(self._groups[prefix].get(order_id, ()) for prefix in families))
         return self.ordered_items(keys)

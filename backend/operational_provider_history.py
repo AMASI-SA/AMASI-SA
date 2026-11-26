@@ -6,6 +6,7 @@ from operational_payment_evidence import _amount, _instant
 from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
 from operational_customer_payment_basis import is_adjusted_payment_balance
 from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
+from operational_reconciliation_state import ReconciliationMap
 
 HISTORICAL = "provider_historical_capture_review_required"
 SETTLED = "provider_settled_capture_review_required"
@@ -81,10 +82,16 @@ def _context(state, row, *, obligation_key=None, through=None):
         if claim and (claim.get("party_type") != "provider" or (claim.get("party_id"), claim.get("currency")) != scope
                 or claim.get("direction") != "receivable" or _amount(claim["confirmed"], ccy) != 0):
             issues.append("claim")
+        facts = engine.get("facts", {})
+        # Only the request-local, mutation-aware map can narrow this scan. The
+        # original iterator remains authoritative for legacy and custom maps.
+        fact_rows = (facts.facts_for(("capture:", "refund:", "provider_order_balance:"), oid)
+                     if type(facts) is ReconciliationMap and facts._index_facts and type(oid) is str
+                     else facts.items())
         if any(isinstance(f, dict) and f.get("order_id") == oid and (
                 name.startswith(("capture:", "refund:")) or
                 (name.startswith("provider_order_balance:") and _amount(f["paid"], ccy) > 0))
-               for name, f in checked_rows(engine.get("facts", {}).items())):
+               for name, f in checked_rows(fact_rows)):
             issues.append("claim")
         if any(r.get("order_id") == oid or r.get("order_number") == number
                for group in ("customer_returns","customer_exchanges") for r in checked_rows(state.get(group, []))):
