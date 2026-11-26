@@ -46,8 +46,10 @@ def _utc(value: Any) -> datetime | None:
     if not isinstance(value, datetime):
         return None
     if value.tzinfo is None:
-        # A missing timezone must not become implicit approval.
-        return None
+        # MongoDB stores BSON datetime in UTC and the default Motor codec
+        # returns UTC-naive values. Treat ONLY database proof timestamps as
+        # UTC; external timestamps are never accepted by this method.
+        value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
 
