@@ -1,17 +1,18 @@
-"""Deterministic, strict Salla pending-order payload builder.
+"""Strict Salla Merchant API pending-order payload, without payment-link creation.
 
-This module NEVER creates an order. Authentication, quoted carrier and
-catalog/options eligibility, consent, replay protection and Salla POST must be
-enforced by the Mezan Action Gateway before this pure builder is called.
+This is a pure formatter: it does not verify stock, discounts, quotes, identity,
+customer consent, tenant permissions or the shipping service. Only a trusted
+Mezan action gateway may call Salla after checking those independent facts.
 
-Reference: https://docs.salla.dev/5394145e0 (2026-09-21)
+Official create-order contract: https://docs.salla.dev/5394145e0 (2026-09-21)
+National address update: https://docs.salla.dev/orders/update (2026-10-08)
 """
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Strict(BaseModel):
@@ -19,46 +20,53 @@ class _Strict(BaseModel):
 
 
 class Customer(_Strict):
-    id: PositiveInt | None = None
+    id: int | None = Field(default=None, gt=0)
     name: str | None = Field(default=None, min_length=2, max_length=120)
-    mobile: str | None = Field(default=None, min_length=8, max_length=20)
+    mobile: str | None = Field(default=None, min_length=8, max_length=25)
     email: str | None = Field(default=None, min_length=5, max_length=254)
 
     @model_validator(mode="after")
-    def known_customer_or_complete_identity(self) -> "Customer":
-        # Salla's published API requires name/mobile/email if no customer ID.
-        # Never fabricate an address to satisfy API validation.
+    def valid_identity(self) -> "Customer":
         if self.id is None and not (self.name and self.mobile and self.email):
-            raise ValueError("Salla requires a customer id or name, mobile and email")
+            raise ValueError("new Salla customer requires name, mobile and email")
         return self
 
 
 class Recipient(_Strict):
     name: str = Field(min_length=2, max_length=120)
-    phone: str = Field(min_length=8, max_length=20)
-    country_code: str = Field(min_length=2, max_length=2, pattern=r"^[A-Z]{2}$")
+    phone: str = Field(min_length=8, max_length=25)
+    country_code: str = Field(pattern=r"^[A-Z]{2}$")
+
+
+class GeoCoordinates(_Strict):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 class ShippingAddress(_Strict):
-    country: PositiveInt
-    city: PositiveInt
-    district: PositiveInt
-    address: str = Field(min_length=3, max_length=400)
-    street_number: str = Field(min_length=1, max_length=40)
-    postal_code: str = Field(min_length=3, max_length=20)
-    address_line: str | None = Field(default=None, max_length=200)
-    block: str | None = Field(default=None, max_length=100)
+    country: int = Field(gt=0)
+    city: int = Field(gt=0)
+    district: int | None
+    block: str | None = Field(max_length=120)
+    street_number: str = Field(min_length=1, max_length=80)
+    address_line: str = Field(min_length=3, max_length=400)
+    postal_code: str | None = Field(max_length=20)
+    short_address: str | None = Field(default=None, max_length=20)
+    building_number: str | None = Field(default=None, max_length=20)
+    additional_number: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=400)
+    geo_coordinates: GeoCoordinates | None = None
 
 
 class Option(_Strict):
-    id: PositiveInt
+    id: int = Field(gt=0)
     value: list[str] = Field(min_length=1, max_length=15)
 
     @field_validator("value")
     @classmethod
-    def nonempty_values(cls, values: list[str]) -> list[str]:
+    def validate_values(cls, values: list[str]) -> list[str]:
         if any(not isinstance(v, str) or not v.strip() or len(v) > 500 for v in values):
-            raise ValueError("product option values must be non-empty strings")
+            raise ValueError("option values must be non-empty strings")
         return [v.strip() for v in values]
 
 
@@ -69,14 +77,14 @@ class Product(_Strict):
     options: list[Option] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
-    def valid_identifier(self) -> "Product":
+    def validate_identifier_and_options(self) -> "Product":
         if self.identifier_type == "id":
             if type(self.identifier) is not int or self.identifier <= 0:
-                raise ValueError("id identifier must be positive integer")
+                raise ValueError("product id must be a positive integer")
         elif not isinstance(self.identifier, str) or not self.identifier.strip():
-            raise ValueError("sku identifier must be nonempty")
+            raise ValueError("SKU must be a non-empty string")
         if len({opt.id for opt in self.options}) != len(self.options):
-            raise ValueError("duplicate option ids for one product")
+            raise ValueError("duplicate option IDs")
         return self
 
 
@@ -86,43 +94,62 @@ PaymentMethod = Literal["credit_card", "mada", "bank", "cod"]
 class PendingOrder(_Strict):
     customer: Customer
     receiver: Recipient
-    branch_id: PositiveInt
-    courier_id: PositiveInt
+    courier_id: int | str
     ship_to: ShippingAddress
     accepted_methods: list[PaymentMethod] = Field(min_length=1, max_length=4)
     products: list[Product] = Field(min_length=1, max_length=50)
+    branch_id: int | None = Field(default=None, gt=0)
 
-    @field_validator("accepted_methods")
-    @classmethod
-    def no_duplicate_methods(cls, methods: list[PaymentMethod]) -> list[PaymentMethod]:
-        if len(set(methods)) != len(methods):
+    @model_validator(mode="after")
+    def validate_shipping_and_payment(self) -> "PendingOrder":
+        if isinstance(self.courier_id, bool) or not str(self.courier_id).isdigit() or int(self.courier_id) <= 0:
+            raise ValueError("courier_id must be a positive Salla carrier ID")
+        if len(set(self.accepted_methods)) != len(self.accepted_methods):
             raise ValueError("duplicate accepted payment methods")
-        return methods
+        if self.receiver.country_code == "SA":
+            address = self.ship_to
+            # Salla's Saudi national-address requirements became mandatory in 2026.
+            if not all((address.short_address, address.building_number,
+                        address.additional_number, address.postal_code,
+                        address.geo_coordinates)):
+                raise ValueError("complete Saudi national address required")
+        return self
 
 
 def build_pending_order_payload(order: PendingOrder) -> dict:
-    """Produce only Salla's allowlisted fields, always unpaid.
+    """Emit only Salla create-order fields. No price, paid flag or checkout URL.
 
-    Call only after trusted shipping/product price checks and customer consent.
-    The payment status is immutable here: no AI can label a new order paid.
-    Payment-link creation is intentionally absent (Salla owns checkout).
+    Server must ensure every field comes from a verified quote and that the
+    payment method is permitted for the verified carrier/branch before calling.
     """
-    customer = order.customer.model_dump(exclude_none=True)
-    return {
-        "customer": customer,
-        "receiver": {
-            **order.receiver.model_dump(),
-            "notify": False,
-        },
+    shipping = order.ship_to.model_dump(exclude_none=False)
+    # Optional extension fields are only sent if available. Salla's nullable
+    # district/block/postal_code fields remain explicit.
+    for key in ("short_address", "building_number", "additional_number", "address",
+                "geo_coordinates"):
+        if shipping.get(key) is None:
+            shipping.pop(key)
+
+    payload = {
+        "customer": order.customer.model_dump(exclude_none=True),
+        "receiver": {**order.receiver.model_dump(), "notify": False},
         "delivery_method": "shipping",
-        "branch_id": order.branch_id,
-        "courier_id": order.courier_id,
-        "ship_to": order.ship_to.model_dump(exclude_none=True),
+        "courier_id": str(order.courier_id),
+        "ship_to": shipping,
         "payment": {
             "status": "pending_payment",
             "accepted_methods": list(order.accepted_methods),
         },
-        "products": [line.model_dump(exclude={"options"}) |
-                     ({"options": [opt.model_dump() for opt in line.options]} if line.options else {})
-                     for line in order.products],
+        "products": [
+            {
+                "identifier_type": item.identifier_type,
+                "identifier": item.identifier,
+                "quantity": item.quantity,
+                **({"options": [o.model_dump() for o in item.options]} if item.options else {}),
+            }
+            for item in order.products
+        ],
     }
+    if order.branch_id is not None:
+        payload["branch_id"] = order.branch_id
+    return payload
