@@ -1,26 +1,28 @@
 {
   "schema": 1,
-  "phase": "source_candidate_a_ci_pending",
+  "phase": "final_source_A_validated_ci_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
-  "source_a": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
-  "source_a_tree": "f764cc59cf9eb2ad378656b5cbf0ded462481b2f",
+  "source_a": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+  "source_a_tree": "c8e2297bcccf65b545a0aa0b3c798944232234dd",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2134",
   "candidate_validation": {
     "valid": true,
     "validator": "load_candidate_release_intent",
-    "source_git_sha": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+    "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
     "source_base_git_sha": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
-    "release_id": "rg5-a243b3a7b2b67a6e46a31c4d1d1941091d4893d7fccf9f055af9972a0b7aa01f",
-    "candidate_sha256": "435be906ff7e58f0d8948cde52e20bcc78067406ca252f68578aa40a9cb080e3",
+    "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+    "candidate_sha256": "6f37b8523c00ba89a06e606d8afd994f3e3ba0d85e8023eed360322871161ad9",
+    "candidate_bytes": 1549194,
     "frontend_artifact": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
     "backend_files": 1389,
     "backend_added": 2,
-    "backend_modified": 6,
+    "backend_modified": 7,
     "backend_deleted": 0,
     "release_control_files": 331,
-    "release_control_modified": 0
+    "release_control_modified": 0,
+    "ignored_local_identity_warning": "The optional ignored local backend identity is absent in this source checkout; the candidate artifact validator exited0 and matched exact Git source/base manifests."
   },
   "original_host_readonly_preflight": {
     "observed_at": "2026-11-26T03:23:00Z",
@@ -40,34 +42,70 @@
     "changed": false
   },
   "source_tests": {
-    "all_12_source_a_workflows_success": true,
-    "source_a": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
-    "targeted_artifact_validation": "passed",
-    "local_mongo_cases": "Four known local failures require exact-A Mongo CI proof; do not count as locally passed",
-    "stock": {
-      "run": 45748115051,
-      "job": 139669122546,
-      "testcases": 6746,
-      "subtests": 97,
-      "failures": 0,
-      "errors": 0,
-      "skipped": 0,
-      "new_module_cases": 147,
-      "required_mongo_cases": 4
-    },
-    "web": {
-      "run": 45748115180,
-      "job": 139669125831,
-      "testcases": 8073,
-      "subtests": 151,
-      "demand_read": 106,
-      "failures": 0,
-      "errors": 0,
-      "skipped": 0,
-      "new_module_cases": 147,
-      "required_mongo_cases": 4
-    },
-    "real_mongo": "Both exact-A jobs provisioned Mongo8.0.12 replica sets and required writable primaries; job logs and JUnit retained."
+    "status": "fresh_final_A_workflows_in_progress",
+    "workflows": 13,
+    "release_readiness_run": 45752783383,
+    "web_run": 45752783259,
+    "stock_run": 45752783491,
+    "backend_preflight": "success",
+    "host_node20": "success",
+    "host_node24": "success",
+    "frontend_build": "success",
+    "conditional_clean_clone_and_manual_notice": "expected skip for source A; must run for reviewed B",
+    "final_a_workflow_ids": [
+      {
+        "name": "Qoyod Payment Freshness",
+        "id": 45752783253
+      },
+      {
+        "name": "MZ2 Employee Salary and Password",
+        "id": 45752783401
+      },
+      {
+        "name": "G47 Focused Integration",
+        "id": 45752783332
+      },
+      {
+        "name": "CodeQL",
+        "id": 45752783244
+      },
+      {
+        "name": "Supplier cost report performance",
+        "id": 45752783460
+      },
+      {
+        "name": "Mobile Order Tracking",
+        "id": 45752783476
+      },
+      {
+        "name": "Operational Stock Eligibility",
+        "id": 45752783491
+      },
+      {
+        "name": "Security Gate",
+        "id": 45752783281
+      },
+      {
+        "name": "Snapchat Direct Active Publication",
+        "id": 45752783307
+      },
+      {
+        "name": "Mezan Release Readiness",
+        "id": 45752783383
+      },
+      {
+        "name": "Snapchat Settings Management V2",
+        "id": 45752783338
+      },
+      {
+        "name": "Operational Balance Web",
+        "id": 45752783259
+      },
+      {
+        "name": "Operational Payment Event Policy",
+        "id": 45752783345
+      }
+    ]
   },
   "diagnostic": {
     "script_sha256": "1cbda56ef7fd0ad64fb9a9b10c33f30cbc69111ea2d6e5c547293f91b3f21fff",
@@ -132,7 +170,7 @@
     ],
     "limitations": "Instrumented synthetic reducer only; whole service and save excluded; no throughput or production completion claim. Base64 pstats preserve exact binary artifacts."
   },
-  "next": "Keep exact A remotely recoverable; finish exact-A CI, evaluate one private bundle-input-copy prototype against the newly observed11.322s normalization stage. No B/lease/publication until final scoped decision. Any added source change requires a fresh A and all gates.",
+  "next": "Require final-A CI/artifact, create fresh intent-only B, complete B gates/rehearsal, ordinary tree-equivalent merge D and exact push gates, original-host governed rehearsal, fresh prepare/prepublish, one publish and official verification, then actual financial save/preservation acceptance.",
   "latest_natural_production_attempt": {
     "observed_at": "2026-11-26T03:37:02.190Z",
     "attempt_local": "2026-11-26 06:34 Asia/Riyadh",
@@ -201,6 +239,90 @@
     "nested_container_clones_avoided": 1551228,
     "complete_output_and_query_parity": true,
     "inputs_and_runtime_preserved": true,
-    "runtime_adoption": "Minimal collector-only opt-in in progress; requires populated bundle/receipt/fallback/cancellation contracts and fresh source A, CI and intent. No B created."
+    "runtime_adoption": "Completed and independently reviewed;34 focused cases pass, no new thread/query/deadline; final source A checkpointed."
+  },
+  "previous_source_a": {
+    "sha": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+    "tree": "f764cc59cf9eb2ad378656b5cbf0ded462481b2f",
+    "ci": {
+      "all_12_source_a_workflows_success": true,
+      "source_a": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+      "targeted_artifact_validation": "passed",
+      "local_mongo_cases": "Four known local failures require exact-A Mongo CI proof; do not count as locally passed",
+      "stock": {
+        "run": 45748115051,
+        "job": 139669122546,
+        "testcases": 6746,
+        "subtests": 97,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "new_module_cases": 147,
+        "required_mongo_cases": 4
+      },
+      "web": {
+        "run": 45748115180,
+        "job": 139669125831,
+        "testcases": 8073,
+        "subtests": 151,
+        "demand_read": 106,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "new_module_cases": 147,
+        "required_mongo_cases": 4
+      },
+      "real_mongo": "Both exact-A jobs provisioned Mongo8.0.12 replica sets and required writable primaries; job logs and JUnit retained."
+    },
+    "candidate_validation": {
+      "valid": true,
+      "validator": "load_candidate_release_intent",
+      "source_git_sha": "7b4da05fba49d7b2e923ae3ac304af7e15dbcaa6",
+      "source_base_git_sha": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+      "release_id": "rg5-a243b3a7b2b67a6e46a31c4d1d1941091d4893d7fccf9f055af9972a0b7aa01f",
+      "candidate_sha256": "435be906ff7e58f0d8948cde52e20bcc78067406ca252f68578aa40a9cb080e3",
+      "frontend_artifact": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+      "backend_files": 1389,
+      "backend_added": 2,
+      "backend_modified": 6,
+      "backend_deleted": 0,
+      "release_control_files": 331,
+      "release_control_modified": 0
+    }
+  },
+  "final_source_review": {
+    "independent_review": "no blocker",
+    "source_a": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "source_tree": "c8e2297bcccf65b545a0aa0b3c798944232234dd",
+    "local_checkout_clean": true,
+    "focused_bundle_tests": 34,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "original_normalizer_ast_equivalent": true,
+    "authority_tail_unchanged": true,
+    "private_input_boundary": "Fresh standard Motor/BSON owner cursor rows; no custom decoder or arbitrary in-memory caller.",
+    "files": [
+      {
+        "path": "backend/operational_balance_sources.py",
+        "sha256": "aac2aeefba84ff2d4069540fffc08fbad59baddab4c13871c25728c4325a6e50"
+      },
+      {
+        "path": "backend/operational_remaining_bundle_sources.py",
+        "sha256": "8ca3c7b3985aea6264a6651d23cf75586ddf20c7409e9f730e31f27263026be5"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_bundle_item_view.py",
+        "sha256": "da8c4db1e87c6f5b098cab1350d4ac50d2bb2edc440e5604c9bab6b1ea8489a8"
+      }
+    ]
+  },
+  "intent_artifact": {
+    "run": 45752783383,
+    "id": 15086402551,
+    "zip_sha256": "14c3df58a997bc92545d0bea3f78318a26778dd8ccc0d8a635ae79c1ac371d01",
+    "candidate_sha256": "6f37b8523c00ba89a06e606d8afd994f3e3ba0d85e8023eed360322871161ad9",
+    "candidate_bytes": 1549194,
+    "validated": true
   }
 }

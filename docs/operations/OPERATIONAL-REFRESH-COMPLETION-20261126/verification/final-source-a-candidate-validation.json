@@ -1,0 +1,16 @@
+{
+  "valid": true,
+  "validator": "load_candidate_release_intent",
+  "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+  "source_base_git_sha": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+  "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+  "candidate_sha256": "6f37b8523c00ba89a06e606d8afd994f3e3ba0d85e8023eed360322871161ad9",
+  "candidate_bytes": 1549194,
+  "frontend_artifact": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+  "backend_files": 1389,
+  "backend_added": 2,
+  "backend_modified": 7,
+  "backend_deleted": 0,
+  "release_control_files": 331,
+  "release_control_modified": 0
+}
