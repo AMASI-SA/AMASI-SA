@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Dependencies
-        run: python -m pip install 'fastapi>=0.100,<1' 'httpx>=0.24,<1' 'pydantic>=2,<3' 'pytest>=8,<10' 'pymongo>=4,<5' 'motor>=3,<4' 'cryptography>=42,<50' 'python-jose>=3,<4' 'PyJWT>=2,<4' 'requests>=2,<3' 'python-multipart>=0.0.9'
+        run: python -m pip install 'fastapi>=0.100,<1' 'httpx>=0.24,<1' 'pydantic>=2,<3' 'pytest>=8,<10' 'pymongo>=4,<5' 'motor>=3,<4' 'cryptography>=42,<50' 'python-jose>=3,<4' 'PyJWT>=2,<4' 'requests>=2,<3' 'python-multipart>=0.0.9' 'reportlab>=4,<5' 'pillow>=10,<13'
       - name: Synthetic order-stage tests only
         run: |
           PYTHONPATH=.:backend python -m pytest -q \
