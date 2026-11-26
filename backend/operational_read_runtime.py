@@ -6,10 +6,12 @@ ordinary reads use at most four concurrent operations.
 """
 import asyncio
 from collections import OrderedDict
+from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 import inspect
+import math
 from threading import Event
 import time
 
@@ -179,10 +181,24 @@ async def read_source_cursor(cursor, count):
 
 
 async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15,
-                           on_source_error=None, observe_primary_orders=False):
+                           per_read_timeouts=None, on_source_error=None, observe_primary_orders=False):
     names = tuple(names)
     if len(names) != len(set(names)):
         raise ValueError('operational_source_duplicate_collection')
+    timeouts = {}
+    if per_read_timeouts is not None:
+        if not isinstance(per_read_timeouts, Mapping):
+            raise ValueError('operational_source_read_budget_invalid')
+        for name, seconds in per_read_timeouts.items():
+            if name not in names or type(seconds) not in (int, float):
+                raise ValueError('operational_source_read_budget_invalid')
+            try:
+                seconds = float(seconds)
+            except (ValueError, OverflowError):
+                raise ValueError('operational_source_read_budget_invalid') from None
+            if not math.isfinite(seconds) or seconds <= 0:
+                raise ValueError('operational_source_read_budget_invalid')
+            timeouts[name] = seconds
     limit = 1 if _snapshot_session(db) else max(1, min(int(concurrency), 4))
     semaphore = asyncio.Semaphore(limit)
 
@@ -191,7 +207,10 @@ async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_
             observation = _PRIMARY_ORDERS_READ.get()
             if observation is not None:
                 _observe_elapsed(observation, 'queue_ms', observation['_queued_at'])
-            remaining = per_read_timeout
+            # This internal policy only allocates the existing outer budget.
+            # Copy/validate it before I/O, then clamp again at admission: a
+            # queued source cannot renew an inherited/request deadline.
+            remaining = timeouts.get(name, per_read_timeout)
             if _DEADLINE.get() is not None:
                 remaining = min(remaining, _DEADLINE.get() - time.monotonic())
             context = demand_context()

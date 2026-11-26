@@ -1,0 +1,53 @@
+{
+  "scope": "synthetic offline actual attachment, no production queries",
+  "operation_counts": [
+    {
+      "orders": 64,
+      "collection_rows": 64,
+      "old_receipt_dict_reads": 4544,
+      "indexed_receipt_dict_reads": 576
+    },
+    {
+      "orders": 128,
+      "collection_rows": 128,
+      "old_receipt_dict_reads": 17280,
+      "indexed_receipt_dict_reads": 1152
+    }
+  ],
+  "timings": [
+    {
+      "mode": "full_scan",
+      "orders": 1500,
+      "collection_rows": 1500,
+      "wall_ms": 205.164,
+      "cpu_ms": 204.381
+    },
+    {
+      "mode": "index",
+      "orders": 1500,
+      "collection_rows": 1500,
+      "wall_ms": 32.237,
+      "cpu_ms": 32.248
+    },
+    {
+      "mode": "index",
+      "orders": 1500,
+      "collection_rows": 1500,
+      "wall_ms": 35.473,
+      "cpu_ms": 35.486
+    },
+    {
+      "mode": "full_scan",
+      "orders": 1500,
+      "collection_rows": 1500,
+      "wall_ms": 199.845,
+      "cpu_ms": 199.835
+    }
+  ],
+  "source_sha256": {
+    "backend/operational_balance_sources.py": "e053dad77aabee6f4378d2c958a370797d7a92570359fd4aebdcd035c8aaf161",
+    "backend/operational_delivery_collection_index.py": "37ab1e4f9c17493d0bc80d6c2e161eac51635690c2e6fd95ed1cae5bac89d0c2",
+    "backend/tests/test_operational_balance_delivery_collection_index.py": "8a1431024d0616791d4eecccb0a3de8540ed2b28f1e58dc7c98028ddaaca2592"
+  },
+  "source_unchanged_during_measurement": true
+}

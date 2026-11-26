@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from operational_delivery_evidence import STATUS_BASIS, delivery_time_matches, status_delivery
 from operational_delivery_confirmation import BASIS as OWNER_DELIVERY_BASIS, EVENT_SCHEMA as OWNER_DELIVERY_SCHEMA, validate_event as validate_owner_delivery
+from operational_report_copy import copy_report_value
 
 
 RIYADH = timezone(timedelta(hours=3))
@@ -236,7 +237,7 @@ def reconcile(state, sources, as_of):
     """
     from operational_demand_refresh import calculation_checkpoint
     calculation_checkpoint()
-    result = deepcopy(state)
+    result = copy_report_value(state)
     calculation_checkpoint()
     if state.get("status") not in {"active", "ACTIVE"} or not state.get("started_at"):
         return result

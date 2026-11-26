@@ -19,6 +19,7 @@ from operational_courier_fee_history import build_recorded_courier_fee_lookup
 from operational_courier_hold_history import build_courier_hold_lookup
 from operational_cost_catalog_index import build_cost_catalog_index
 from operational_delivery_assignment_index import build_delivery_assignment_index, active_assignments_for_number
+from operational_delivery_collection_index import build_delivery_collection_index, delivery_collection_rows
 from operational_issue_index import append_issue, append_unique_issue, enable_issue_index, finish_issue_index
 from shipping_companies import normalize_shipping_company
 from operational_courier_tariffs import matches as matches_courier_key
@@ -1200,7 +1201,8 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
                 order['cod']['evidence_complete'] = False
             if assignments[0].get('status') == 'delivered':
                 order['status'] = 'delivered'
-                collections = [c for c in data['store_delivery_collections'] if c.get('assignment_id') == assignments[0].get('id')
+                collections = [c for c in delivery_collection_rows(data['store_delivery_collections'], assignments[0],
+                               owner=owner, collection_index=data.get('_collection_index')) if c.get('assignment_id') == assignments[0].get('id')
                                and c.get('driver_id') == party_id
                                and (not delivery_event or (str(c.get('order_id')) == identity
                                     and str(c.get('order_number')) == order_number))]
@@ -1360,13 +1362,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         from operational_read_runtime import load_collections
         # Start the large order cursor in the first bounded wave. Alphabetical
         # order left it last, leaving less of the overall deadline for its read.
-        # Every collection still completes under the same concurrency/deadlines.
+        # Orders get bounded full-cohort headroom within the inherited/request
+        # deadline; other reads retain 15s and the same four-reader concurrency.
         source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
             DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
             'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'},
             key=lambda name: (name != 'unified_orders', name))
         data = await load_collections(db, owner, source_names, reader=refresh_source_rows,
-                                      observe_primary_orders=True)
+                                      per_read_timeouts={'unified_orders': 20}, observe_primary_orders=True)
     if on_primary_reads_complete is not None:
         on_primary_reads_complete()
     with refresh_stage('source_fee_settings'):
@@ -1532,6 +1535,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 driver_groups = data['_driver_groups'] = await prepare_in_thread(assignment_groups, data['store_delivery_assignments'], owner)
             assignment_index = await prepare_in_thread(build_delivery_assignment_index, data['store_delivery_assignments'], owner)
             data['_assignment_index'] = assignment_index
+            data['_collection_index'] = await prepare_in_thread(build_delivery_collection_index, data['store_delivery_collections'], owner)
             cost_catalog_index = await prepare_in_thread(build_cost_catalog_index, data, unique_index)
             courier_hold_lookup = await prepare_in_thread(build_courier_hold_lookup, operational_state)
             retained_fact_index = await prepare_in_thread(retained_fact_scope.build)

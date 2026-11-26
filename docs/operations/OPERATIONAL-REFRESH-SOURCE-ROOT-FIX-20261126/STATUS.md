@@ -128,3 +128,55 @@ sentinel remain unchanged. This supersedes the old task's all-primary-15s
 description for this one callsite; it is not an increase of the total request
 budget or a substitute for the measured work reductions. Complete live-save
 acceptance is still required before claiming reliability or lower load.
+
+## Integrated implementation and verification
+
+The implementation is limited to five production modules:
+
+- `operational_balance_archive.py`: avoid copying the entire validated BSON
+  buffer before each existing packet decode. Synthetic peak allocation fell
+  by 31,034,888 bytes for a 31,035,717-byte uncompressed packet; logical values,
+  BSON types and input bytes remained identical.
+- `operational_balance_engine.py`: use the project's existing exact-container
+  copier for the initial complete independent state. Preserve every historical
+  field, fallback type, alias/cycle and all other local copies. A synthetic
+  53,997,836-byte state through the real reducer had a whole-reconciliation
+  median of 3,427.735 ms before and 2,831.984 ms after; these are not live counts
+  or a production speed guarantee.
+- `operational_delivery_collection_index.py` and its source integration: index
+  each unchanged receipt cohort once per attempt by assignment identity. Keep
+  the entire original driver/custody/event predicate, row order and duplicate
+  occurrences. Unsupported structures use the old scan. A 128-order synthetic
+  fixture reduced receipt dictionary reads from 17,280 to 1,152; doubling the
+  fixture now doubles this work instead of producing 3.8 times as much.
+- `operational_read_runtime.py` and the single primary source callsite: the
+  explicit 20-second orders policy described above, with default 15 seconds
+  elsewhere, four-way admission, outer deadline clamping and cumulative CSOT.
+
+Root inspected the integrated diff and ran 16 affected offline modules against
+the combined implementation: **453 passed in 15.13 seconds, no failures and no
+skips**. Exact output is retained in `evidence/combined-offline-regression.xml`.
+An earlier independent root check passed 55 packet/copy/replacement cases in
+4.95 seconds. These counts overlap and must not be added together.
+
+Peer verification included 83 packet/read-lifetime cases, 109 initial
+copy/reducer cases followed by the final 12 strengthened copy tests, 71
+budget/runtime/scheduling cases, and 84 new collection-index cases. Independent
+source review found no blocker in the index and budget boundaries. Additional
+affected offline shipping verification passed 577 cases, with three supplier
+preview cases skipped and three real-Mongo delivery cases explicitly excluded
+from that local-only command after connection refusal. The local driver-writer
+module could not collect because `email_validator` was absent. Full CI must
+execute these layers with its real isolated Mongo fixture and complete project
+dependencies; local results do not replace those gates. No test was weakened.
+
+The first remote verified checkpoint is
+`e79d595fb0fac75650b79613d40c1d1c8eb04051`; retained experiment/decision checkpoint
+is `8dcae5038d388fbd977b3056339b94e914927562`. PR:
+https://github.com/AMASI-SA/AMASI-SA/pull/2133.
+
+Next safe action: publish this integrated source as final A, require exact-A CI
+and its candidate intent, freeze intent-only B, require exact-B CI and both
+clean-clone rehearsals, then complete the unchanged original-host v5 release
+protocol and live financial acceptance. No follow-up release lease exists and
+Production still runs PR #2132. Do not reuse any previous candidate or intent.

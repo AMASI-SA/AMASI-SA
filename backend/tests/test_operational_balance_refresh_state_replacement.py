@@ -74,13 +74,15 @@ def test_refresh_copies_the_complete_aggregate_once_and_preserves_its_input(monk
         observed = observe_inputs(monkeypatch)
         copies = []
 
-        def counted(value, *args, **kwargs):
-            if isinstance(value, dict) and value.get("owner_id") == OWNER and "revision" in value:
-                copies.append(value["revision"])
-            return deepcopy(value, *args, **kwargs)
+        def observe(copier):
+            def counted(value, *args, **kwargs):
+                if isinstance(value, dict) and value.get("owner_id") == OWNER and "revision" in value:
+                    copies.append(value["revision"])
+                return copier(value, *args, **kwargs)
+            return counted
 
-        monkeypatch.setattr(store, "deepcopy", counted)
-        monkeypatch.setattr(engine, "deepcopy", counted)
+        monkeypatch.setattr(store, "deepcopy", observe(deepcopy))
+        monkeypatch.setattr(engine, "copy_report_value", observe(engine.copy_report_value))
         result = await visible(database)
         assert result == database.data[store.STATES][OWNER]
         assert result["revision"] == 2 and result["engine"]["as_of"] == NOW
