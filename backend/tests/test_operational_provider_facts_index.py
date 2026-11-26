@@ -82,3 +82,64 @@ def test_provider_history_context_matches_original_full_scan():
             "customer_returns": [], "customer_exchanges": [],
         }
     assert _context(state(_indexed(values)), row) == _context(state(dict(values)), row)
+
+
+def test_provider_history_calls_index_only_for_exact_safe_map(monkeypatch):
+    calls = []
+    original = ReconciliationMap.facts_for
+
+    def tracking(self, family, order_id):
+        calls.append((family, order_id))
+        return original(self, family, order_id)
+
+    monkeypatch.setattr(ReconciliationMap, "facts_for", tracking)
+    from operational_provider_history import _context
+
+    values = {"capture:other": {"order_id": "other", "amount": "1"}}
+    row = {
+        "owner_id": "owner", "order_id": "target", "order_number": "T-1",
+        "provider": "tabby", "currency": "SAR", "gross": "100",
+        "paid": "100", "remaining": "0",
+        "created_at": "2026-11-25T12:00:00+00:00",
+    }
+    def state(facts):
+        return {
+            "owner_id": "owner", "started_at": "2026-10-03T00:00:00+00:00",
+            "engine": {
+                "as_of": "2026-11-26T12:00:00+00:00",
+                "obligations": {}, "facts": facts,
+            },
+            "movements": [], "openings": {},
+            "customer_returns": [], "customer_exchanges": [],
+        }
+
+    assert _context(state(_indexed(values)), row) == _context(state(dict(values)), row)
+    assert calls == [(("capture:", "refund:", "provider_order_balance:"), "target")]
+
+
+def test_provider_balance_and_capture_conflicts_match_unindexed_context():
+    from operational_provider_history import _context
+
+    row = {
+        "owner_id": "owner", "order_id": "target", "order_number": "T-1",
+        "provider": "tabby", "currency": "SAR", "gross": "100",
+        "paid": "100", "remaining": "0",
+        "created_at": "2026-11-25T12:00:00+00:00",
+    }
+    for facts in (
+        {"provider_order_balance:target": {"order_id": "target", "paid": "1"}},
+        {"capture:target": {"order_id": "target", "amount": "100"}},
+        {"refund:target": {"order_id": "target", "amount": "20"}},
+        {"provider_order_balance:target": {"order_id": "target"}},
+    ):
+        def state(items):
+            return {
+                "owner_id": "owner", "started_at": "2026-10-03T00:00:00+00:00",
+                "engine": {
+                    "as_of": "2026-11-26T12:00:00+00:00",
+                    "obligations": {}, "facts": items,
+                },
+                "movements": [], "openings": {},
+                "customer_returns": [], "customer_exchanges": [],
+            }
+        assert _context(state(_indexed(facts)), row) == _context(state(dict(facts)), row)
