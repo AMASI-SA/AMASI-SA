@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
   "phase": "production_verified_live_financial_acceptance_failed_orders_timeout",
-  "updated_utc": "2026-11-26 00:48:01 UTC",
+  "updated_utc": "2026-11-26 00:56:50 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -106,7 +106,7 @@
     "development_backend_restored_at": "2026-11-26T00:41:50.801272+00:00"
   },
   "live_validation": "One owner-visible manual refresh failed at the primary unified_orders source deadline. Last saved snapshot retained; no acceptance of new financial calculation. First fix removed redundant copy but is insufficient for reliability.",
-  "next_safe_action": "Diagnose remaining cursor/payload and unpack bottlenecks with regression evidence. Observe next existing scheduled run; do not change automation settings or issue blind retries. Additional reviewed source/intent/release only after validated fix.",
+  "next_safe_action": "Review bounded real-Motor synthetic admission experiment and remaining source diagnosis in PR2133; preserve exact financial payloads, source cap, authorization and request budget. Production accounting acceptance remains failed.",
   "guard": {
     "actor": "operational-refresh-root-fix-20261126",
     "prepared": true,
@@ -194,5 +194,46 @@
     },
     "production_write_confirmed": false,
     "automatic_retry": false
-  }
+  },
+  "scheduled_live_attempt": {
+    "scheduled_local": "2026-11-26 03:53 Asia/Riyadh",
+    "outcome": "failed",
+    "ui_code": "operational_source_setup_incomplete",
+    "stage_ms": {
+      "native_evidence": 9046.947,
+      "snapshot_raw_read": 65.071,
+      "snapshot_unpack": 11097.544,
+      "snapshot_copy_prepare": 0.001,
+      "snapshot_load": 11163.249,
+      "source_collision": 0.106,
+      "orders_cursor_build": 0.147,
+      "orders_cursor_read": 15133.85,
+      "source_primary_reads": 15554.755,
+      "source_collection": 15555.576,
+      "aggregate": 26809.414
+    },
+    "primary_orders_read": {
+      "queue_ms": 0.017,
+      "budget_ms": 15000,
+      "first_row_ms": 10.446,
+      "read_elapsed_ms": 15133.833,
+      "rows_retained": 15261
+    },
+    "next_existing_backoff_local": "2026-11-26 03:58 Asia/Riyadh",
+    "scheduler_settings_changed": false
+  },
+  "followup_branch": "codex/operational-refresh-source-root-fix-20261126",
+  "monitoring_observation": {
+    "window": "mixed 24-hour display; not a causal comparison",
+    "response_ms": 359,
+    "response_peak_ms": 431,
+    "error_percent": 0,
+    "error_peak_percent": 3,
+    "cpu_percent": 20,
+    "cpu_peak_percent": 57,
+    "memory_percent": 67,
+    "memory_peak_percent": 100
+  },
+  "followup_pr": 2133,
+  "followup_checkpoint": "e79d595fb0fac75650b79613d40c1d1c8eb04051"
 }
