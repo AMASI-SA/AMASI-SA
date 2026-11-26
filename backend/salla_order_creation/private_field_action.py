@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .private_fields import FIELDS
+from .private_fields import allowed_private_field_name
 from .signature import ID, DIGEST, SignatureDenied, verify_signed_json
 
 
@@ -41,6 +41,6 @@ def verify_private_field(
         out = SignedPrivateOrderField.model_validate(parsed)
     except ValidationError as exc:
         raise SignatureDenied("invalid_private_field_action") from exc
-    if out.field not in FIELDS:
+    if not allowed_private_field_name(out.field):
         raise SignatureDenied("field_not_allowlisted")
     return out
