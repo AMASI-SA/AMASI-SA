@@ -221,3 +221,90 @@ def test_full_reducer_late_provider_recovery_matches_unindexed_scan(monkeypatch)
     }, "fixture must admit the paid capture after actual historical overlap checks"
     assert existing == old_state
     assert engine.reconcile(deepcopy(indexed), deepcopy(sources), NOW) == indexed
+
+
+def test_retained_history_cohort_index_reduces_checked_fact_visits_without_changing_reducer(monkeypatch):
+    """Count real provider-history scan work for complete synthetic old/new cohorts.
+
+    The original lazy scan is the control; neither test path writes financial
+    records or times a production SLA. All historical and new capture facts are
+    generated through the actual pure reducer, not padded into the ledger.
+    """
+    from copy import deepcopy
+    import operational_balance_engine as engine
+    import operational_provider_history as history
+    from operational_provider_transaction_evidence import CANONICAL_WITH_UNBOUND_ACTIVITY
+    from test_operational_balance_engine import initial, order, policy, NOW
+
+    count = 120
+    owner = "synthetic-history-index-benchmark-owner"
+    base = {**initial(), "owner_id": owner}
+    fee_policies = [policy()]
+    def clean_order(identity, payment):
+        return order(id=identity, order_number="SYNTH-BENCH-" + identity,
+                     items=[], carrier={}, cod_amount="0", payment=payment)
+
+    prior_orders = [
+        clean_order("prior-%03d" % i, {
+            "provider": "tabby", "currency": "SAR", "gross": "100.00",
+            "captures": [{"id": "old-proof-%03d" % i, "amount": "100.00",
+                          "captured_at": NOW}],
+            "refunds": [],
+        }) for i in range(count)
+    ]
+    previous = engine.reconcile(base, {"orders": prior_orders, "fee_policies": fee_policies}, NOW)
+    previous["engine"]["as_of"] = NOW
+    original_previous = deepcopy(previous)
+    retained_captures = [k for k in previous["engine"]["facts"] if k.startswith("capture:")]
+    assert len(retained_captures) == count, "old cohort must be genuine saved capture facts"
+
+    new_orders = [
+        clean_order("late-%03d" % i, {
+            "provider": "tabby", "currency": "SAR", "gross": "100.00",
+            "capture_source": CANONICAL_WITH_UNBOUND_ACTIVITY,
+            "captures": [{"id": "late-proof-%03d" % i, "amount": "100.00",
+                          "captured_at": "2026-10-07T08:00:00+00:00"}],
+        }) for i in range(count)
+    ]
+    sources = {"orders": new_orders, "fee_policies": fee_policies}
+    original_sources = deepcopy(sources)
+    original_context = history._context
+    original_checked = history.checked_rows
+
+    def run(*, use_index):
+        scanned = 0
+        calls = 0
+
+        def count_checked(values):
+            nonlocal scanned
+            for value in original_checked(values):
+                if (type(value) is tuple and len(value) == 2
+                        and isinstance(value[0], str) and isinstance(value[1], dict)):
+                    scanned += 1
+                yield value
+
+        def count_context(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return original_context(*args, **kwargs)
+
+        with monkeypatch.context() as m:
+            m.setattr(history, "checked_rows", count_checked)
+            m.setattr(history, "_context", count_context)
+            if not use_index:
+                # Only the history check uses the legacy iterator. Leave the
+                # already-established engine-specific indexes unchanged.
+                m.setattr(history, "ReconciliationMap", object)
+            output = engine.reconcile(deepcopy(previous), deepcopy(sources), NOW)
+        return output, calls, scanned
+
+    indexed, indexed_calls, indexed_visits = run(use_index=True)
+    baseline, baseline_calls, baseline_visits = run(use_index=False)
+    assert indexed_calls == baseline_calls == count
+    assert baseline_visits >= count * count
+    assert indexed_visits * 20 < baseline_visits
+    assert indexed == baseline, "money, dates, history, issues and audit must match exactly"
+    for i in range(count):
+        assert indexed["engine"]["facts"]["capture:late-proof-%03d" % i]["amount"] == "100.00"
+    assert previous == original_previous and sources == original_sources
+    assert engine.reconcile(deepcopy(indexed), deepcopy(sources), NOW) == indexed
