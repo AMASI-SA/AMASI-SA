@@ -364,3 +364,22 @@ def test_post_create_requires_explicit_server_owned_unpriced_intent(
     with pytest.raises(CreationDenied, match="fresh_server_verified_quote_required"):
         asyncio.run(call_create(db,salla_pending_order,unreachable))
     assert db.salla_ai_order_intents.rows == []
+
+
+
+def test_confirmed_chatwoot_contact_must_match_private_quote_source(
+    salla_pending_order,
+):
+    db=fixture_db(
+        salla_pending_order,
+        quote={"source_contact_id":77},
+        confirm={"source_contact_id":99},
+    )
+    sent=[]
+    async def no_salla(*args,**kwargs):
+        sent.append(1)
+        raise AssertionError("no Salla POST allowed")
+    with pytest.raises(CreationDenied,match="independent_customer_confirmation_required"):
+        asyncio.run(call_create(db,salla_pending_order,no_salla))
+    assert sent==[]
+    assert db.salla_ai_order_intents.rows==[]
