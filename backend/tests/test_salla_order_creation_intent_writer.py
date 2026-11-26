@@ -135,7 +135,7 @@ def test_verified_cart_input_without_invented_total():
     assert persisted["carrier_eligibility_verified"] is True
     assert persisted["post_create_salla_total"] is True
     assert persisted["total_sar"] is None
-    assert persisted["order_payload"]["payment"] if False else True
+    assert persisted["order_payload"]["accepted_methods"] == ["mada"]
     assert persisted["purge_after"]>persisted["expires_at"]
 
 
