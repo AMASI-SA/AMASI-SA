@@ -1,0 +1,99 @@
+{
+  "audit_events": 57429,
+  "facts": 19143,
+  "input_unchanged": true,
+  "logical_results_equal": true,
+  "median_ms": {
+    "plain_container_copy": {
+      "initial_copy_ms": 1198.852,
+      "other_engine_copy_ms": 35.623,
+      "provider_input_copy_ms": 215.452,
+      "total_ms": 2831.984
+    },
+    "stdlib": {
+      "initial_copy_ms": 1981.947,
+      "other_engine_copy_ms": 36.905,
+      "provider_input_copy_ms": 161.076,
+      "total_ms": 3427.735
+    }
+  },
+  "obligations": 57429,
+  "orders": 19143,
+  "sampled_nested_history_independent": true,
+  "samples": {
+    "plain_container_copy": [
+      {
+        "initial_copy_ms": 1630.776,
+        "other_engine_copy_ms": 35.623,
+        "provider_input_copy_ms": 227.248,
+        "total_ms": 3457.126
+      },
+      {
+        "initial_copy_ms": 1166.34,
+        "other_engine_copy_ms": 35.793,
+        "provider_input_copy_ms": 215.452,
+        "total_ms": 2831.984
+      },
+      {
+        "initial_copy_ms": 1198.852,
+        "other_engine_copy_ms": 34.947,
+        "provider_input_copy_ms": 201.642,
+        "total_ms": 2794.941
+      }
+    ],
+    "stdlib": [
+      {
+        "initial_copy_ms": 2150.449,
+        "other_engine_copy_ms": 34.387,
+        "provider_input_copy_ms": 161.076,
+        "total_ms": 3362.383
+      },
+      {
+        "initial_copy_ms": 1748.125,
+        "other_engine_copy_ms": 37.835,
+        "provider_input_copy_ms": 146.967,
+        "total_ms": 3427.735
+      },
+      {
+        "initial_copy_ms": 1981.947,
+        "other_engine_copy_ms": 36.905,
+        "provider_input_copy_ms": 170.735,
+        "total_ms": 3589.698
+      }
+    ]
+  },
+  "scope": "synthetic real reconcile; no live audit/fact counts known",
+  "standalone_field_copy": {
+    "audit": {
+      "bson_bytes": 31871910,
+      "copy_ms": 707.664,
+      "count": 57429
+    },
+    "facts": {
+      "bson_bytes": 3240136,
+      "copy_ms": 284.215,
+      "count": 19143
+    },
+    "issues": {
+      "bson_bytes": 63793,
+      "copy_ms": 1.705,
+      "count": 1000
+    },
+    "obligations": {
+      "bson_bytes": 14309746,
+      "copy_ms": 402.175,
+      "count": 57429
+    },
+    "profit_snapshot": {
+      "bson_bytes": 160,
+      "copy_ms": 0.04,
+      "count": 3
+    },
+    "provider_fee_inputs": {
+      "bson_bytes": 3814502,
+      "copy_ms": 142.247,
+      "count": 4
+    }
+  },
+  "state_bson_bytes": 53997836
+}

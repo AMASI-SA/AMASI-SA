@@ -21,7 +21,8 @@ async def test_orders_enter_first_bounded_wave_and_every_primary_source_is_joine
 
     async def observed_load(*args, **kwargs):
         options.append({key: kwargs.get(key, default) for key, default in
-                       (('concurrency', 4), ('per_read_timeout', 15), ('observe_primary_orders', False))})
+                       (('concurrency', 4), ('per_read_timeout', 15), ('per_read_timeouts', None),
+                        ('observe_primary_orders', False))})
         return await original(*args, **kwargs)
 
     async def reader(db, owner, name):
@@ -57,7 +58,8 @@ async def test_orders_enter_first_bounded_wave_and_every_primary_source_is_joine
         assert len(started) == len(set(started)) == 32
         assert Counter(started) == Counter(finished) and not running
         assert started[1:] == sorted(started[1:])
-        assert options == [{'concurrency': 4, 'per_read_timeout': 15, 'observe_primary_orders': True}]
+        assert options == [{'concurrency': 4, 'per_read_timeout': 15,
+                            'per_read_timeouts': {'unified_orders': 20}, 'observe_primary_orders': True}]
     finally:
         release.set()
         if not task.done():
