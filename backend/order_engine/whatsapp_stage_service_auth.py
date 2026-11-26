@@ -17,6 +17,7 @@ MAX_AGE_SECONDS = 300
 NONCE = re.compile(r"[A-Za-z0-9_-]{22,96}\Z", re.ASCII)
 KEY_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z", re.ASCII)
 EXPECTED_PATH = "/api/internal/whatsapp/order-stage/read"
+CATALOG_PATH = "/api/internal/whatsapp/catalog/read"
 EXPECTED_METHOD = "POST"
 
 
@@ -36,6 +37,7 @@ def verify_stage_service_request(
     active_keys: Mapping[str, bytes],
     claim_nonce: Callable[[str, int], bool],
     now: int | None = None,
+    expected_path: str = EXPECTED_PATH,
 ) -> None:
     """Validate a scoped HMAC request with atomic nonce replay prevention.
 
@@ -51,7 +53,8 @@ def verify_stage_service_request(
         raise StageServiceUnauthorized("service_unauthorized")
 
     if (type(method) is not str or method != EXPECTED_METHOD
-            or type(path) is not str or path != EXPECTED_PATH
+            or expected_path not in (EXPECTED_PATH, CATALOG_PATH)
+            or type(path) is not str or path != expected_path
             or type(body) is not bytes or len(body) > MAX_BODY_BYTES
             or type(timestamp) is not str or not re.fullmatch(r"[0-9]{10,11}", timestamp)
             or type(nonce) is not str or NONCE.fullmatch(nonce) is None
