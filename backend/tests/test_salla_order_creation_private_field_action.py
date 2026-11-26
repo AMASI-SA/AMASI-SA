@@ -84,3 +84,16 @@ def test_bad_timestamp_or_wrong_purpose_secret_fails():
 def test_empty_customer_field_denied():
     with pytest.raises(SignatureDenied):
         signed(fields(value=""))
+
+
+
+def test_signed_personalized_option_field_is_accepted_only_for_numeric_id():
+    signed_value=signed(fields(field="option_text_501",value="اسم هدية خاص"))
+    assert signed_value.field=="option_text_501"
+    with pytest.raises(SignatureDenied):
+        signed(fields(field="option_text_abc",value="اسم هدية خاص"))
+
+
+def test_signed_private_field_does_not_authorize_plaintext_checkout():
+    with pytest.raises(SignatureDenied):
+        signed(fields(field="checkout_url",value="https://evil.invalid"))
