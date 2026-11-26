@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "publication_running",
+  "phase": "publication_succeeded_official_verification_pending",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,7 +691,7 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "Observe one newer explicit provider completion/version without repeating publication; persist completion and invoke unchanged official verifier once, then restore owned Backend and validate fresh calculation.",
+  "next_safe_action": "Run the independently reviewed original verify wrapper once; require official three-probe success and closed lease, review preservation and restore the locally stopped Backend, then perform live financial acceptance.",
   "original_host_current_attempt": {
     "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
     "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
@@ -787,7 +787,27 @@
     "publication_previous_version": "bad38ff",
     "publication_observed_state": "Deployment Started; Packaging your latest changes; Publishing...",
     "preview_used": false,
-    "paid_agent_chat_used": false
+    "paid_agent_chat_used": false,
+    "publication_version": "bff6a19",
+    "publication_succeeded_at": "2026-11-26T05:04:26.562Z",
+    "publication_ui_label": "Deployment finished",
+    "publication_ui_time": "Nov 26, 08:03 AM Asia/Riyadh",
+    "publication_ui_counter": "100th publish (UI cap)",
+    "publication_screenshot_observed_green": true,
+    "health_preflight": {
+      "requests": 1,
+      "ok": true,
+      "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+      "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "backend_runtime_source_verified": true,
+      "release_control_source_bound": true,
+      "boot_started_at": "2026-11-26T05:03:34.631821+00:00",
+      "proof_sha256": "9141d7e191c7201df539f7592f951836db3c042503b09ea888dea1e58bc5398b"
+    },
+    "official_verify_invocations": 0
   },
   "deployment_ci": {
     "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
