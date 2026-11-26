@@ -211,6 +211,7 @@ async def create_confirmed_salla_order(
             "state": prior.get("state", "unknown"),
             "salla_order_id": prior.get("salla_order_id"),
             "reference_id": prior.get("reference_id"),
+            "pricing_mode": prior.get("pricing_mode"),
             "replayed": True,
         }
 
@@ -281,5 +282,6 @@ async def create_confirmed_salla_order(
     return {
         "state": final_state, "salla_order_id": int(order_id),
         "reference_id": int(reference) if reference is not None else None,
+        "pricing_mode": pricing_mode,
         "replayed": False, "amount_confirmed": amount_confirmed,
     }
