@@ -319,6 +319,24 @@ def reconcile(state, sources, as_of):
 
     def put(key, kind, party, party_type, currency, expected=ZERO, confirmed=ZERO,
             direction="payable", business_date=None, **metadata):
+        # A post-opening Salla delivered STATUS may have earned its fee at
+        # first observation, without proof of the original delivery time.
+        # If a dated native delivery arrives later, keep the exact original
+        # payable (amount, payee, business date and basis) immutable.
+        # The newly validated delivery can still record its separate COD and
+        # shipment evidence; it must not silently redate a settled base fee.
+        if kind == "shipping" and key.startswith("shipping:") and key.endswith(":base_shipping"):
+            observed_oid = key[len("shipping:"):-len(":base_shipping")]
+            observed = facts.get("observed_courier_base:" + observed_oid)
+            old_fee = obligations.get(key)
+            if observed is not None and old_fee and money(old_fee.get("confirmed", "0")) > ZERO:
+                if (old_fee.get("kind") != "shipping" or old_fee.get("party_id") != party
+                        or old_fee.get("party_type") != party_type
+                        or old_fee.get("currency") != currency
+                        or old_fee.get("direction") != direction
+                        or money(old_fee["confirmed"]) != money(confirmed)):
+                    raise ValueError("operational_courier_observed_fee_saved_conflict")
+                return
         existing_name = obligations.get(key, {}).get("name")
         obligations[key] = {"id": key, "kind": kind, "party_id": party, "party_type": party_type,
                             "currency": currency, "expected": amount(expected), "confirmed": amount(confirmed),
