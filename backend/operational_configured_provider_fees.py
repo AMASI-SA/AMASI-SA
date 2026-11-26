@@ -9,6 +9,7 @@ from excel_parser import normalize_name, resolve_payment_setting
 from operational_fee_methods import fee_rail
 from operational_provider_fees import provider_projection
 from operational_provider_statement_fees import AVERAGE_CALCULATION, statement_average_projection
+from operational_report_copy import copy_report_value
 from payment_methods import KNOWN_PAYMENT_SUB_KEYS, normalize_payment_method
 
 CENT = Decimal(".01")
@@ -307,7 +308,7 @@ def refresh_provider_fee_inputs(state, sources):
     if "provider_fee_settings" not in sources:
         return
     previous = state["engine"].get("provider_fee_inputs", {})
-    orders = deepcopy(previous.get("orders", {}))
+    orders = copy_report_value(previous.get("orders", {}))
     for order in sources.get("orders", []):
         payment = order.get("payment") or {}
         valuation = order.get("customer_payment_sar") or {}

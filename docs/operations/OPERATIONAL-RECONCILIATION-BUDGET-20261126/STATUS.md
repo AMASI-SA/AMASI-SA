@@ -39,3 +39,8 @@ Then observe one actual new calculation save, download its exact private recover
 Issue1006 is at2500-comment cap; no further comment. Update this task document and PR and use a separate documentation-only release evidence branch. Private financial reports/owner identifiers never enter GitHub.
 
 Production changed by this successor task: NO. Production was changed by completed PR2134; live financial acceptance failed.
+
+## Retained provider copy candidate checkpoint
+The only runtime change replaces the complete retained provider-orders stdlib copy with the existing independent report copier. Six per-current-order field copies, retained adjustments, settings/policies/history copies remain unchanged. No borrowing or shared mutable financial graph was introduced. Root and independent shipping review found no blocker.
+
+Red control failed at the intended retained-map dispatch; the earlier missing backend/tests PYTHONPATH setup error is retained separately. All18 new cases passed in1.527s;178 affected cases passed in5.232s, no failures/errors/skips. Exact raw JUnit and the reviewed bounded single-pair measurement script are in evidence/provider-copy. No benchmark executed yet and this checkpoint is not source A or release ready. Next: run the sole fresh-process baseline/candidate pair at this exact checkpoint, then evaluate gain together with a separate under-limit full-tail diagnostic. Keep all runtime files frozen during the pair.
