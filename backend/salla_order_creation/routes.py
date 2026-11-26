@@ -23,6 +23,7 @@ from .confirmation import ConfirmationDenied, persist_signed_confirmation, verif
 from .checkout_readback import resolve_synced_checkout, verify_checkout_read
 from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
 from .prepare_action import verify_prepare_unpaid_order
+from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
@@ -92,6 +93,12 @@ def make_assisted_salla_order_router(
                 or verified.inbox_id != int(inbox)):
             raise HTTPException(status_code=403, detail={"code": "outside_approved_inbox"})
         try:
+            await require_assisted_quote_ttl(db)
+        except RetentionNotReady as exc:
+            raise HTTPException(
+                status_code=503, detail={"code": str(exc)}
+            ) from exc
+        try:
             return await prepare_salla_unpaid_order_intent(
                 db,
                 user_id=owner_id, intent_id=verified.intent_id,
@@ -125,6 +132,12 @@ def make_assisted_salla_order_router(
         role = str((user or {}).get("role") or "").strip().lower()
         if not user or (role != "owner" and user.get("is_owner") is not True):
             raise HTTPException(status_code=403, detail={"code": "owner_only"})
+        try:
+            await require_assisted_quote_ttl(db)
+        except RetentionNotReady as exc:
+            raise HTTPException(
+                status_code=503, detail={"code": str(exc)}
+            ) from exc
         try:
             return await prepare_salla_unpaid_order_intent(
                 db,
