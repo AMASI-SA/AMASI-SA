@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "all_prepublication_gates_passed",
+  "phase": "publication_running",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,7 +691,7 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "Fresh original prepare and immediate prepublish, one authorized provider publication, unchanged official three-probe verifier, restoration, then live financial acceptance.",
+  "next_safe_action": "Observe one newer explicit provider completion/version without repeating publication; persist completion and invoke unchanged official verifier once, then restore owned Backend and validate fresh calculation.",
   "original_host_current_attempt": {
     "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
     "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
@@ -713,8 +713,8 @@
       "cache_quarantined"
     ],
     "backend_restore_required": true,
-    "lease_created": false,
-    "publication_count": 0,
+    "lease_created": true,
+    "publication_count": 1,
     "local_verification": {
       "phase": "local_verified",
       "created_at": "2026-11-26T04:46:01.353655+00:00",
@@ -774,7 +774,20 @@
         "free_bytes_after": 174231552,
         "no_output_removed_before_complete_verification": true
       }
-    }
+    },
+    "guard_prepare": {
+      "exit_code": 0,
+      "proof_sha256": "7825019df6790355b86e58d1d2bb1d58d14210ec724790b4c5973ce8cd17a10f"
+    },
+    "guard_prepublish": {
+      "exit_code": 0,
+      "proof_sha256": "f3c31862464e9855c45c13dcc00fd5365e2659f34f54d7604ed916d0e4526952"
+    },
+    "publication_clicked_at": "2026-11-26T04:53:18.827Z",
+    "publication_previous_version": "bad38ff",
+    "publication_observed_state": "Deployment Started; Packaging your latest changes; Publishing...",
+    "preview_used": false,
+    "paid_agent_chat_used": false
   },
   "deployment_ci": {
     "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
