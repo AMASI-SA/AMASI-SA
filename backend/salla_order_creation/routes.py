@@ -16,8 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from salla_integration.service import call_salla, get_integration
+from order_engine.repository import MongoOrderRepository
+from order_engine.service import get_order, OrderNotFoundError
 
 from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
+from .checkout_readback import resolve_synced_checkout, verify_checkout_read
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
@@ -163,6 +166,72 @@ def make_assisted_salla_order_router(
             raise HTTPException(
                 status_code=exc.status_code, detail={"code": exc.args[0]}
             ) from exc
+
+    @router.post("/signed-checkout")
+    async def signed_checkout(request: Request) -> dict:
+        """Read a Salla checkout URL already present on the Mezan order.
+
+        No generation, no browser clipboard, no raw customer lookup or order
+        number from the caller. Separate read-only capability from Salla POST.
+        """
+        if os.environ.get("MEZAN_ASSISTED_SALLA_CHECKOUT_READ_ENABLED", "0") != "1":
+            raise HTTPException(status_code=503, detail={"code": "checkout_read_disabled"})
+        owner_id = str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        secret = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHECKOUT_HMAC_SECRET") or "").encode()
+        account = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
+        inbox = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
+        host_setting = str(os.environ.get("MEZAN_ASSISTED_SALLA_CHECKOUT_ALLOWED_HOSTS") or "")
+        allowed_hosts = frozenset(
+            h.strip().lower() for h in host_setting.split(",") if h.strip()
+        )
+        if (not owner_id or len(secret) < 32 or not account.isdigit()
+                or not inbox.isdigit() or not allowed_hosts
+                or any("/" in host or ":" in host or "@" in host
+                       or host in {"localhost", "127.0.0.1"}
+                       for host in allowed_hosts)):
+            raise HTTPException(status_code=503, detail={"code": "checkout_scope_not_configured"})
+        try:
+            raw = await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(
+                status_code=413, detail={"code": exc.args[0]}
+            ) from exc
+        try:
+            action = verify_checkout_read(
+                raw, request.headers.get("x-mezan-action-timestamp", ""),
+                request.headers.get("x-mezan-action-delivery", ""),
+                request.headers.get("x-mezan-action-signature", ""), secret,
+            )
+        except SignatureDenied as exc:
+            raise HTTPException(
+                status_code=401, detail={"code": exc.args[0]}
+            ) from exc
+        if (action.account_id != int(account)
+                or action.inbox_id != int(inbox)):
+            raise HTTPException(status_code=403, detail={"code": "outside_approved_inbox"})
+
+        async def read_existing_mezan_order(user_id: str, ref: str):
+            try:
+                return await get_order(
+                    MongoOrderRepository(db), user_id=user_id,
+                    order_number=ref,
+                )
+            except OrderNotFoundError as exc:
+                raise LookupError("mezan_order_not_synced") from exc
+
+        return await resolve_synced_checkout(
+            db,
+            owner_id=owner_id,
+            intent_id=action.intent_id,
+            inbox_id=str(action.inbox_id),
+            conversation_id=str(action.conversation_id),
+            quote_ref=action.quote_ref,
+            quote_digest=action.quote_digest,
+            quote_version=action.quote_version,
+            confirmation_message_id=action.confirmation_message_id,
+            load_order=read_existing_mezan_order,
+            allowed_hosts=allowed_hosts,
+        )
 
     @router.post("/signed-action")
     async def signed_action(request: Request) -> dict:
