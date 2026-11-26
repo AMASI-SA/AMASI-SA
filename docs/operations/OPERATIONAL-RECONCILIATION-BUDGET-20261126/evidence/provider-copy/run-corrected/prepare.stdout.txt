@@ -1,0 +1,1 @@
+Prepared one actual-collector retained fixture; no owned async tasks remain.

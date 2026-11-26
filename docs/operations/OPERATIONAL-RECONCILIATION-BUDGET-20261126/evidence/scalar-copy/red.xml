@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="4" time="0.664" timestamp="2026-11-26T08:55:17.734326+03:00" hostname="7b1c7493d169"><testcase classname="reconciliation-release-prep.scalar-copy.test_operational_balance_report_copy_scalar_dispatch" name="test_flat_atomic_financial_values_are_copied_without_leaf_recursion[list]" time="0.003"><failure message="assert 1201 == 1">container = &lt;class 'list'&gt;
+
+    @pytest.mark.parametrize("container", [list, dict])
+    def test_flat_atomic_financial_values_are_copied_without_leaf_recursion(container):
+        leaves = ["100.01", 7, 0.25, True, b"retained", None] * 200
+        original = leaves if container is list else {str(i): value for i, value in enumerate(leaves)}
+        profiler = cProfile.Profile()
+        profiler.enable()
+        try:
+            result = copying.copy_report_value(original)
+        finally:
+            profiler.disable()
+        assert result == deepcopy(original) and result is not original
+        recursive_calls = sum(total for (filename, _line, name), (_primitive, total, *_rest)
+                              in pstats.Stats(profiler).stats.items()
+                              if filename == copying.__file__ and name == "clone")
+        # A complete mutable root still needs one independent copy. Immutable
+        # leaves have no hooks or aliases requiring a second recursive dispatch.
+&gt;       assert recursive_calls == 1
+E       assert 1201 == 1
+
+../reconciliation-release-prep/scalar-copy/test_operational_balance_report_copy_scalar_dispatch.py:27: AssertionError</failure></testcase><testcase classname="reconciliation-release-prep.scalar-copy.test_operational_balance_report_copy_scalar_dispatch" name="test_flat_atomic_financial_values_are_copied_without_leaf_recursion[dict]" time="0.004"><failure message="assert 1201 == 1">container = &lt;class 'dict'&gt;
+
+    @pytest.mark.parametrize("container", [list, dict])
+    def test_flat_atomic_financial_values_are_copied_without_leaf_recursion(container):
+        leaves = ["100.01", 7, 0.25, True, b"retained", None] * 200
+        original = leaves if container is list else {str(i): value for i, value in enumerate(leaves)}
+        profiler = cProfile.Profile()
+        profiler.enable()
+        try:
+            result = copying.copy_report_value(original)
+        finally:
+            profiler.disable()
+        assert result == deepcopy(original) and result is not original
+        recursive_calls = sum(total for (filename, _line, name), (_primitive, total, *_rest)
+                              in pstats.Stats(profiler).stats.items()
+                              if filename == copying.__file__ and name == "clone")
+        # A complete mutable root still needs one independent copy. Immutable
+        # leaves have no hooks or aliases requiring a second recursive dispatch.
+&gt;       assert recursive_calls == 1
+E       assert 1201 == 1
+
+../reconciliation-release-prep/scalar-copy/test_operational_balance_report_copy_scalar_dispatch.py:27: AssertionError</failure></testcase><testcase classname="reconciliation-release-prep.scalar-copy.test_operational_balance_report_copy_scalar_dispatch" name="test_key_hook_cannot_retroactively_change_already_evaluated_atomic_value" time="0.000" /><testcase classname="reconciliation-release-prep.scalar-copy.test_operational_balance_report_copy_scalar_dispatch" name="test_value_hook_is_observed_before_its_atomic_dictionary_key" time="0.001" /></testsuite></testsuites>

@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/workspace/scratch/1f2d9548e6ff/reconciliation-release-prep/provider-copy/measure_retained_provider_copy.py", line 321, in <module>
+    main()
+  File "/workspace/scratch/1f2d9548e6ff/reconciliation-release-prep/provider-copy/measure_retained_provider_copy.py", line 314, in main
+    measure(args)
+  File "/workspace/scratch/1f2d9548e6ff/reconciliation-release-prep/provider-copy/measure_retained_provider_copy.py", line 128, in measure
+    assert before_state == metadata['retained_state'] and before_sources == metadata['sources']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

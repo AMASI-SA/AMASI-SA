@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.269" timestamp="2026-11-26T08:44:03.369334+03:00" hostname="7b1c7493d169"><testcase classname="backend.tests.test_operational_balance_provider_order_copy" name="test_retained_map_uses_one_complete_copy_and_keeps_other_local_deepcopies" time="0.002"><failure message="AssertionError: retained orders still use repeated scalar deepcopy dispatch&#10;assert {'retained': {'created_at': '2026-10-05T09:00:00+00:00', 'currency': 'SAR', 'order_number': 'retained-reference', 'pay...', 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}} is not {'retained': {'created_at': '2026-10-05T09:00:00+00:00', 'currency': 'SAR', 'order_number': 'retained-reference', 'pay...', 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}}">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8a2b232b70&gt;
+
+    def test_retained_map_uses_one_complete_copy_and_keeps_other_local_deepcopies(monkeypatch):
+        state, sources = retained_inputs()
+        retained = state["engine"]["provider_fee_inputs"]["orders"]
+        sources["orders"] = [order(id="current", payment={"provider": "tabby", "gross": "90.00"})]
+        before, complete, local = deepcopy((state, sources)), [], []
+    
+        def copy_map(value):
+            complete.append(value)
+            return copying.copy_report_value(value)
+    
+        def local_copy(value, *args, **kwargs):
+            assert value is not retained, "retained orders still use repeated scalar deepcopy dispatch"
+            local.append(value)
+            return deepcopy(value, *args, **kwargs)
+    
+        monkeypatch.setattr(fees, "copy_report_value", copy_map, raising=False)
+        monkeypatch.setattr(fees, "deepcopy", local_copy)
+&gt;       fees.refresh_provider_fee_inputs(state, sources)
+
+backend/tests/test_operational_balance_provider_order_copy.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+backend/operational_configured_provider_fees.py:310: in refresh_provider_fee_inputs
+    orders = deepcopy(previous.get("orders", {}))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = {'retained': {'created_at': '2026-10-05T09:00:00+00:00', 'currency': 'SAR', 'order_number': 'retained-reference', 'pay...', 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}}
+args = (), kwargs = {}, @py_assert1 = False
+@py_format3 = "{'retained': {'created_at': '2026-10-05T09:00:00+00:00', 'currency': 'SAR', 'order_number': 'retained-reference', 'pa..., 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}}"
+@py_format5 = "retained orders still use repeated scalar deepcopy dispatch\n&gt;assert {'retained': {'created_at': '2026-10-05T09:00:00..., 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}}"
+
+    def local_copy(value, *args, **kwargs):
+&gt;       assert value is not retained, "retained orders still use repeated scalar deepcopy dispatch"
+E       AssertionError: retained orders still use repeated scalar deepcopy dispatch
+E       assert {'retained': {'created_at': '2026-10-05T09:00:00+00:00', 'currency': 'SAR', 'order_number': 'retained-reference', 'pay...', 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}} is not {'retained': {'created_at': '2026-10-05T09:00:00+00:00', 'currency': 'SAR', 'order_number': 'retained-reference', 'pay...', 'id': 'retained-capture'}], 'currency': 'SAR', 'gross': '100.00', 'payment_method': 'tabby_installment', ...}, ...}}
+
+backend/tests/test_operational_balance_provider_order_copy.py:57: AssertionError</failure></testcase></testsuite></testsuites>
