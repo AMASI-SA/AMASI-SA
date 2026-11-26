@@ -1,0 +1,884 @@
+{
+  "observed_at": "2026-11-26T04:51:32.726Z",
+  "repo": "AMASI-SA/AMASI-SA",
+  "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+  "tree": "57601ee93838dde732e122354f0766c7e7414301",
+  "runs": [
+    {
+      "id": 45757007587,
+      "name": "CodeQL",
+      "event": "push",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "tree": "57601ee93838dde732e122354f0766c7e7414301",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007587",
+      "created_at": "2026-11-26T04:43:29Z",
+      "updated_at": "2026-11-26T04:50:17Z"
+    },
+    {
+      "id": 45757007586,
+      "name": "Mezan Release Readiness",
+      "event": "push",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "tree": "57601ee93838dde732e122354f0766c7e7414301",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586",
+      "created_at": "2026-11-26T04:43:29Z",
+      "updated_at": "2026-11-26T04:46:45Z"
+    },
+    {
+      "id": 45757007626,
+      "name": "Security Gate",
+      "event": "push",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "tree": "57601ee93838dde732e122354f0766c7e7414301",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007626",
+      "created_at": "2026-11-26T04:43:29Z",
+      "updated_at": "2026-11-26T04:47:12Z"
+    }
+  ],
+  "jobs": [
+    {
+      "run_id": 45757007587,
+      "id": 139697883999,
+      "name": "CodeQL (javascript-typescript)",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:45:40Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007587/job/139697883999",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run github/codeql-action/autobuild@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007587,
+      "id": 139697884317,
+      "name": "CodeQL (python)",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:50:16Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007587/job/139697884317",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run github/codeql-action/autobuild@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run github/codeql-action/analyze@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run github/codeql-action/init@v3",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139697884481,
+      "name": "Backend preflight",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:43:47Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139697884481",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile backend Python sources",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run frontend identity and release guard unit suites",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139697884630,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:43:48Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139697884630",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable the observed Yarn Classic version",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139697884674,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:43:47Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139697884674",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable the observed Yarn Classic version",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139697884746,
+      "name": "Frontend build",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:44:32Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139697884746",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable Yarn Classic",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record governed frontend toolchain",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install frontend dependencies",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Test governed frontend build contract",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Classify reviewed B or source candidate A",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build production frontend twice and retain verified build B",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify retained frontend artifact and reproducibility proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Freeze a candidate reviewed intent from the source commit",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "name": "Retain the candidate reviewed intent",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "name": "Prove install and build leave the worktree clean",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139698233714,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:44:34Z",
+      "completed_at": "2026-11-26T04:46:17Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139698233714",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139698233723,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:44:34Z",
+      "completed_at": "2026-11-26T04:46:38Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139698233723",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007586,
+      "id": 139698946549,
+      "name": "Emergent manual redeploy required",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:46:40Z",
+      "completed_at": "2026-11-26T04:46:45Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007586/job/139698946549",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record supported deployment handoff",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007626,
+      "id": 139697884473,
+      "name": "Frontend dependency and CSP checks",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:47:12Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007626/job/139697884473",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable Yarn Classic",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install frontend dependencies",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify patched dependency runtime compatibility",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify strict audit and local security backport contracts",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run unmodified released braces compatibility suite",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Full frontend regression against patched dependency graph",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Audit production frontend dependencies",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Reject vulnerable spreadsheet runtime",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify production build and frontend security manifests",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 45757007626,
+      "id": 139697884649,
+      "name": "Backend security contracts",
+      "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-26T04:43:31Z",
+      "completed_at": "2026-11-26T04:44:53Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45757007626/job/139697884649",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Validate backend dependency policy",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install reproducible public dependency closure",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Audit backend dependencies",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify image and PDF dependency compatibility (offline)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile security-critical modules",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify governed frontend toolchain bootstrap contracts",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run security contracts",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run inherited security boundary regressions (offline)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify sensitive logging output (offline)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "total_workflows": 3,
+  "total_jobs": 11,
+  "all_workflows_and_jobs_success": true,
+  "manual_redeploy_notice_job": 139698946549,
+  "web_stock_push_not_applicable": true,
+  "no_workflow_dispatched_or_rerun": true,
+  "no_git_host_browser_or_financial_mutations": true
+}

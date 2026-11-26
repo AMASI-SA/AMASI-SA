@@ -1,0 +1,85 @@
+{
+  "total_count": 4,
+  "artifacts": [
+    {
+      "id": 15088496670,
+      "node_id": "MDg6QXJ0aWZhY3QxNTA4ODQ5NjY3MA==",
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 63790,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088496670",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088496670/zip",
+      "expired": false,
+      "digest": "sha256:850248d724fc282b8d752bd1bc1dc63326ba4a07dc1cb3125456f05ae3d73bc6",
+      "created_at": "2026-11-26T04:46:15Z",
+      "updated_at": "2026-11-26T04:46:15Z",
+      "expires_at": "2026-12-10T04:46:14Z",
+      "workflow_run": {
+        "id": 45757007586,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2"
+      }
+    },
+    {
+      "id": 15088431845,
+      "node_id": "MDg6QXJ0aWZhY3QxNTA4ODQzMTg0NQ==",
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 63787,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088431845",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088431845/zip",
+      "expired": false,
+      "digest": "sha256:e664b2da0ac41997cae75f560813905b30754a09e9a803c8ec5d5960cb6aea9e",
+      "created_at": "2026-11-26T04:46:28Z",
+      "updated_at": "2026-11-26T04:46:28Z",
+      "expires_at": "2026-12-10T04:46:27Z",
+      "workflow_run": {
+        "id": 45757007586,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2"
+      }
+    },
+    {
+      "id": 15088117993,
+      "node_id": "MDg6QXJ0aWZhY3QxNTA4ODExNzk5Mw==",
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 3896210,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088117993",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088117993/zip",
+      "expired": false,
+      "digest": "sha256:6776b79e371c3a3194e9e0afb328cfc80505c91f3bdb18d42db6c254bfa1b0b2",
+      "created_at": "2026-11-26T04:46:14Z",
+      "updated_at": "2026-11-26T04:46:14Z",
+      "expires_at": "2026-12-10T04:46:13Z",
+      "workflow_run": {
+        "id": 45757007586,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2"
+      }
+    },
+    {
+      "id": 15088073029,
+      "node_id": "MDg6QXJ0aWZhY3QxNTA4ODA3MzAyOQ==",
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 3898289,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088073029",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/15088073029/zip",
+      "expired": false,
+      "digest": "sha256:6066b47e4d6cdb60e13fdcff6e0a9a3d59d9108f497532d0f80880c620c7d83c",
+      "created_at": "2026-11-26T04:46:27Z",
+      "updated_at": "2026-11-26T04:46:27Z",
+      "expires_at": "2026-12-10T04:46:26Z",
+      "workflow_run": {
+        "id": 45757007586,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2"
+      }
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+  "deployment_tree": "57601ee93838dde732e122354f0766c7e7414301",
+  "source": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+  "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+  "host_proofs_identical": true,
+  "proofs": {
+    "20.20.2": {
+      "package_boundary": {
+        "backend": {
+          "file_count": 1390,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 512901,
+            "path": "release_identity.json",
+            "sha256": "9de208bfdb7437f4f9ee99f71cbff316fa80340c9ed3bb4a5842128b296f2d7e"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "0d49d5ebb011e0f46d73427fa3bcf66c10c84710bf8331e3632bbfcd9b2009e0",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "3e989288b2747ea303f1c1707485da3ed2102c8fe7e4130754d402bd4ae11b33"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "db97800c24eb09ed1e1e04be3e529b5a09cae280a9969a5ebbfa3ac433101a8b",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+        "schema_version": 1,
+        "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+      },
+      "pre_adapter_host_node": "v20.20.2",
+      "adapter_without_git": true,
+      "actual_host_node": "v20.20.2",
+      "platform_snapshot_workspace_shared_observed": false,
+      "files": {
+        "mezan-adapter-build-v5.log": "9de476a09530288d05ad80bb5854b586cf148d36854e25880f5d689912e4fb37",
+        "mezan-adapter-environment-v5.json": "61a88ffeb42ec4c907b56255adfe174b13f0262b8db051342e2bb1844a037c63",
+        "mezan-governed-runtime.log": "17eebaea5367209cac4b1ac324e4e2e706688111cfed856c359e20cd9dd63e13",
+        "mezan-package-boundary-v5.json": "3229dd4e1cf4ff91a39ae83329d51fcb75b1a5e5b21db81fa484a7be16a91ed1"
+      }
+    },
+    "24.19.0": {
+      "package_boundary": {
+        "backend": {
+          "file_count": 1390,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 512901,
+            "path": "release_identity.json",
+            "sha256": "9de208bfdb7437f4f9ee99f71cbff316fa80340c9ed3bb4a5842128b296f2d7e"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "0d49d5ebb011e0f46d73427fa3bcf66c10c84710bf8331e3632bbfcd9b2009e0",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+          "build_meta": {
+            "bytes": 592074,
+            "path": "build/build-meta.json",
+            "sha256": "3e989288b2747ea303f1c1707485da3ed2102c8fe7e4130754d402bd4ae11b33"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1834,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "db97800c24eb09ed1e1e04be3e529b5a09cae280a9969a5ebbfa3ac433101a8b",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+        "schema_version": 1,
+        "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+      },
+      "pre_adapter_host_node": "v24.19.0",
+      "adapter_without_git": true,
+      "actual_host_node": "v24.19.0",
+      "platform_snapshot_workspace_shared_observed": false,
+      "files": {
+        "mezan-adapter-build-v5.log": "7261111efc5db3ed010d43c169c1d0a36a4f8cea17d49a2140165c9a803ad523",
+        "mezan-adapter-environment-v5.json": "29f73d845d089744e45a9a27e3797fefebc6c99d20841863fe6c58df18567fa6",
+        "mezan-governed-runtime.log": "3f8620888c231ff50eefa88804e412e9ee872295231b84f70aebbd308075983e",
+        "mezan-package-boundary-v5.json": "3229dd4e1cf4ff91a39ae83329d51fcb75b1a5e5b21db81fa484a7be16a91ed1"
+      }
+    }
+  },
+  "scope": "Read-only verification of GitHub clean-clone rehearsal artifacts; no production-host or publication evidence."
+}

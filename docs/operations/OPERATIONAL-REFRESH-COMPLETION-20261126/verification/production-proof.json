@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "original_host_local_verified_waiting_last_deployment_gate",
+  "phase": "all_prepublication_gates_passed",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,7 +691,7 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "After a fresh original-host inactive guard, upload the exact reviewed operator into a separate task-owned .git directory and run one governed local rehearsal; require all exact-D push gates before lease/publication.",
+  "next_safe_action": "Fresh original prepare and immediate prepublish, one authorized provider publication, unchanged official three-probe verifier, restoration, then live financial acceptance.",
   "original_host_current_attempt": {
     "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
     "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
@@ -775,5 +775,22 @@
         "no_output_removed_before_complete_verification": true
       }
     }
+  },
+  "deployment_ci": {
+    "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
+    "tree": "57601ee93838dde732e122354f0766c7e7414301",
+    "workflows": 3,
+    "jobs": 11,
+    "all_success": true,
+    "run_ids": [
+      45757007587,
+      45757007586,
+      45757007626
+    ],
+    "run_attempt": 1,
+    "manual_redeploy_notice_job": 139698946549,
+    "workflows_and_jobs_sha256": "0a9d85b545930593809848746dcaba2cbc556d1fba1ce06cda59f581e91d65a3",
+    "clean_clone_verification_sha256": "dc082c59106fbfa1436182fc945b9945231faac4ac4bc7d0ea82a57cff98a521",
+    "web_stock_push_not_applicable": true
   }
 }
