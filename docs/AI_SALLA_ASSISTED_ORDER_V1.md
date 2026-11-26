@@ -61,3 +61,16 @@ The proof writers are **not implemented** in this checkpoint; therefore this end
 3. Build a signed Chatwoot inbound confirmation writer and Mezan Action Gateway service-to-service authorization; wire quoted state machine with retries/corrections and human takeover.
 4. Test one authorized synthetic creation in a safe environment, confirm Salla order ID and existing Mezan synchronization, check checkout URL if available; no new link generation.
 5. Review CI/PR, merge only with appropriate owner permission, never deploy/live-enable until gates pass. Update #2139 and CSA #96 with each commit/CI/result.
+
+## 2026-11-26 — Additional implementation checkpoint (signed CSA→Mezan channel)
+
+- `backend/salla_order_creation/signature.py`: pure HMAC-SHA256 signature verification over UTC timestamp, canonical UUID delivery and exact raw JSON; 300-second clock skew, strict JSON fields/scope/action type; no Salla credential in signed body.
+- `POST /api/orders-v2/assisted-salla/signed-action`: default-off endpoint restricted by `MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED`, fixed `MEZAN_ASSISTED_SALLA_OWNER_ID`, `MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT`, `MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX`, `MEZAN_ASSISTED_SALLA_HMAC_SECRET`. All settings required; do not commit values.
+- Signed request contains **only** account/inbox/conversation, intent ID, quote ref/digest/version and customer-inbound confirmation message ID. Mezan loads `order_payload` from its own trusted persisted quote; account/tenant/context binding and both separate proof rows remain mandatory before a single Salla POST.
+- `salla_ai_action_deliveries` stores the signed delivery's unique hash; repeated signed delivery never causes second provider POST. The order intent collection also uses a stable unique Mongo `_id`.
+- Provider response total currency and amount are compared to the verified SAR quote within 0.01. `created_amount_unverified` is NOT eligible for automatic checkout link delivery.
+- `GET /api/orders-v2/assisted-salla/capabilities` provides owner-only readback of stored OAuth scope presence without exposing secrets; it does not prove live API authorization. `GET /intents/{intent_id}` provides owner-only safe creation state for reconciliation.
+- Complementary customer-service pure draft/transport lives in **CSA PR #104**; independent proof writers are still to be built in Mezan **#2141** and CSA **#105**.
+- Synthetic GitHub Actions `Salla assisted order (synthetic only)` run **45882595487** passed **57 tests** at source `45a8a3447e317dc159fb9fe83b934eb69234d4e6`. Separate unrelated `Unified Ads Manager Read Only` job failed because `_fetch_daily_spend` did not match its pre-existing reviewed AST digest; do not alter ad accounting in this Salla PR. Overall PR is **not** a green release.
+- The endpoint is **not live**, shared secret and action-bridge deployment are **not configured**, no genuine quote/confirmation proof rows exist yet and no real Salla create-order call has been run. All production flags remain OFF.
+
