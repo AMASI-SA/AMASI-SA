@@ -245,3 +245,29 @@ def test_foreign_currency_requires_separate_reconciliation(salla_pending_order):
         }}
     result = asyncio.run(call_create(db, salla_pending_order, salla))
     assert result["state"] == "created_amount_unverified"
+
+
+
+def test_provider_success_false_with_numeric_id_never_authorizes_checkout(salla_pending_order):
+    db = fixture_db(salla_pending_order)
+    async def salla(*args, **kwargs):
+        return {"success": False, "data": {
+            "id": 90006, "amounts": {"total": {"amount": 200, "currency": "SAR"}},
+        }}
+    result = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert result["state"] == "unknown"
+    assert result["needs_reconciliation"] is True
+    assert result["salla_order_id"] is None
+
+
+def test_provider_failure_duplicate_intent_cannot_post_again(salla_pending_order):
+    db = fixture_db(salla_pending_order)
+    sent = []
+    async def salla(*args, **kwargs):
+        sent.append(1)
+        return {"success": False, "data": {"id": 90007}}
+    first = asyncio.run(call_create(db, salla_pending_order, salla))
+    second = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert first["state"] == "unknown"
+    assert second["replayed"] is True
+    assert len(sent) == 1
