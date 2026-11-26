@@ -29,6 +29,7 @@ def action(**kwargs):
         "intent_id": "intent-1234",
         "quote_ref": "quote.001", "quote_digest": DIGEST,
         "quote_version": 4, "confirmation_message_id": 501,
+        "source_contact_id": 77,
         "message_created_at": 1_799_999_990, "source_id_sha256": "b" * 64,
     }
     values.update(kwargs)
@@ -211,3 +212,18 @@ def test_utc_naive_mongo_quote_timestamp_is_interpreted_as_utc():
 def test_extreme_future_message_time_is_rejected_before_datetime_conversion():
     with pytest.raises(SignatureDenied):
         signed(action(message_created_at=4_102_444_801))
+
+
+
+def test_signed_confirmation_denies_other_contact_on_private_order():
+    db=DB(valid_quote(source_contact_id=77))
+    with pytest.raises(ConfirmationDenied,match="contact_mismatch"):
+        asyncio.run(persist(db,signed(action(source_contact_id=99))))
+    assert db.salla_ai_order_confirmations.rows==[]
+
+
+def test_verified_customer_contact_is_stored_as_non_pii_id():
+    db=DB(valid_quote(source_contact_id=77))
+    result=asyncio.run(persist(db))
+    assert result["state"]=="recorded"
+    assert db.salla_ai_order_confirmations.rows[0]["source_contact_id"]==77
