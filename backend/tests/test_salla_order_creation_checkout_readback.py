@@ -91,6 +91,7 @@ def test_mezan_exact_order_total_and_link_ready():
         "state": "ready", "salla_order_id": 9876,
         "reference_id": 302076044,
         "total_sar": "165.00",
+        "pricing_mode": "preverified",
         "checkout_url": "https://amasi-sa.com/checkout/order-302076044",
         "amount_verified": True,
     }
