@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "task": "OPERATIONAL-REFRESH-SOURCE-ROOT-FIX-20261126",
+  "phase": "final_source_ci_running",
+  "updated_utc": "2026-11-26T01:33:43.762Z",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 2133,
+  "task_branch": "codex/operational-refresh-source-root-fix-20261126",
+  "source_A": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
+  "source_tree": "995ca22369e7b09328999e5b2e3142e6ac133013",
+  "source_base": "570b173d1dc6438624c39a5c511311f2a33be9a3",
+  "production_changed": false,
+  "publication_action_count": 0,
+  "lease_created": false,
+  "evidence_branch": "codex/operational-refresh-source-publication-evidence-20261126",
+  "evidence_branch_instruction": "Documentation only. Never merge or deploy this branch.",
+  "validation": {
+    "root_combined_offline_passed": 453,
+    "root_combined_seconds": 15.13,
+    "root_combined_skipped": 0,
+    "root_packet_copy_replacement_passed": 55,
+    "root_packet_copy_seconds": 4.95,
+    "counts_overlap": true,
+    "independent_reviews": {
+      "archive_engine": "no_blocker",
+      "delivery_index": "no_blocker",
+      "source_budgets": "no_blocker"
+    },
+    "full_real_mongo_ci": "pending"
+  },
+  "policy": {
+    "outer_refresh_seconds": 85,
+    "primary_orders_seconds": 20,
+    "other_primary_read_seconds": 15,
+    "maximum_read_concurrency": 4,
+    "source_row_sentinel": 20001,
+    "queries_added": 0,
+    "recurring_jobs_added": 0,
+    "financial_rules_changed": false,
+    "financial_test_writes": false
+  },
+  "prior_attempt_evidence": {
+    "manual_utc": "2026-11-26T00:42:56.558Z",
+    "manual_source_timeout_rows": 18432,
+    "scheduled_0353_source_timeout_rows": 15261,
+    "scheduled_0358_all_orders_read": 19143,
+    "scheduled_0358_outcome": "overall_timeout_during_reconciliation",
+    "latest_pre_followup": {
+      "observed_utc": "2026-11-26T01:31:00Z",
+      "attempt_riyadh": "2026-11-26 04:31",
+      "last_saved_riyadh": "2026-11-26 01:51",
+      "code": "operational_source_setup_incomplete",
+      "orders_rows": 16456,
+      "orders_budget_ms": 15000,
+      "orders_cursor_ms": 15296.575,
+      "snapshot_unpack_ms": 11883.575,
+      "snapshot_copy_prepare_ms": 0.002,
+      "aggregate_ms": 27849.789
+    }
+  },
+  "ci": {
+    "as_of": "2026-11-26T01:26:02Z",
+    "total_runs": 12,
+    "success": 3,
+    "in_progress": 9,
+    "web": 45735625676,
+    "stock": 45735625913,
+    "readiness": 45735625726
+  },
+  "next_safe_action": "Require exact-A successful CI and source-bound candidate intent; freeze intent-only B without changing source A; complete both rehearsals and original-host v5 protocol before authorized direct publish.",
+  "candidate_intent": {
+    "artifact_id": 15079120933,
+    "run_id": 45735625726,
+    "zip_sha256": "27101777b0290ac72d50e1369b54c46be954fcfff5ceb51d9deaffc6fd540545",
+    "file_sha256": "8f0ecb88e8dcf82b648537b61727f80f6bf7117ebf46e5ac878009298ac87769",
+    "file_git_blob": "5f3e22a9fa0067f529dd2d2c08110b48e4119eef",
+    "runtime_release_id": "rg5-5064eab0115d74d39ba29eeed04f13511f5a27156260c0cc5a3a4bc2045e1fb5"
+  }
+}
