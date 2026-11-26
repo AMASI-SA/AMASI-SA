@@ -1,5 +1,18 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Added private-data acceptance gates
+
+- [ ] Install `salla_assisted_private_fields_ttl_v1` on `salla_ai_private_order_fields.purge_after` and `salla_assisted_quote_purge_ttl_v1` on `salla_ai_order_quotes.purge_after` with expireAfterSeconds=0 in an explicitly authorized migration. Confirm both readbacks before any real data writes. Do NOT migrate other collections/operational balances.
+- [ ] Provision different production-only Fernet key `MEZAN_ASSISTED_SALLA_PRIVATE_FIELDS_KEY` (optional _OLD rotation), and purpose-specific HMAC secrets for private field write, vault quote, customer approval, Salla POST and checkout read. Never print, commit or send keys to the AI.
+- [ ] Verify bot user cannot read raw buyer name, phone, email, address, coordinates or actual personalized engraving text from vault or Mongo quote, only opaque field-presence metadata and refs.
+- [ ] Use signed Chatwoot current-customer public message and immutable contact_id for private field writes and quote; staff takeover must stop capture immediately. Do not send those values to OpenAI in normal context/history.
+- [ ] Verify encrypted temporary quote read can be decrypted ONLY by Mezan after account/intent proof; wrong tenant, tampering, expired TTL and changed source contact prevent Salla create.
+- [ ] Validate `private.option_text_<option id>` against actual Salla text/conditional option requirements; do not pass raw engraving value through model, logs or purpose-bound Chatwoot quote request.
+- [ ] Default flags `MEZAN_ASSISTED_SALLA_PRIVATE_FIELDS_ENABLED`, `MEZAN_ASSISTED_SALLA_SIGNED_PREPARE_ENABLED`, `MEZAN_ASSISTED_SALLA_QUOTE_WRITE_ENABLED`, `MEZAN_ASSISTED_SALLA_CONFIRMATION_ENABLED`, `MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED`, `MEZAN_ASSISTED_SALLA_CHECKOUT_READ_ENABLED` must remain OFF until explicit go-live and full CI.
+- [ ] No real customer data, card number, CVV or OTP in CI/github issue comments. Use fully synthetic fixtures.
+- [ ] Check source-specific CI for **new encryption tests**; 297 prior PASS tests do NOT certify these files.
+
+
 Owner decision (27 Nov 2026): AI/Mezan creates **one** unpaid Salla order, waits for the same order to sync into Mezan, verifies Salla's actual payable amount, reads the **already synchronized** customer payment URL from the Mezan order, then sends the link in the **same WhatsApp conversation**. Do not generate new payment links or copy merchant admin URLs. The customer chooses whether to pay through Salla; no AI payment capture.
 
 Related issues: [Mezan #2139](https://github.com/AMASI-SA/AMASI-SA/issues/2139), [quote/source #2141](https://github.com/AMASI-SA/AMASI-SA/issues/2141), [CSA P05 #116](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/116), [CSA runner blocker #122](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/122). Source PRs: Mezan #2140, CSA #104.
