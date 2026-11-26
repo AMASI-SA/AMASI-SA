@@ -212,6 +212,15 @@ def attach_cancel_approval_route(
     router: APIRouter, db: Any, current_user: Callable[..., Any],
     *, require_operator: Callable, merchant_user_id: Callable,
 ) -> None:
+    @router.get("/cancellation-capability")
+    async def cancellation_capability(user: dict = Depends(current_user)) -> dict:
+        actor = require_operator(user)
+        merchant_user_id(actor)  # Staff permission and tenant binding must exist.
+        return {"contract_version": 1, "enabled": _flag_enabled(),
+                "salla_canceled_slug": "canceled",
+                "confirmation_required": True,
+                "automatic_retries": False}
+
     @router.post("/{assignment_id}/approve-cancellation")
     async def approve_cancellation(
         assignment_id: str, payload: ApproveCourierCancellation,
