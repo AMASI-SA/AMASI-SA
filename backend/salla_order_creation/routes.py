@@ -28,6 +28,7 @@ from .private_fields import PrivateOrderFieldDenied, save_private_order_field
 from .private_fields import require_private_fields_ttl
 from .private_vault_action import verify_private_vault_prepare
 from .private_order_builder import PrivateOrderAssemblyDenied, prepare_from_private_vault
+from .quote_cipher import EncryptedOrderUnavailable, decrypt_order_payload
 from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .http_limits import BodyTooLarge, read_bounded_action_body
@@ -539,11 +540,20 @@ def make_assisted_salla_order_router(
         try:
             # Full customer/product/address data comes from Mezan storage,
             # never from the AI caller or signed action body.
-            order = PendingOrder.model_validate(quote.get("order_payload"))
+            # New source records never persist raw customer/order PII.
+            # Transitional legacy authoritative quotes are supported only by
+            # the explicit older source; new unpriced quotes MUST be encrypted.
+            if quote.get("source") == "mezan_authoritative_quote_v1":
+                order = PendingOrder.model_validate(quote.get("order_payload"))
+            else:
+                order = decrypt_order_payload(
+                    quote.get("encrypted_order_payload"),
+                    owner_id=owner_id, intent_id=action.intent_id,
+                )
             if order_digest(order) != action.quote_digest:
                 raise ValueError("quote mismatch")
-        except (ValueError, TypeError) as exc:
-            raise HTTPException(status_code=409, detail={"code": "verified_payload_missing"}) from exc
+        except (EncryptedOrderUnavailable, ValueError, TypeError):
+            raise HTTPException(status_code=409, detail={"code": "verified_payload_missing"}) from None
 
         # Durable delivery replay fence in Mongo; unique native _id across pods.
         delivery_key = hashlib.sha256(
