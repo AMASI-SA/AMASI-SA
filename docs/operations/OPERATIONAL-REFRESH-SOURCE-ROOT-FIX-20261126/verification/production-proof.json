@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-SOURCE-ROOT-FIX-20261126",
-  "phase": "intent_B_frozen_ci_running",
-  "updated_utc": "2026-11-26T01:40:08.118Z",
+  "phase": "merged_original_host_preparation_pending",
+  "updated_utc": "2026-11-26T02:00:24.579Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2133,
   "task_branch": "codex/operational-refresh-source-root-fix-20261126",
@@ -171,10 +171,365 @@
           "head_sha": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
           "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45735625676"
         }
-      ]
+      ],
+      "artifact_audit": {
+        "backend-targeted-summary.json": {
+          "artifact": 15079247846,
+          "members": [
+            "operational-backend.xml",
+            "operational-demand-read-benchmark.json",
+            "operational-demand-read.xml",
+            "operational-demand-register-benchmark.json",
+            "operational-source-sha.txt",
+            "operational-source-tree.txt"
+          ],
+          "operational-source-sha.txt": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
+          "operational-source-tree.txt": "995ca22369e7b09328999e5b2e3142e6ac133013",
+          "operational-backend.xml": {
+            "cases": 7926,
+            "skips": 0,
+            "failures": 0,
+            "errors": 0,
+            "required_suite_counts": {
+              "test_operational_balance_archive_decode_buffers": 23,
+              "test_operational_balance_delivery_collection_index": 84,
+              "test_operational_balance_driver_fee_writer": 6,
+              "test_operational_balance_engine_state_copy": 12,
+              "test_operational_balance_refresh_state_replacement": 20,
+              "test_operational_balance_source_read_budgets": 37,
+              "test_operational_balance_supplier_invoice_preview": 40
+            },
+            "real_delivery": [
+              {
+                "suite": "backend.tests.test_operational_balance_delivery_cutover",
+                "name": "test_real_refresh_preserves_old_delivery_custody_and_bank_settlement_once",
+                "seconds": "0.235"
+              },
+              {
+                "suite": "backend.tests.test_operational_balance_delivery_start_rule",
+                "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[courier]",
+                "seconds": "0.213"
+              },
+              {
+                "suite": "backend.tests.test_operational_balance_delivery_start_rule",
+                "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[native_driver]",
+                "seconds": "0.224"
+              }
+            ]
+          },
+          "operational-demand-read.xml": {
+            "cases": 106,
+            "skips": 0,
+            "failures": 0,
+            "errors": 0,
+            "required_suite_counts": {},
+            "real_delivery": []
+          }
+        },
+        "stock-targeted-summary.json": {
+          "artifact": 15078763564,
+          "cases": 6599,
+          "skips": 0,
+          "failures": 0,
+          "errors": 0,
+          "suites": [
+            {
+              "suite": "test_operational_balance_delivery_collection_index",
+              "cases": 84,
+              "names": null
+            },
+            {
+              "suite": "test_operational_balance_engine_state_copy",
+              "cases": 12,
+              "names": null
+            },
+            {
+              "suite": "test_operational_balance_source_read_budgets",
+              "cases": 37,
+              "names": null
+            },
+            {
+              "suite": "test_operational_balance_archive_decode_buffers",
+              "cases": 23,
+              "names": null
+            },
+            {
+              "suite": "test_operational_balance_driver_fee_writer",
+              "cases": 6,
+              "names": [
+                "test_mobile_delivery_posts_frozen_fee_once_without_a_second_contract[500.00-cash]",
+                "test_mobile_delivery_posts_frozen_fee_once_without_a_second_contract[0.00-None]",
+                "test_replaced_carrier_cannot_deliver_or_post_frozen_fee[SMSA-smsa-code-500.00-cash]",
+                "test_replaced_carrier_cannot_deliver_or_post_frozen_fee[SMSA-smsa-code-0.00-None]",
+                "test_replaced_carrier_cannot_deliver_or_post_frozen_fee[iMile \\u0644\\u0644\\u062a\\u0648\\u0635\\u064a\\u0644-imile-500.00-cash]",
+                "test_replaced_carrier_cannot_deliver_or_post_frozen_fee[iMile \\u0644\\u0644\\u062a\\u0648\\u0635\\u064a\\u0644-imile-0.00-None]"
+              ]
+            },
+            {
+              "suite": "test_operational_balance_supplier_invoice_preview",
+              "cases": 40,
+              "names": [
+                "test_snapshot_reads_actual_native_invoice_but_never_saves_difference[False-80.00]",
+                "test_snapshot_reads_actual_native_invoice_but_never_saves_difference[True-40.00]",
+                "test_preview_preserves_unrelated_provider_payroll_opening_and_supplier_returns",
+                "test_nonactive_never_produces_current_balance_proposal[draft]",
+                "test_nonactive_never_produces_current_balance_proposal[frozen]",
+                "test_nonactive_never_produces_current_balance_proposal[accounting_active]",
+                "test_native_accounting_gate_is_not_bypassed_by_read_preview[marker]",
+                "test_native_accounting_gate_is_not_bypassed_by_read_preview[settings]",
+                "test_incomplete_supplier_proof_blocks_total_instead_of_zero[amount]",
+                "test_incomplete_supplier_proof_blocks_total_instead_of_zero[supplier]",
+                "test_incomplete_supplier_proof_blocks_total_instead_of_zero[duplicate]",
+                "test_incomplete_supplier_proof_blocks_total_instead_of_zero[missing_piece]",
+                "test_native_purchase_is_separate_and_duplicate_reference_never_becomes_a_new_debt",
+                "test_same_number_for_other_supplier_or_generated_sequence_is_not_a_match",
+                "test_native_bad_declared_amount_is_unknown[None]",
+                "test_native_bad_declared_amount_is_unknown[True]",
+                "test_native_bad_declared_amount_is_unknown[NaN]",
+                "test_native_bad_declared_amount_is_unknown[-1]",
+                "test_native_bad_declared_amount_is_unknown[0.001]",
+                "test_native_cross_owner_rejected_even_when_passed_by_bad_caller",
+                "test_http_cannot_select_other_owner_and_has_no_post_action",
+                "test_http_mobile_permissions_remain_actor_scoped[read]",
+                "test_http_mobile_permissions_remain_actor_scoped[write_only]",
+                "test_http_mobile_permissions_remain_actor_scoped[no_supplier_permission]",
+                "test_http_mobile_permissions_remain_actor_scoped[disabled]",
+                "test_snapshot_remains_consistent_when_invoice_changes_mid_read",
+                "test_read_capability_rejects_mutations_and_unscoped_reads[collection]",
+                "test_read_capability_rejects_mutations_and_unscoped_reads[owner]",
+                "test_read_capability_rejects_mutations_and_unscoped_reads[merge]",
+                "test_read_capability_rejects_mutations_and_unscoped_reads[out]",
+                "test_read_capability_rejects_mutations_and_unscoped_reads[lookup]",
+                "test_read_capability_rejects_mutations_and_unscoped_reads[writer]",
+                "test_no_standalone_or_non_snapshot_fallback",
+                "test_snapshot_audit_page_only_allows_an_exact_owner_key_in_the_same_session",
+                "test_source_change_cannot_reprice_saved_receipt",
+                "test_future_saved_snapshot_rejected",
+                "test_role_revoked_during_snapshot_is_rechecked_before_disclosure",
+                "test_full_accounting_activation_during_snapshot_blocks_current_preview",
+                "test_receiving_only_compares_source_pieces_for_saved_window_and_cannot_post",
+                "test_receiving_correction_http_is_bound_to_owner_invoice_and_current_snapshot"
+              ]
+            }
+          ],
+          "real_delivery": [
+            {
+              "class": "tests.test_operational_balance_delivery_cutover",
+              "name": "test_real_refresh_preserves_old_delivery_custody_and_bank_settlement_once",
+              "seconds": "0.252"
+            },
+            {
+              "class": "tests.test_operational_balance_delivery_start_rule",
+              "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[courier]",
+              "seconds": "0.228"
+            },
+            {
+              "class": "tests.test_operational_balance_delivery_start_rule",
+              "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[native_driver]",
+              "seconds": "0.236"
+            }
+          ]
+        }
+      }
+    },
+    "intent_B": {
+      "head": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+      "readiness_run_id": 45737239697,
+      "readiness_success": true,
+      "clean_clone_rehearsals": [
+        {
+          "host_node": "20.20.2",
+          "job_id": 139633657660,
+          "evidence_artifact_id": 15079736482,
+          "generated_artifact_id": 15080280083,
+          "conclusion": "success"
+        },
+        {
+          "host_node": "24.19.0",
+          "job_id": 139633657707,
+          "evidence_artifact_id": 15079059174,
+          "generated_artifact_id": 15080041306,
+          "conclusion": "success"
+        }
+      ],
+      "other_workflows": "complete",
+      "clean_clone_artifact_audit": [
+        {
+          "host": "20.20.2",
+          "source_git_sha": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
+          "release_id": "rg5-5064eab0115d74d39ba29eeed04f13511f5a27156260c0cc5a3a4bc2045e1fb5",
+          "backend": {
+            "file_count": 1388,
+            "git_directory_present": false,
+            "health_verified": true,
+            "isolated_verified": true,
+            "package_tree_sha256": "b5a30b5d496fbb7e8650f0177c8c014fba03d92c7ec3b115b87a20966cca5236",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+            "build_meta": {
+              "bytes": 592074,
+              "path": "build/build-meta.json",
+              "sha256": "a32f6128585f969812e3d05ccd4f94e338d4c7ea8d12ea28c1e1f05688585a8f"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1834,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "d944d89a302a09550a10d8cb23a727bd2a301b9d6760f45ac467399bcc54c1ef",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          }
+        },
+        {
+          "host": "24.19.0",
+          "source_git_sha": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
+          "release_id": "rg5-5064eab0115d74d39ba29eeed04f13511f5a27156260c0cc5a3a4bc2045e1fb5",
+          "backend": {
+            "file_count": 1388,
+            "git_directory_present": false,
+            "health_verified": true,
+            "isolated_verified": true,
+            "package_tree_sha256": "b5a30b5d496fbb7e8650f0177c8c014fba03d92c7ec3b115b87a20966cca5236",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+            "build_meta": {
+              "bytes": 592074,
+              "path": "build/build-meta.json",
+              "sha256": "a32f6128585f969812e3d05ccd4f94e338d4c7ea8d12ea28c1e1f05688585a8f"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1834,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "d944d89a302a09550a10d8cb23a727bd2a301b9d6760f45ac467399bcc54c1ef",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          }
+        }
+      ],
+      "stock": {
+        "run_id": 45737239692,
+        "artifact_id": 15079787712,
+        "cases": 6599,
+        "subtests": 97,
+        "failed": 0,
+        "skipped": 0,
+        "errors": 0
+      },
+      "runs": [
+        {
+          "id": 45737239692,
+          "name": "Operational Stock Eligibility",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239692"
+        },
+        {
+          "id": 45737239793,
+          "name": "Operational Balance Web",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239793"
+        },
+        {
+          "id": 45737239686,
+          "name": "TikTok Creator Release Candidate",
+          "status": "completed",
+          "conclusion": "skipped",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239686"
+        },
+        {
+          "id": 45737239684,
+          "name": "Snapchat Direct Active Publication",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239684"
+        },
+        {
+          "id": 45737239882,
+          "name": "Snapchat Settings Management V2",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239882"
+        },
+        {
+          "id": 45737239697,
+          "name": "Mezan Release Readiness",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239697"
+        },
+        {
+          "id": 45737239701,
+          "name": "Supplier cost report performance",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239701"
+        },
+        {
+          "id": 45737239735,
+          "name": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239735"
+        },
+        {
+          "id": 45737239757,
+          "name": "G47 Focused Integration",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239757"
+        },
+        {
+          "id": 45737239722,
+          "name": "Qoyod Payment Freshness",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239722"
+        },
+        {
+          "id": 45737239691,
+          "name": "Mobile Order Tracking",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239691"
+        },
+        {
+          "id": 45737239690,
+          "name": "MZ2 Employee Salary and Password",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239690"
+        },
+        {
+          "id": 45737239721,
+          "name": "Security Gate",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45737239721"
+        }
+      ],
+      "all_applicable_success": true
     }
   },
-  "next_safe_action": "Require exact-B workflow success and both host-20/24 clean-clone adapter rehearsals, preserve A/B ancestry in merge, then run original-host v5 protocol and live financial acceptance.",
+  "next_safe_action": "Complete reviewed original-host preservation/rehearsal while exact-D workflows run; require all gates before original v5 prepare/prepublish and one authorized publication.",
   "candidate_intent": {
     "artifact_id": 15079120933,
     "run_id": 45735625726,
@@ -193,5 +548,27 @@
     "source_mutated": false
   },
   "intent_B": "4067edbfbfd0739382a1c390784bc238a7f00b7f",
-  "intent_tree": "a8aedd1be45cf7dcb26b31078a6c5e580709e30f"
+  "intent_tree": "a8aedd1be45cf7dcb26b31078a6c5e580709e30f",
+  "deployment_D": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
+  "deployment_tree": "a8aedd1be45cf7dcb26b31078a6c5e580709e30f",
+  "merge": {
+    "method": "merge",
+    "parents": [
+      "570b173d1dc6438624c39a5c511311f2a33be9a3",
+      "4067edbfbfd0739382a1c390784bc238a7f00b7f"
+    ],
+    "tree_equals_B": true
+  },
+  "host_orchestration": {
+    "reviewed": true,
+    "prepare_sha256": "b6b07afef39b6a386f153e5e30516a73480b40ad584a7ed8f8c9e7559833b57d",
+    "verify_sha256": "b4a416ee53be3bb70d62f7752e4c807e20acd2ec335cb78e1c65fb90d4576da3",
+    "prepare_local_smoke": "Explicit STOPPED exit 3 accepted; default exit 3 rejected; no /app access.",
+    "protected_generated_config_metadata_scan": {
+      "candidates": 0,
+      "observed_utc": "2026-11-26T01:58:00Z"
+    },
+    "stage": ".git/operational-refresh-2133-50cbe07d",
+    "actor": "operational-refresh-2133-20261126"
+  }
 }
