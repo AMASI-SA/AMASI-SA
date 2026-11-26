@@ -282,6 +282,45 @@ def courier_issue(out, code, raw, source, *, carrier=None, event=None, setup=Non
         append_issue(out, entry)
 
 
+def _postopening_courier_order_created(state, event):
+    """UTC order creation cutoff, only for new, independently identified orders.
+
+    A prior payment before creation cannot settle a service for an order
+    which did not yet exist. Missing or imprecise timestamps always keep the
+    old strict hold, including allocations to the candidate's own fee.
+    """
+    if (not isinstance(state, dict) or not isinstance(event, dict)
+            or event.get("party_type") != "courier"
+            or event.get("schema") not in {"operational_delivery_status_v1", "operational_delivery_event_v1"}
+            or not event.get("order_id") or not event.get("order_number")
+            or not event.get("order_created_at")):
+        return None
+    try:
+        start, created = _instant(state.get("started_at")), _instant(event["order_created_at"])
+        return created if start < created else None
+    except (ValueError, TypeError, KeyError):
+        return None
+
+
+def _strictly_prior_unallocated_courier_payment(movement, event, creation):
+    """Only an outgoing payment with a proved pre-creation occurrence is old.
+
+    Exact order allocations are checked FIRST by the caller and never exempt.
+    No calendar-date or processing-time fallback is allowed.
+    """
+    if creation is None or movement.get("kind") != "payment":
+        return False
+    if (movement.get("order_id") is not None and str(movement["order_id"]) == str(event["order_id"])
+            or movement.get("order_number") is not None
+            and str(movement["order_number"]) == str(event["order_number"])):
+        return False
+    try:
+        when = _instant(movement.get("occurred_at"))
+        return when < creation and amount(movement.get("amount", "0")) > Decimal(0)
+    except (ValueError, TypeError, KeyError, ArithmeticError):
+        return False
+
+
 def hold_prior_courier_event(state, event, carrier):
     if not state or not event or event["party_type"] != "courier":
         return False
@@ -304,6 +343,7 @@ def hold_prior_courier_event(state, event, carrier):
     payable_ids = {k for k, row in obs.items() if same_payable(row) and row.get("direction") == "payable"}
     payable_ids.update(row["id"] for row in state.get("openings", {}).values()
                        if same_payable(row) and row.get("direction") == "for_party")
+    created_after_opening = _postopening_courier_order_created(state, event)
     for movement in state.get("movements", []):
         allocations = movement.get("allocations") or []
         if any(row.get("obligation_id") in keys for row in allocations):
@@ -313,6 +353,10 @@ def hold_prior_courier_event(state, event, carrier):
         # Without a priced contract, a pooled payment cannot be cleared by
         # comparing it with the unrelated customer currency.
         if fee_currency is not None and movement.get("currency") != fee_currency:
+            continue
+        if _strictly_prior_unallocated_courier_payment(movement, event, created_after_opening):
+            # The order did not exist at the time of this payment. A later
+            # newly earned fee cannot be a duplicate of that old disbursement.
             continue
         try:
             if (movement.get("kind") != "payment" or not allocations
