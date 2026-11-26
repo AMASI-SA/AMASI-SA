@@ -18,7 +18,7 @@ from .signature import verify_signed_json, SignatureDenied, DIGEST, ID, REF
 from urllib.parse import parse_qsl, urlsplit
 import unicodedata
 
-from .service import intent_storage_id
+from .service import intent_storage_id, quote_pricing_mode
 
 class SignedCheckoutRead(BaseModel):
     """Purpose-bound read request; never accept a caller-supplied order URL."""
@@ -175,21 +175,22 @@ async def resolve_synced_checkout(
         "inbox_id": inbox_id, "conversation_id": conversation_id,
         "quote_ref": quote_ref,
     })
-    if (not isinstance(quote, dict) or
-            quote.get("source") != "mezan_authoritative_quote_v1" or
-            quote.get("state") != "verified" or
+    pricing_mode = quote_pricing_mode(quote)
+    if (pricing_mode is None or
             quote.get("payload_digest") != quote_digest or
-            quote.get("version") != quote_version or
-            not all(quote.get(x) is True for x in (
-                "products_verified", "shipping_verified",
-                "pricing_verified", "payment_methods_verified",
-            ))):
+            quote.get("version") != quote_version):
         return _not_ready("original_quote_not_verified", salla_order_id=order_id,
                           reference_id=ref_id)
-    approved_total = _money(quote.get("total_sar"))
-    if approved_total is None or approved_total <= 0:
-        return _not_ready("original_total_unverified", salla_order_id=order_id,
-                          reference_id=ref_id)
+    approved_total = None
+    if pricing_mode == "preverified":
+        approved_total = _money(quote.get("total_sar"))
+        if approved_total is None or approved_total <= 0:
+            return _not_ready("original_total_unverified", salla_order_id=order_id,
+                              reference_id=ref_id)
+    # In Salla-post-create mode, no final total was promised before the
+    # unpaid order was created. After Mezan sync, show the authoritative
+    # actual Salla SAR amount and its existing link to the customer. Payment
+    # is never charged automatically by this read-only operation.
 
     # Reuse the exact Mezan order engine. This is read-only; the signed client
     # cannot ask to retrieve any different order or merchant.
@@ -230,9 +231,13 @@ async def resolve_synced_checkout(
             str(getattr(totals, "currency", "")).upper() != "SAR"):
         return _not_ready("payment_or_currency_not_verified", salla_order_id=order_id,
                           reference_id=ref_id)
-    if abs(total - approved_total) > Decimal("0.01"):
+    if (pricing_mode == "preverified" and
+            abs(total - approved_total) > Decimal("0.01")):
         # The customer approved a different amount: do not send the link.
         return _not_ready("amount_mismatch_needs_customer_review",
+                          salla_order_id=order_id, reference_id=ref_id)
+    if total <= 0:
+        return _not_ready("salla_final_total_invalid",
                           salla_order_id=order_id, reference_id=ref_id)
 
     url = validated_salla_checkout_url(
@@ -246,6 +251,7 @@ async def resolve_synced_checkout(
         "salla_order_id": order_id,
         "reference_id": ref_id,
         "total_sar": f"{total:.2f}",
+        "pricing_mode": pricing_mode,
         "checkout_url": url,
         "amount_verified": True,
     }
