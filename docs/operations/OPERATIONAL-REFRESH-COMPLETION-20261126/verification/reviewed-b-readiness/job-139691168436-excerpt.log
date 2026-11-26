@@ -1,0 +1,181 @@
+# Bounded selected lines from GitHub job 139691168436; original 11848 lines, 1050822 decoded characters.
+# Read-only evidence capture; CI was not rerun.
+34: 2026-11-26T04:23:41.2377989Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+39: 2026-11-26T04:23:41.5630606Z   ref: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+146: 2026-11-26T04:23:48.2950995Z  * [new branch]          agent/fix-qoyod-invoice-sync-identity -> origin/agent/fix-qoyod-invoice-sync-identity
+160: 2026-11-26T04:23:48.2999943Z  * [new branch]          agent/fix-taxonomy-school-rosary-guards -> origin/agent/fix-taxonomy-school-rosary-guards
+163: 2026-11-26T04:23:48.3010000Z  * [new branch]          agent/fulfillment-custody-guards-20260821 -> origin/agent/fulfillment-custody-guards-20260821
+228: 2026-11-26T04:23:48.3203428Z  * [new branch]          agent/qoyod-three-status-live-guard -> origin/agent/qoyod-three-status-live-guard
+235: 2026-11-26T04:23:48.3222473Z  * [new branch]          agent/release-guard-multireplica -> origin/agent/release-guard-multireplica
+283: 2026-11-26T04:23:48.3354297Z  * [new branch]          agent/temp-disable-supplier-specialty-guard-v1 -> origin/agent/temp-disable-supplier-specialty-guard-v1
+327: 2026-11-26T04:23:48.3491411Z  * [new branch]          chore/frontend-build-identity-lock -> origin/chore/frontend-build-identity-lock
+500: 2026-11-26T04:23:48.3998143Z  * [new branch]          codex/combined-release-identity-1252 -> origin/codex/combined-release-identity-1252
+534: 2026-11-26T04:23:48.4129305Z  * [new branch]          codex/courier-recipient-identity-20261112 -> origin/codex/courier-recipient-identity-20261112
+669: 2026-11-26T04:23:48.4511753Z  * [new branch]          codex/fulfillment-delivered-guard -> origin/codex/fulfillment-delivered-guard
+715: 2026-11-26T04:23:48.4643348Z  * [new branch]          codex/google-budget-guard-integration-20261029 -> origin/codex/google-budget-guard-integration-20261029
+716: 2026-11-26T04:23:48.4646400Z  * [new branch]          codex/google-budget-guard-release-wip-20261029 -> origin/codex/google-budget-guard-release-wip-20261029
+717: 2026-11-26T04:23:48.4649189Z  * [new branch]          codex/google-budget-identity-wip-20261027 -> origin/codex/google-budget-identity-wip-20261027
+745: 2026-11-26T04:23:48.4731090Z  * [new branch]          codex/google-funded-grant-guard-contract-20261029 -> origin/codex/google-funded-grant-guard-contract-20261029
+750: 2026-11-26T04:23:48.4747879Z  * [new branch]          codex/google-guard-integration-wip-20261026 -> origin/codex/google-guard-integration-wip-20261026
+775: 2026-11-26T04:23:48.4829117Z  * [new branch]          codex/google-merchant-source-provenance-20261030 -> origin/codex/google-merchant-source-provenance-20261030
+776: 2026-11-26T04:23:48.4832397Z  * [new branch]          codex/google-merchant-source-provenance-status-20261030 -> origin/codex/google-merchant-source-provenance-status-20261030
+839: 2026-11-26T04:23:48.5027864Z  * [new branch]          codex/google-retail-identity-gate-20261029 -> origin/codex/google-retail-identity-gate-20261029
+911: 2026-11-26T04:23:48.5232509Z  * [new branch]          codex/legacy-preparation-identity-20260827 -> origin/codex/legacy-preparation-identity-20260827
+995: 2026-11-26T04:23:48.5460642Z  * [new branch]          codex/mz2-financial-identity-foundation-20260930 -> origin/codex/mz2-financial-identity-foundation-20260930
+1015: 2026-11-26T04:23:48.5514195Z  * [new branch]          codex/mz2-supplier-debit-identity-native-producer-20260930 -> origin/codex/mz2-supplier-debit-identity-native-producer-20260930
+1231: 2026-11-26T04:23:48.6098490Z  * [new branch]          codex/preparation-unit-identity-reconciliation -> origin/codex/preparation-unit-identity-reconciliation
+1261: 2026-11-26T04:23:48.6128769Z  * [new branch]          codex/provider-payment-identity-20261116 -> origin/codex/provider-payment-identity-20261116
+1361: 2026-11-26T04:23:48.6229120Z  * [new branch]          codex/release-guard-intent-lineage-20261006 -> origin/codex/release-guard-intent-lineage-20261006
+1362: 2026-11-26T04:23:48.6230102Z  * [new branch]          codex/release-guard-v5-backend-manifest -> origin/codex/release-guard-v5-backend-manifest
+1363: 2026-11-26T04:23:48.6231074Z  * [new branch]          codex/release-guard-v5-backend-manifest-r2 -> origin/codex/release-guard-v5-backend-manifest-r2
+1364: 2026-11-26T04:23:48.6232006Z  * [new branch]          codex/release-identity-diagnostics -> origin/codex/release-identity-diagnostics
+1398: 2026-11-26T04:23:48.6267167Z  * [new branch]          codex/review-acceptance-config-guard -> origin/codex/review-acceptance-config-guard
+1409: 2026-11-26T04:23:48.6276825Z  * [new branch]          codex/review-production-source-guard -> origin/codex/review-production-source-guard
+1413: 2026-11-26T04:23:48.6280466Z  * [new branch]          codex/review-salla-pending-guard-20261021 -> origin/codex/review-salla-pending-guard-20261021
+1419: 2026-11-26T04:23:48.6286072Z  * [new branch]          codex/reviewed-identity-assignment-20260827 -> origin/codex/reviewed-identity-assignment-20260827
+1421: 2026-11-26T04:23:48.6288160Z  * [new branch]          codex/reviewed-product-identity-options-20260827 -> origin/codex/reviewed-product-identity-options-20260827
+1492: 2026-11-26T04:23:48.6357671Z  * [new branch]          codex/snap-active-publication-20261025 -> origin/codex/snap-active-publication-20261025
+1493: 2026-11-26T04:23:48.6358671Z  * [new branch]          codex/snap-active-publication-20261025-r2 -> origin/codex/snap-active-publication-20261025-r2
+1520: 2026-11-26T04:23:48.6383410Z  * [new branch]          codex/snap-publication-active-20261025-wip -> origin/codex/snap-publication-active-20261025-wip
+1522: 2026-11-26T04:23:48.6385882Z  * [new branch]          codex/snap-recovery-provenance-20261025-wip -> origin/codex/snap-recovery-provenance-20261025-wip
+1710: 2026-11-26T04:23:48.6512172Z  * [new branch]          codex/tiktok-spend-guard-20261025 -> origin/codex/tiktok-spend-guard-20261025
+1711: 2026-11-26T04:23:48.6512632Z  * [new branch]          codex/tiktok-spend-guard-r2-evidence-20261025 -> origin/codex/tiktok-spend-guard-r2-evidence-20261025
+1712: 2026-11-26T04:23:48.6513054Z  * [new branch]          codex/tiktok-spend-guard-release-20261025 -> origin/codex/tiktok-spend-guard-release-20261025
+1713: 2026-11-26T04:23:48.6513655Z  * [new branch]          codex/tiktok-spend-guard-release-evidence-20261025 -> origin/codex/tiktok-spend-guard-release-evidence-20261025
+1714: 2026-11-26T04:23:48.6514106Z  * [new branch]          codex/tiktok-spend-guard-release-r2-20261025 -> origin/codex/tiktok-spend-guard-release-r2-20261025
+1737: 2026-11-26T04:23:48.6523836Z  * [new branch]          dependabot/github_actions/actions/upload-artifact-7 -> origin/dependabot/github_actions/actions/upload-artifact-7
+1990: 2026-11-26T04:23:48.6630756Z  * [new branch]          fix/ads-manager-snap-route-guard-baseline -> origin/fix/ads-manager-snap-route-guard-baseline
+1991: 2026-11-26T04:23:48.6631190Z  * [new branch]          fix/ads-manager-snap-route-guard-clean -> origin/fix/ads-manager-snap-route-guard-clean
+1993: 2026-11-26T04:23:48.6695279Z  * [new branch]          fix/advanced-dashboard-active-users-overflow-20260816 -> origin/fix/advanced-dashboard-active-users-overflow-20260816
+2034: 2026-11-26T04:23:48.6714184Z  * [new branch]          fix/campaign-ai-p1-4-observation-window-guard -> origin/fix/campaign-ai-p1-4-observation-window-guard
+2042: 2026-11-26T04:23:48.6717148Z  * [new branch]          fix/components-live-refresh-duplicate-guards-v1 -> origin/fix/components-live-refresh-duplicate-guards-v1
+2076: 2026-11-26T04:23:48.6731457Z  * [new branch]          fix/dashboard-selected-range-guard-v1 -> origin/fix/dashboard-selected-range-guard-v1
+2112: 2026-11-26T04:23:48.6746415Z  * [new branch]          fix/integrations-connection-provenance -> origin/fix/integrations-connection-provenance
+2206: 2026-11-26T04:23:48.6787604Z  * [new branch]          fix/prod-active-campaign-entity-filters-v1 -> origin/fix/prod-active-campaign-entity-filters-v1
+2259: 2026-11-26T04:23:48.6840055Z  * [new branch]          fix/prod-snap-ad-identity-link-20260809 -> origin/fix/prod-snap-ad-identity-link-20260809
+2262: 2026-11-26T04:23:48.6843139Z  * [new branch]          fix/prod-snap-adsquad-active-catalog-v5-20260808 -> origin/fix/prod-snap-adsquad-active-catalog-v5-20260808
+2275: 2026-11-26T04:23:48.6856307Z  * [new branch]          fix/prod-snap-deleted-ad-identity-20260809 -> origin/fix/prod-snap-deleted-ad-identity-20260809
+2287: 2026-11-26T04:23:48.6867914Z  * [new branch]          fix/prod-snap-squad-nine-row-guard-20260808 -> origin/fix/prod-snap-squad-nine-row-guard-20260808
+2396: 2026-11-26T04:23:48.6969825Z  * [new branch]          fix/qoyod-unified-customer-identity-20260915 -> origin/fix/qoyod-unified-customer-identity-20260915
+2426: 2026-11-26T04:23:48.6998374Z  * [new branch]          fix/rg5-runtime-requirements-identity-20260914 -> origin/fix/rg5-runtime-requirements-identity-20260914
+2456: 2026-11-26T04:23:48.7024483Z  * [new branch]          fix/single-active-product-draft -> origin/fix/single-active-product-draft
+2479: 2026-11-26T04:23:48.7045519Z  * [new branch]          fix/snapchat-dashboard-active-proof -> origin/fix/snapchat-dashboard-active-proof
+2517: 2026-11-26T04:23:48.7081062Z  * [new branch]          fix/snapchat-v2-ad-identity-pagination -> origin/fix/snapchat-v2-ad-identity-pagination
+2557: 2026-11-26T04:23:48.7119694Z  * [new branch]          fix/supplier-pdf-customer-options-guard-20260825 -> origin/fix/supplier-pdf-customer-options-guard-20260825
+2731: 2026-11-26T04:23:48.7298242Z [command]/usr/bin/git rev-parse --verify --quiet a59e6ee18f41d13baaa0e863de2ed5810dd43319^{object}
+2732: 2026-11-26T04:23:48.7308711Z a59e6ee18f41d13baaa0e863de2ed5810dd43319
+2739: 2026-11-26T04:23:48.7312423Z [command]/usr/bin/git checkout --progress --force a59e6ee18f41d13baaa0e863de2ed5810dd43319
+2740: 2026-11-26T04:23:49.0016898Z Note: switching to 'a59e6ee18f41d13baaa0e863de2ed5810dd43319'.
+2760: 2026-11-26T04:23:49.0143874Z a59e6ee18f41d13baaa0e863de2ed5810dd43319
+2890: 2026-11-26T04:23:53.5480222Z release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: '/home/runner/work/AMASI-SA/AMASI-SA/backend/release_identity.json'
+2893: 2026-11-26T04:23:55.6906590Z Note: switching to 'a59e6ee18f41d13baaa0e863de2ed5810dd43319'.
+2916: 2026-11-26T04:23:56.5862445Z test ! -e "$REHEARSAL_REPO/backend/release_identity.json"
+2935: 2026-11-26T04:23:56.5905024Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+2936: 2026-11-26T04:23:56.5905421Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+2958: 2026-11-26T04:23:57.0768767Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+2959: 2026-11-26T04:23:57.0769159Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+2976: 2026-11-26T04:23:57.5062990Z   "git_directory_present": true,
+2977: 2026-11-26T04:23:57.5063255Z   "host_node": "v20.20.2",
+2982: 2026-11-26T04:23:57.5064975Z   "outer_install_command_observed": false,
+2983: 2026-11-26T04:23:57.5065291Z   "outer_install_command": null,
+2986: 2026-11-26T04:23:57.5066731Z   "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive",
+2992: 2026-11-26T04:23:57.5205330Z yarn install --frozen-lockfile --non-interactive
+3007: 2026-11-26T04:23:57.5247257Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+3008: 2026-11-26T04:23:57.5247659Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+3074: 2026-11-26T04:24:37.0327882Z [5/5] Building fresh packages...
+3075: 2026-11-26T04:24:37.7634496Z Done in 40.06s.
+3094: 2026-11-26T04:24:37.8295423Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+3095: 2026-11-26T04:24:37.8296215Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+3115: 2026-11-26T04:24:37.8449022Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+3116: 2026-11-26T04:24:37.8449440Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+3120: 2026-11-26T04:24:44.6125803Z release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: '/tmp/tmp.3VyhTIJC4c/repo/backend/release_identity.json'
+3199: 2026-11-26T04:25:16.3387169Z [5/5] Building fresh packages...
+3200: 2026-11-26T04:25:17.1266861Z Done in 14.39s.
+3570: 2026-11-26T04:25:29.5398812Z Frontend build identity: 76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a
+3938: 2026-11-26T04:25:37.5692821Z Frontend build identity: 76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a
+3940: 2026-11-26T04:25:37.5868488Z Done in 15.81s.
+3941: 2026-11-26T04:25:42.1426623Z release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: '/tmp/tmp.3VyhTIJC4c/repo/backend/release_identity.json'
+3945: 2026-11-26T04:25:42.7142565Z     "git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+7610: 2026-11-26T04:25:42.7951283Z     "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+7620: 2026-11-26T04:25:42.7955045Z     "git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+7657: 2026-11-26T04:25:42.7965510Z         "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a"
+7666: 2026-11-26T04:25:42.7968301Z         "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a"
+7677: 2026-11-26T04:25:44.6555187Z {"architecture": "x86_64", "backend_root": "/tmp/tmp.3VyhTIJC4c/repo/backend", "configured_package_build_command": "cd frontend && yarn build", "declared_backend_package_root": "backend", "declared_frontend_package_root": "frontend", "declared_frontend_static_root": "frontend/build", "frontend_root": "/tmp/tmp.3VyhTIJC4c/repo/frontend", "git_directory_present": false, "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release", "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive", "host_node": "v20.20.2", "host_python": "3.11.18", "host_yarn": "1.22.22", "kind": "emergent_cloud_build_evidence_v1", "outer_build_command_observed": false, "outer_install_command": null, "outer_install_command_observed": false, "platform_snapshot_workspace_shared_observed": false, "repository_root": "/tmp/tmp.3VyhTIJC4c/repo", "schema_version": 1, "source_roots_declared_co_parented": true, "system": "Linux", "working_directory": "/tmp/tmp.3VyhTIJC4c/repo/frontend"}
+7681: 2026-11-26T04:25:44.6565482Z   "frontend_artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+7685: 2026-11-26T04:25:44.6567662Z       "git_directory_present": false,
+7686: 2026-11-26T04:25:44.6568209Z       "health_verified": true,
+7687: 2026-11-26T04:25:44.6568649Z       "identity": {
+7689: 2026-11-26T04:25:44.6569436Z         "path": "release_identity.json",
+7692: 2026-11-26T04:25:44.6571099Z       "isolated_verified": true,
+7693: 2026-11-26T04:25:44.6571880Z       "package_tree_sha256": "0d49d5ebb011e0f46d73427fa3bcf66c10c84710bf8331e3632bbfcd9b2009e0",
+7698: 2026-11-26T04:25:44.6574944Z       "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+7706: 2026-11-26T04:25:44.6579484Z       "isolated_runtime_artifact_verified": true,
+7707: 2026-11-26T04:25:44.6580460Z       "package_tree_sha256": "db97800c24eb09ed1e1e04be3e529b5a09cae280a9969a5ebbfa3ac433101a8b",
+7712: 2026-11-26T04:25:44.6583958Z     "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+7714: 2026-11-26T04:25:44.6585344Z     "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+7717: 2026-11-26T04:25:44.6587046Z   "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+7718: 2026-11-26T04:25:44.6588037Z   "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+7720: 2026-11-26T04:25:44.6701667Z Done in 66.63s.
+7726: 2026-11-26T04:25:44.6841868Z test -s "$REHEARSAL_REPO/backend/release_identity.json"
+7737: 2026-11-26T04:25:44.6846551Z from frontend_build_identity import (
+7738: 2026-11-26T04:25:44.6846875Z     read_frontend_build_identity,
+7741: 2026-11-26T04:25:44.6847756Z from release_identity import read_release_identity
+7742: 2026-11-26T04:25:44.6848167Z from release_identity import release_health_payload
+7749: 2026-11-26T04:25:44.6850276Z     _assert_isolated_backend_health,
+7761: 2026-11-26T04:25:44.6853826Z identity = json.loads(
+7762: 2026-11-26T04:25:44.6854205Z     (root / "backend" / "release_identity.json").read_text(
+7766: 2026-11-26T04:25:44.6855278Z frontend_build = read_frontend_build_identity(
+7773: 2026-11-26T04:25:44.6857292Z health = read_release_identity()
+7778: 2026-11-26T04:25:44.6859275Z assert identity == intent["runtime_identity"]
+7779: 2026-11-26T04:25:44.6859702Z assert identity["source_git_sha"] == intent["source_git_sha"]
+7780: 2026-11-26T04:25:44.6860215Z assert identity["source_base_git_sha"] == intent["source_base_git_sha"]
+7781: 2026-11-26T04:25:44.6860684Z assert identity["release_id"].startswith("rg5-")
+7782: 2026-11-26T04:25:44.6861267Z assert identity["frontend_build"]["artifact_tree_sha256"] == intent["frontend_build"]["artifact_tree_sha256"]
+7783: 2026-11-26T04:25:44.6861935Z assert identity["critical_file_hashes"] == intent["critical_file_hashes"]
+7786: 2026-11-26T04:25:44.6863390Z assert health["verified_identity_available"] is True
+7791: 2026-11-26T04:25:44.6865724Z assert health["release_id"] == identity["release_id"]
+7808: 2026-11-26T04:25:44.6872243Z _assert_isolated_backend_health(health, health_payload)
+7812: 2026-11-26T04:25:44.6873970Z tracked_generated="$(git ls-files -- backend/release_identity.json frontend/build frontend/.release)"
+7828: 2026-11-26T04:25:44.6913188Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+7829: 2026-11-26T04:25:44.6913736Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+7834: 2026-11-26T04:25:45.7542471Z     "git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+11499: 2026-11-26T04:25:45.8468839Z     "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+11509: 2026-11-26T04:25:45.8470114Z     "git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+11546: 2026-11-26T04:25:45.8474937Z         "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a"
+11555: 2026-11-26T04:25:45.8476153Z         "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a"
+11569: 2026-11-26T04:25:48.3574006Z     "git_directory_present": false,
+11570: 2026-11-26T04:25:48.3574442Z     "health_verified": true,
+11571: 2026-11-26T04:25:48.3574808Z     "identity": {
+11573: 2026-11-26T04:25:48.3575518Z       "path": "release_identity.json",
+11576: 2026-11-26T04:25:48.3577167Z     "isolated_verified": true,
+11577: 2026-11-26T04:25:48.3577763Z     "package_tree_sha256": "0d49d5ebb011e0f46d73427fa3bcf66c10c84710bf8331e3632bbfcd9b2009e0",
+11582: 2026-11-26T04:25:48.3579739Z     "artifact_tree_sha256": "76c634411ce1f9adef1862c705d1eda0dba41a8f062c02b66e616de07531839a",
+11590: 2026-11-26T04:25:48.3582840Z     "isolated_runtime_artifact_verified": true,
+11591: 2026-11-26T04:25:48.3583614Z     "package_tree_sha256": "db97800c24eb09ed1e1e04be3e529b5a09cae280a9969a5ebbfa3ac433101a8b",
+11596: 2026-11-26T04:25:48.3585770Z   "release_id": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+11598: 2026-11-26T04:25:48.3586679Z   "source_git_sha": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d"
+11713: 2026-11-26T04:25:49.2002760Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+11714: 2026-11-26T04:25:49.2003151Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+11721: 2026-11-26T04:25:50.0275525Z   backend/release_identity.json release/release-intent-v5.json
+11737: 2026-11-26T04:25:50.0338294Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+11738: 2026-11-26T04:25:50.0338820Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+11740: 2026-11-26T04:25:50.4149892Z ##[group]Run actions/upload-artifact@v4
+11763: 2026-11-26T04:25:50.4157699Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+11764: 2026-11-26T04:25:50.4158096Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+11769: 2026-11-26T04:25:50.6044430Z The least common ancestor is /home/runner/work/_temp. This will be the root directory of the artifact
+11773: 2026-11-26T04:25:50.8312033Z Beginning upload of artifact content to blob storage
+11776: 2026-11-26T04:25:51.1226627Z Finished uploading artifact content to blob storage!
+11777: 2026-11-26T04:25:51.1228261Z SHA256 digest of uploaded artifact zip is 30b23ce5b2fa5bbf31a30cadbac2481a092a8b1bf8141fa88fc55839b060f818
+11778: 2026-11-26T04:25:51.1229452Z Finalizing artifact upload
+11781: 2026-11-26T04:25:51.4642342Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45754802916/artifacts/15087561574
+11782: 2026-11-26T04:25:51.4817442Z ##[group]Run actions/upload-artifact@v4
+11807: 2026-11-26T04:25:51.4825960Z   INTENT_SOURCE_SHA: b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d
+11808: 2026-11-26T04:25:51.4826393Z   DEPLOYMENT_GIT_SHA: a59e6ee18f41d13baaa0e863de2ed5810dd43319
+11813: 2026-11-26T04:25:51.6727675Z The least common ancestor is /home/runner/work/_temp. This will be the root directory of the artifact
+11817: 2026-11-26T04:25:51.9107139Z Beginning upload of artifact content to blob storage
+11820: 2026-11-26T04:25:52.0106195Z Finished uploading artifact content to blob storage!
+11821: 2026-11-26T04:25:52.0107138Z SHA256 digest of uploaded artifact zip is a3b2182caa3c8d96f7c3c2a540b753ff00fed0e073b652e4cad392498229aa05
+11822: 2026-11-26T04:25:52.0109286Z Finalizing artifact upload
+11825: 2026-11-26T04:25:52.3701083Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45754802916/artifacts/15087461895
+11847: 2026-11-26T04:25:52.9627668Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

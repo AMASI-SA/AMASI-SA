@@ -465,6 +465,35 @@
       "workflow": "TikTok Creator Release Candidate",
       "run": 45754803015,
       "reason": "Unchanged job requires head_ref codex/tiktok-content-ci-20261011; current branch differs."
+    },
+    "readiness": {
+      "run": 45754802916,
+      "attempt": 1,
+      "conclusion": "success",
+      "completed_at": "2026-11-26T04:25:58Z",
+      "applicable_jobs_success": 6,
+      "manual_notice": "expected skipped",
+      "node20_job": 139691168436,
+      "node24_job": 139691168431,
+      "isolated_backend_files": 1390,
+      "isolated_frontend_files": 1834,
+      "governed_node": "22.23.2",
+      "governed_yarn": "1.22.22",
+      "package_proofs_sha256": "3229dd4e1cf4ff91a39ae83329d51fcb75b1a5e5b21db81fa484a7be16a91ed1",
+      "ci_original_host_guard_status_observed": false
     }
+  },
+  "operator_partially_configured": {
+    "draft": true,
+    "deployment": "pending ordinary merge D",
+    "source": "b7c7d13f9685fdbc5d7c93b8f8278638bcb2aa6d",
+    "intent": "a59e6ee18f41d13baaa0e863de2ed5810dd43319",
+    "tree": "57601ee93838dde732e122354f0766c7e7414301",
+    "runtime": "rg5-3786c214f5c7213c2b3c118ff79d895b716268f479c94d8c5fba2f7a0de66b86",
+    "stage": ".git/operational-refresh-completion-b7c7d13f",
+    "config_sha256": "6dfd9789119723899c9c3a04e9a6dfffc9c7109c1266842c9054bfcb97d74690",
+    "manifest_sha256": "f3270a736e75543e527af8d31930bb301087c3b6449d28a299336c8403c91ad5",
+    "independent_review": "no blocker while disabled",
+    "host_actions_executed": false
   }
 }
