@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "phase": "publication_succeeded_official_verification_pending",
+  "phase": "official_production_verification_running",
   "task": "OPERATIONAL-REFRESH-COMPLETION-20261126",
   "production_changed": false,
   "production_base": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
@@ -691,7 +691,7 @@
     "historical_manifest_note": "The manifest's pending review field records its generation state; this exact-hash-bound independent review supersedes that field. Historical draft README and comments are retained.",
     "host_actions_executed": false
   },
-  "next_safe_action": "Run the independently reviewed original verify wrapper once; require official three-probe success and closed lease, review preservation and restore the locally stopped Backend, then perform live financial acceptance.",
+  "next_safe_action": "Wait for this existing original verifier only; do not repeat publication or verification, inspect its result and preservation, restore owned Backend, then perform one actual financial refresh.",
   "original_host_current_attempt": {
     "operator_checkpoint": "c595f7aff97f54a16ab7a62ca9c23082ab5e879e",
     "operator_directory": "/app/.git/operational-completion-operator-b7c7d13f",
@@ -807,7 +807,17 @@
       "boot_started_at": "2026-11-26T05:03:34.631821+00:00",
       "proof_sha256": "9141d7e191c7201df539f7592f951836db3c042503b09ea888dea1e58bc5398b"
     },
-    "official_verify_invocations": 0
+    "official_verify_invocations": 1,
+    "verify_started_at": "2026-11-26T05:05:09.532939+00:00",
+    "verify_runner_pid": 9207,
+    "guard_verify_pid": 9225,
+    "latest_verifier_observation": {
+      "at": "2026-11-26T05:05:52.963404+00:00",
+      "phase": "verify_running",
+      "owned_process_alive": true,
+      "proof_bytes": 0,
+      "stderr_bytes": 0
+    }
   },
   "deployment_ci": {
     "deployment": "33be2d0e1b51faa355d55707c0c374f4c1d6bbe2",
