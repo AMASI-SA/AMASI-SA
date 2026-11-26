@@ -7,6 +7,7 @@ to Salla or generates a checkout URL.
 
 from __future__ import annotations
 
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -19,7 +20,9 @@ class CartUnverified(ValueError):
     pass
 
 
-_ALLOWED_SELECTABLE = frozenset({"radio", "select", "checkbox", "image"})
+_ALLOWED_SELECTABLE = frozenset({"radio", "select", "checkbox", "image", "button"})
+_TEXT_TYPES = frozenset({"text", "textarea"})
+_FALLBACK_MAX_TEXT_LENGTH = 120
 _FRESHNESS = timedelta(seconds=120)
 
 
@@ -82,25 +85,79 @@ def validate_selected_cart(
             choice_map[option["option_id"]] = option
         selected_value_ids = []
         selected_options = set()
+        selected_text_option_ids = []
+        picked_map = {picked.id: picked.value for picked in product.options}
+
+        def is_active(option: dict) -> bool:
+            visibility = option.get("visibility") or "always"
+            if visibility == "always":
+                return True
+            if visibility != "on_condition":
+                raise CartUnverified("unsupported_option_visibility")
+            operation = option.get("visibility_condition_type")
+            ref_id = option.get("visibility_condition_option")
+            ref_value = option.get("visibility_condition_value")
+            if (operation not in ("=", "!=")
+                    or type(ref_id) is not int
+                    or type(ref_value) is not int
+                    or ref_id not in choice_map
+                    or ref_id == option.get("option_id")):
+                raise CartUnverified("unsupported_conditional_option")
+            selected = picked_map.get(ref_id)
+            # No base choice means this conditional field cannot be active.
+            if not selected:
+                return False
+            equal = str(ref_value) in selected
+            return equal if operation == "=" else not equal
+
         for picked in product.options:
             option = choice_map.get(picked.id)
             if not option:
                 raise CartUnverified("unknown_product_option")
-            if option.get("type") not in _ALLOWED_SELECTABLE:
+            if not is_active(option):
+                raise CartUnverified("hidden_option_submitted")
+            opt_type = option.get("type")
+            if opt_type in _TEXT_TYPES:
+                if len(picked.value) != 1 or type(picked.value[0]) is not str:
+                    raise CartUnverified("text_option_must_be_one_string")
+                text_value = picked.value[0]
+                if (not text_value.strip() or "<" in text_value or ">" in text_value
+                        or any(unicodedata.category(ch).startswith("C")
+                               for ch in text_value)):
+                    raise CartUnverified("unsafe_personalization_text")
+                chars_limit = option.get("characters_limit")
+                if chars_limit is None:
+                    max_chars = _FALLBACK_MAX_TEXT_LENGTH
+                elif (type(chars_limit) is int and
+                        0 < chars_limit <= 500):
+                    max_chars = chars_limit
+                elif (isinstance(chars_limit, str) and chars_limit.isascii()
+                      and chars_limit.isdecimal() and
+                      0 < int(chars_limit) <= 500):
+                    max_chars = int(chars_limit)
+                else:
+                    raise CartUnverified("text_option_limit_unverified")
+                if len(text_value) > max_chars:
+                    raise CartUnverified("personalization_text_too_long")
+                selected_text_option_ids.append(picked.id)
+                selected_options.add(picked.id)
+                continue
+            if opt_type not in _ALLOWED_SELECTABLE:
                 raise CartUnverified("unsupported_product_option")
-            if option.get("type") != "checkbox" and len(picked.value) != 1:
+            if opt_type != "checkbox" and len(picked.value) != 1:
                 raise CartUnverified("multiple_choice_for_single_option")
             known_values = {}
             for v in option.get("values") or []:
-                if (not isinstance(v,dict) or type(v.get("value_id")) is not int or
-                        v["value_id"] in known_values):
+                if (not isinstance(v, dict)
+                        or type(v.get("value_id")) is not int
+                        or v["value_id"] in known_values):
                     raise CartUnverified("invalid_catalog_values")
                 known_values[v["value_id"]] = v
             if not known_values:
                 raise CartUnverified("option_values_not_verified")
             for raw in picked.value:
-                if (not isinstance(raw,str) or not raw.isascii() or
-                        not raw.isdecimal() or str(int(raw)) != raw):
+                if (not isinstance(raw, str) or not raw.isascii()
+                        or not raw.isdecimal() or str(int(raw)) != raw):
                     raise CartUnverified("noncanonical_option_value")
                 value = known_values.get(int(raw))
                 if not value or value.get("out_of_stock") is True:
@@ -109,7 +166,9 @@ def validate_selected_cart(
                 selected_value_ids.append(int(raw))
             selected_options.add(picked.id)
         for option_id, opt in choice_map.items():
-            if opt.get("required") is True and option_id not in selected_options:
+            if (opt.get("required") is True
+                    and is_active(opt)
+                    and option_id not in selected_options):
                 raise CartUnverified("required_option_missing")
         if len(selected_value_ids) != len(set(selected_value_ids)):
             raise CartUnverified("duplicate_option_value")
@@ -150,6 +209,7 @@ def validate_selected_cart(
             "variant_id": variant_id,
             "quantity": product.quantity,
             "option_value_ids": sorted(selected_value_ids),
+            "selected_text_option_ids": sorted(selected_text_option_ids),
             "provider_list_price_sar": price_hint,
             "verified_catalog_reference": "salla_product_details",
             "is_final_cart_quote": False,
