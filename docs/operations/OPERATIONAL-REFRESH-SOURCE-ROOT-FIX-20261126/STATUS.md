@@ -91,3 +91,40 @@ change passed all 83 affected packet/read-lifetime/audit-batch cases in 2.61 s.
 Root independently passed the 23 new cases and 20 existing replacement-state
 cases: 43 passed in 3.25 s, no skips. Primary cursor work remains diagnostic;
 do not treat this checkpoint as ready to merge or publish.
+
+## Wider deadline evidence and implementation decisions
+
+The natural 03:58 Asia/Riyadh attempt completed all 19,143 primary order rows
+in 14,990.402 ms, but the unchanged 85-second request budget expired during
+reconciliation. Native evidence took 8,777.906 ms, unpack 10,605.911 ms, primary
+reads 15,011.137 ms, total source collection 52,665.964 ms and reconciliation
+12,937.578 ms before cancellation. Source collection included 15,124.454 ms
+for bundles and 14,106.373 ms for the order loop. Profit context took
+17,158.217 ms; its product authority was cancelled under its separate 25-second
+budget. These stages overlap and must not be summed indiscriminately.
+
+One bounded real-Motor synthetic wire experiment compared current concurrent
+primary reads with orders-first admission in A/B/B/A order. It retained exact
+payload/query/projection/cap/digests and used a separate pre-encoded responder.
+The experiment did not show a consistent total-wall or CPU improvement from
+orders-first admission. Keep current four-way concurrency; do not select only
+the favorable first run. The saved findings explicitly distinguish synthetic
+payload assumptions from observed production facts.
+
+A proposed reuse of primary raw rows for profit is deferred: normalized profit
+fields, date-cohort membership, dotted projection behavior, conditional shape
+proof and same-revision source writers require a larger freshness contract.
+Do not silently substitute full raw documents or reuse uncertain proof.
+
+Further work is deliberately limited to a complete-state copier already used
+by the project, a request-local delivery collection index that preserves every
+row/duplicate/predicate, and explicit primary-order deadline allocation. The
+approved deadline policy under implementation gives only the primary full-owner
+order read 20 seconds; all other primary reads retain their 15-second default.
+The 85-second outer request limit and any earlier inherited source deadline
+remain authoritative, with one cumulative driver deadline across batches and
+owned cancellation/cleanup. Query, projection, cohort and the 20,001 overflow
+sentinel remain unchanged. This supersedes the old task's all-primary-15s
+description for this one callsite; it is not an increase of the total request
+budget or a substitute for the measured work reductions. Complete live-save
+acceptance is still required before claiming reliability or lower load.

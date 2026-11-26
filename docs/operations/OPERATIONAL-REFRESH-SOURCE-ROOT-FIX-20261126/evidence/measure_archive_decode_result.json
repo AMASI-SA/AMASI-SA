@@ -1,0 +1,33 @@
+{
+  "bson_c_extension": true,
+  "compressed_packet_bytes": 280297,
+  "fixture": "synthetic_only",
+  "logical_values_and_types_equal": true,
+  "median_ms": {
+    "direct_public": 74.297,
+    "legacy_wrapper": 90.404
+  },
+  "pymongo": "4.18.3",
+  "python": "3.12.14",
+  "records": 7200,
+  "samples_ms": {
+    "direct_public": [
+      79.586,
+      71.397,
+      74.297
+    ],
+    "legacy_wrapper": [
+      163.881,
+      84.298,
+      90.404
+    ]
+  },
+  "scope": "_unpack_packets only; excludes audit I/O, authorization and live source reads",
+  "stored_packet_unchanged": true,
+  "traced_peak_bytes": {
+    "direct_public": 69382924,
+    "legacy_wrapper": 100417812
+  },
+  "traced_peak_bytes_eliminated": 31034888,
+  "uncompressed_packet_bytes": 31035717
+}

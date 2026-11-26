@@ -1,0 +1,2383 @@
+{
+  "method": "Offline synthetic wire responder in separate process; real Motor/PyMongo; fresh-client A/B/B/A",
+  "production_data_or_db_used": false,
+  "production_latency_measured": false,
+  "runtime_source_changed": false,
+  "financial_writer_used": false,
+  "per_read_timeout_seconds": 15,
+  "application_row_sentinel": 20001,
+  "complete_read_count": 4,
+  "successful_projection_cohort_and_payload_identical": true,
+  "source_sha256_before": {
+    "backend/operational_read_runtime.py": "813b62bb2afabd447a527b7c262fcf15a280a0c86746d9f4e8cb0e5987fe7c90",
+    "backend/operational_balance_sources.py": "b9b554e271a5ae3367bf9902a4bf64041f91218c468996a391c3c71c38f3b2d1"
+  },
+  "source_sha256_after": {
+    "backend/operational_read_runtime.py": "813b62bb2afabd447a527b7c262fcf15a280a0c86746d9f4e8cb0e5987fe7c90",
+    "backend/operational_balance_sources.py": "b9b554e271a5ae3367bf9902a4bf64041f91218c468996a391c3c71c38f3b2d1"
+  },
+  "runtime_source_unchanged_during_experiment": true,
+  "fixture": {
+    "order_count": 19200,
+    "other_rows_per_collection": 4800,
+    "batch_bytes": {
+      "unified_orders": [
+        648901,
+        15744578,
+        15746028,
+        15746028,
+        15746028,
+        15743882,
+        15746186,
+        15746186,
+        13266261
+      ],
+      "mezan_preparation_pieces_v1": [
+        246590,
+        11627838
+      ],
+      "store_delivery_assignments": [
+        246488,
+        11623138
+      ],
+      "store_delivery_collections": [
+        246488,
+        11623138
+      ]
+    },
+    "expected_sha256": {
+      "unified_orders": "f5355ebbd2b6160b956b2f7b9f0b911c3967fe9256642449f5863ab766189933",
+      "mezan_preparation_pieces_v1": "ab6d73a8f459a334be4381a6047450afdf1e947db415c1f4ba110b35d64dfb9b",
+      "store_delivery_assignments": "2fe51ed7aac03aa2ad19eae17aec7cda43c0b60e5f085bb65f5b0f0f4d39b900",
+      "store_delivery_collections": "c6fc75004fe1d8393420b730ae454716ddae7b5bc08bc329f0cef03a1f99dae2"
+    },
+    "fixture_first_batch_rows": 101,
+    "fixture_max_batch_bytes": 15728640,
+    "production_payload_distribution_known": false
+  },
+  "runs": [
+    {
+      "schedule": "concurrent",
+      "wall_ms": 6604.766,
+      "process_cpu_ms": 6645.304,
+      "versions": {
+        "python": "3.12.14",
+        "motor": "3.7.1",
+        "pymongo": "4.18.3",
+        "bson_c_extension": true
+      },
+      "error": null,
+      "row_counts": {
+        "unified_orders": 19200,
+        "mezan_preparation_pieces_v1": 4800,
+        "store_delivery_assignments": 4800,
+        "store_delivery_collections": 4800
+      },
+      "sha256": {
+        "unified_orders": "f5355ebbd2b6160b956b2f7b9f0b911c3967fe9256642449f5863ab766189933",
+        "mezan_preparation_pieces_v1": "ab6d73a8f459a334be4381a6047450afdf1e947db415c1f4ba110b35d64dfb9b",
+        "store_delivery_assignments": "2fe51ed7aac03aa2ad19eae17aec7cda43c0b60e5f085bb65f5b0f0f4d39b900",
+        "store_delivery_collections": "c6fc75004fe1d8393420b730ae454716ddae7b5bc08bc329f0cef03a1f99dae2"
+      },
+      "resident_snapshot_bson_bytes": 22344918,
+      "rss_before_kib": 222056,
+      "rss_after_kib": 1522012,
+      "process_peak_rss_before_kib": 242468,
+      "process_peak_rss_after_kib": 1521040,
+      "read_rss_growth_kib": 1299956,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "gc_by_generation": {
+        "0": {
+          "count": 13,
+          "wall_sum_ms": 1234.834,
+          "wall_max_ms": 433.477,
+          "collected": 5
+        },
+        "1": {
+          "count": 1,
+          "wall_sum_ms": 99.391,
+          "wall_max_ms": 99.391,
+          "collected": 4
+        },
+        "2": {
+          "count": 1,
+          "wall_sum_ms": 148.194,
+          "wall_max_ms": 148.194,
+          "collected": 2
+        }
+      },
+      "gc_counts_before": [
+        388,
+        8,
+        10
+      ],
+      "gc_counts_after": [
+        0,
+        10,
+        0
+      ],
+      "gc_stats_before": [
+        {
+          "collections": 602,
+          "collected": 463,
+          "uncollectable": 0
+        },
+        {
+          "collections": 54,
+          "collected": 29,
+          "uncollectable": 0
+        },
+        {
+          "collections": 4,
+          "collected": 5,
+          "uncollectable": 0
+        }
+      ],
+      "gc_stats_after": [
+        {
+          "collections": 615,
+          "collected": 468,
+          "uncollectable": 0
+        },
+        {
+          "collections": 55,
+          "collected": 33,
+          "uncollectable": 0
+        },
+        {
+          "collections": 5,
+          "collected": 7,
+          "uncollectable": 0
+        }
+      ],
+      "explicit_gc_collect_used": false,
+      "gc_enabled": true,
+      "event_loop_lag_ms": {
+        "samples": 40,
+        "max": 762.966,
+        "p95": 632.673
+      },
+      "nested_driver_stage_summaries": {
+        "socket_receive": {
+          "count": 19,
+          "wall_sum_ms": 5130.015,
+          "thread_cpu_sum_ms": 283.301,
+          "wall_max_ms": 1370.094
+        },
+        "driver_refresh": {
+          "count": 15,
+          "wall_sum_ms": 12437.763,
+          "thread_cpu_sum_ms": 6518.308,
+          "wall_max_ms": 1918.621
+        },
+        "bson_unpack": {
+          "count": 15,
+          "wall_sum_ms": 6958.7,
+          "thread_cpu_sum_ms": 5993.016,
+          "wall_max_ms": 977.008
+        }
+      },
+      "driver_batch_operations": [
+        {
+          "collection": "unified_orders",
+          "started": 0.836,
+          "wall_ms": 26.022
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 0.926,
+          "wall_ms": 362.9
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 1.676,
+          "wall_ms": 67.128
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 4.661,
+          "wall_ms": 359.941
+        },
+        {
+          "collection": "unified_orders",
+          "started": 26.958,
+          "wall_ms": 1462.928
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 68.899,
+          "wall_ms": 1441.905
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 363.91,
+          "wall_ms": 1919.269
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 364.702,
+          "wall_ms": 2526.729
+        },
+        {
+          "collection": "unified_orders",
+          "started": 1492.729,
+          "wall_ms": 1407.97
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2903.426,
+          "wall_ms": 605.206
+        },
+        {
+          "collection": "unified_orders",
+          "started": 3511.418,
+          "wall_ms": 582.654
+        },
+        {
+          "collection": "unified_orders",
+          "started": 4096.86,
+          "wall_ms": 640.728
+        },
+        {
+          "collection": "unified_orders",
+          "started": 4740.235,
+          "wall_ms": 660.196
+        },
+        {
+          "collection": "unified_orders",
+          "started": 5402.601,
+          "wall_ms": 658.853
+        },
+        {
+          "collection": "unified_orders",
+          "started": 6064.502,
+          "wall_ms": 529.647
+        }
+      ],
+      "primary_orders_reads": [
+        {
+          "collection": "unified_orders",
+          "outcome": "complete",
+          "cursor_kind": "motor",
+          "rows_retained": 19200,
+          "last_checkpoint_rows": 19200,
+          "queue_ms": 0.011,
+          "budget_ms": 15000,
+          "first_row_ms": 26.417,
+          "last_checkpoint_ms": 6595.421,
+          "read_elapsed_ms": 6595.703,
+          "cancel_join_ms": 0,
+          "close_ms": 0.241
+        }
+      ],
+      "stage_timings": [
+        {
+          "stage": "orders_cursor_build",
+          "duration_ms": 0.202,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_cursor_read",
+          "duration_ms": 6595.716,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_rows_validate",
+          "duration_ms": 8.369,
+          "outcome": "complete"
+        }
+      ],
+      "driver_events": [
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 5.094,
+          "wall_ms": 0.435,
+          "thread_cpu_ms": 0.185
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1.839,
+          "wall_ms": 4.456,
+          "thread_cpu_ms": 2.813
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 6.302,
+          "wall_ms": 20.273,
+          "thread_cpu_ms": 19.973
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 1.087,
+          "wall_ms": 25.565,
+          "thread_cpu_ms": 23.274
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 5.488,
+          "wall_ms": 55.733,
+          "thread_cpu_ms": 0.492
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 27.693,
+          "wall_ms": 33.866,
+          "thread_cpu_ms": 0.2
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 24.991,
+          "wall_ms": 37.157,
+          "thread_cpu_ms": 0.533
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 62.153,
+          "wall_ms": 6.386,
+          "thread_cpu_ms": 5.994
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 4.204,
+          "wall_ms": 64.41,
+          "thread_cpu_ms": 7.769
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 61.909,
+          "wall_ms": 7.515,
+          "thread_cpu_ms": 0.367
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 62.098,
+          "wall_ms": 147.624,
+          "thread_cpu_ms": 0.999
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 209.732,
+          "wall_ms": 4.869,
+          "thread_cpu_ms": 4.688
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 5.204,
+          "wall_ms": 209.522,
+          "thread_cpu_ms": 7.076
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 69.427,
+          "wall_ms": 145.523,
+          "thread_cpu_ms": 101.576
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 1.495,
+          "wall_ms": 362.119,
+          "thread_cpu_ms": 251.864
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 27.587,
+          "wall_ms": 414.532,
+          "thread_cpu_ms": 38.502
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 69.379,
+          "wall_ms": 1002.649,
+          "thread_cpu_ms": 43.447
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 1072.04,
+          "wall_ms": 329.149,
+          "thread_cpu_ms": 314.061
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1399.613,
+          "wall_ms": 18.925,
+          "thread_cpu_ms": 1.376
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 442.128,
+          "wall_ms": 977.008,
+          "thread_cpu_ms": 633.779
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 27.089,
+          "wall_ms": 1462.633,
+          "thread_cpu_ms": 739.573
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 69.142,
+          "wall_ms": 1424.335,
+          "thread_cpu_ms": 375.4
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 364.447,
+          "wall_ms": 1151.537,
+          "thread_cpu_ms": 47.299
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 401.299,
+          "wall_ms": 1370.094,
+          "thread_cpu_ms": 49.278
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 1515.997,
+          "wall_ms": 766.307,
+          "thread_cpu_ms": 368.844
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 364.103,
+          "wall_ms": 1918.621,
+          "thread_cpu_ms": 416.915
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 1771.405,
+          "wall_ms": 518.851,
+          "thread_cpu_ms": 394.349
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 400.538,
+          "wall_ms": 1890.439,
+          "thread_cpu_ms": 444.73
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1493.792,
+          "wall_ms": 797.3,
+          "thread_cpu_ms": 20.916
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2291.099,
+          "wall_ms": 609.213,
+          "thread_cpu_ms": 593.22
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 1493.527,
+          "wall_ms": 1407.027,
+          "thread_cpu_ms": 614.646
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2903.857,
+          "wall_ms": 50.184,
+          "thread_cpu_ms": 48.572
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2954.05,
+          "wall_ms": 553.928,
+          "thread_cpu_ms": 553.417
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2903.524,
+          "wall_ms": 604.935,
+          "thread_cpu_ms": 602.806
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3511.807,
+          "wall_ms": 15.107,
+          "thread_cpu_ms": 13.116
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 3526.921,
+          "wall_ms": 566.755,
+          "thread_cpu_ms": 565.856
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 3511.539,
+          "wall_ms": 582.363,
+          "thread_cpu_ms": 579.468
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 4097.367,
+          "wall_ms": 4.75,
+          "thread_cpu_ms": 3.818
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 4102.123,
+          "wall_ms": 634.759,
+          "thread_cpu_ms": 633.972
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 4096.995,
+          "wall_ms": 640.131,
+          "thread_cpu_ms": 638.407
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 4742.701,
+          "wall_ms": 4.903,
+          "thread_cpu_ms": 4.019
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 4747.61,
+          "wall_ms": 652.421,
+          "thread_cpu_ms": 651.947
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 4742.339,
+          "wall_ms": 657.961,
+          "thread_cpu_ms": 656.514
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 5403.038,
+          "wall_ms": 9.032,
+          "thread_cpu_ms": 4.097
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 5412.075,
+          "wall_ms": 648.754,
+          "thread_cpu_ms": 632.039
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 5402.726,
+          "wall_ms": 658.486,
+          "thread_cpu_ms": 636.834
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 6065.124,
+          "wall_ms": 4.218,
+          "thread_cpu_ms": 3.272
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 6069.347,
+          "wall_ms": 524.502,
+          "thread_cpu_ms": 519.301
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 6064.841,
+          "wall_ms": 529.217,
+          "thread_cpu_ms": 523.033
+        }
+      ],
+      "run": 1
+    },
+    {
+      "schedule": "orders_first",
+      "wall_ms": 4143.794,
+      "process_cpu_ms": 4139.048,
+      "versions": {
+        "python": "3.12.14",
+        "motor": "3.7.1",
+        "pymongo": "4.18.3",
+        "bson_c_extension": true
+      },
+      "error": null,
+      "row_counts": {
+        "unified_orders": 19200,
+        "mezan_preparation_pieces_v1": 4800,
+        "store_delivery_assignments": 4800,
+        "store_delivery_collections": 4800
+      },
+      "sha256": {
+        "unified_orders": "f5355ebbd2b6160b956b2f7b9f0b911c3967fe9256642449f5863ab766189933",
+        "mezan_preparation_pieces_v1": "ab6d73a8f459a334be4381a6047450afdf1e947db415c1f4ba110b35d64dfb9b",
+        "store_delivery_assignments": "2fe51ed7aac03aa2ad19eae17aec7cda43c0b60e5f085bb65f5b0f0f4d39b900",
+        "store_delivery_collections": "c6fc75004fe1d8393420b730ae454716ddae7b5bc08bc329f0cef03a1f99dae2"
+      },
+      "resident_snapshot_bson_bytes": 22344918,
+      "rss_before_kib": 222060,
+      "rss_after_kib": 1502012,
+      "process_peak_rss_before_kib": 242768,
+      "process_peak_rss_after_kib": 1501628,
+      "read_rss_growth_kib": 1279952,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "gc_by_generation": {
+        "0": {
+          "count": 13,
+          "wall_sum_ms": 727.346,
+          "wall_max_ms": 106.388,
+          "collected": 5
+        },
+        "1": {
+          "count": 1,
+          "wall_sum_ms": 479.393,
+          "wall_max_ms": 479.393,
+          "collected": 6
+        },
+        "2": {
+          "count": 1,
+          "wall_sum_ms": 855.146,
+          "wall_max_ms": 855.146,
+          "collected": 2
+        }
+      },
+      "gc_counts_before": [
+        388,
+        8,
+        10
+      ],
+      "gc_counts_after": [
+        0,
+        10,
+        0
+      ],
+      "gc_stats_before": [
+        {
+          "collections": 602,
+          "collected": 463,
+          "uncollectable": 0
+        },
+        {
+          "collections": 54,
+          "collected": 29,
+          "uncollectable": 0
+        },
+        {
+          "collections": 4,
+          "collected": 5,
+          "uncollectable": 0
+        }
+      ],
+      "gc_stats_after": [
+        {
+          "collections": 615,
+          "collected": 468,
+          "uncollectable": 0
+        },
+        {
+          "collections": 55,
+          "collected": 35,
+          "uncollectable": 0
+        },
+        {
+          "collections": 5,
+          "collected": 7,
+          "uncollectable": 0
+        }
+      ],
+      "explicit_gc_collect_used": false,
+      "gc_enabled": true,
+      "event_loop_lag_ms": {
+        "samples": 45,
+        "max": 850.799,
+        "p95": 301.463
+      },
+      "nested_driver_stage_summaries": {
+        "socket_receive": {
+          "count": 18,
+          "wall_sum_ms": 858.871,
+          "thread_cpu_sum_ms": 78.869,
+          "wall_max_ms": 556.001
+        },
+        "bson_unpack": {
+          "count": 15,
+          "wall_sum_ms": 3973.903,
+          "thread_cpu_sum_ms": 3950.394,
+          "wall_max_ms": 1001.795
+        },
+        "driver_refresh": {
+          "count": 15,
+          "wall_sum_ms": 4843.414,
+          "thread_cpu_sum_ms": 4038.718,
+          "wall_max_ms": 1039.603
+        }
+      },
+      "driver_batch_operations": [
+        {
+          "collection": "unified_orders",
+          "started": 0.395,
+          "wall_ms": 12.142
+        },
+        {
+          "collection": "unified_orders",
+          "started": 12.633,
+          "wall_ms": 266.629
+        },
+        {
+          "collection": "unified_orders",
+          "started": 286.387,
+          "wall_ms": 252.258
+        },
+        {
+          "collection": "unified_orders",
+          "started": 541.601,
+          "wall_ms": 618.668
+        },
+        {
+          "collection": "unified_orders",
+          "started": 1162.203,
+          "wall_ms": 1039.967
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2204.793,
+          "wall_ms": 303.857
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2510.687,
+          "wall_ms": 362.623
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2875.287,
+          "wall_ms": 241.114
+        },
+        {
+          "collection": "unified_orders",
+          "started": 3118.546,
+          "wall_ms": 204.709
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3333.644,
+          "wall_ms": 4.911
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 3333.716,
+          "wall_ms": 12.782
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 3333.743,
+          "wall_ms": 8.196
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3338.652,
+          "wall_ms": 186.117
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 3342.017,
+          "wall_ms": 796.514
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 3346.578,
+          "wall_ms": 547.934
+        }
+      ],
+      "primary_orders_reads": [
+        {
+          "collection": "unified_orders",
+          "outcome": "complete",
+          "cursor_kind": "motor",
+          "rows_retained": 19200,
+          "last_checkpoint_rows": 19200,
+          "queue_ms": 0.047,
+          "budget_ms": 15000,
+          "first_row_ms": 12.19,
+          "last_checkpoint_ms": 3324.502,
+          "read_elapsed_ms": 3324.771,
+          "cancel_join_ms": 0,
+          "close_ms": 0.241
+        }
+      ],
+      "stage_timings": [
+        {
+          "stage": "orders_cursor_build",
+          "duration_ms": 0.122,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_cursor_read",
+          "duration_ms": 3324.786,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_rows_validate",
+          "duration_ms": 7.871,
+          "outcome": "complete"
+        }
+      ],
+      "driver_events": [
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 0.83,
+          "wall_ms": 0.658,
+          "thread_cpu_ms": 0.505
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 1.494,
+          "wall_ms": 10.812,
+          "thread_cpu_ms": 9.761
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 0.516,
+          "wall_ms": 11.881,
+          "thread_cpu_ms": 10.674
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 12.901,
+          "wall_ms": 8.0,
+          "thread_cpu_ms": 6.788
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 20.907,
+          "wall_ms": 257.503,
+          "thread_cpu_ms": 256.968
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 12.714,
+          "wall_ms": 266.105,
+          "thread_cpu_ms": 264.356
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 286.836,
+          "wall_ms": 5.521,
+          "thread_cpu_ms": 3.749
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 292.365,
+          "wall_ms": 245.829,
+          "thread_cpu_ms": 245.097
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 286.557,
+          "wall_ms": 251.849,
+          "thread_cpu_ms": 249.342
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 538.473,
+          "wall_ms": 5.23,
+          "thread_cpu_ms": 0.202
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 542.242,
+          "wall_ms": 4.466,
+          "thread_cpu_ms": 3.286
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 546.714,
+          "wall_ms": 613.092,
+          "thread_cpu_ms": 612.651
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 541.863,
+          "wall_ms": 618.152,
+          "thread_cpu_ms": 616.395
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1162.632,
+          "wall_ms": 37.213,
+          "thread_cpu_ms": 33.296
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 1199.853,
+          "wall_ms": 1001.795,
+          "thread_cpu_ms": 992.28
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 1162.314,
+          "wall_ms": 1039.603,
+          "thread_cpu_ms": 1026.166
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2205.405,
+          "wall_ms": 9.912,
+          "thread_cpu_ms": 3.898
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2215.325,
+          "wall_ms": 292.738,
+          "thread_cpu_ms": 288.821
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2204.91,
+          "wall_ms": 303.571,
+          "thread_cpu_ms": 293.636
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2511.154,
+          "wall_ms": 5.822,
+          "thread_cpu_ms": 3.362
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2516.982,
+          "wall_ms": 355.968,
+          "thread_cpu_ms": 353.595
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2510.814,
+          "wall_ms": 362.369,
+          "thread_cpu_ms": 357.533
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2875.657,
+          "wall_ms": 14.17,
+          "thread_cpu_ms": 3.765
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2889.836,
+          "wall_ms": 226.132,
+          "thread_cpu_ms": 225.754
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2875.403,
+          "wall_ms": 240.866,
+          "thread_cpu_ms": 230.079
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3118.932,
+          "wall_ms": 8.516,
+          "thread_cpu_ms": 3.161
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 3127.453,
+          "wall_ms": 195.295,
+          "thread_cpu_ms": 194.843
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 3118.648,
+          "wall_ms": 204.371,
+          "thread_cpu_ms": 198.563
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3334.249,
+          "wall_ms": 0.309,
+          "thread_cpu_ms": 0.115
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3334.562,
+          "wall_ms": 2.894,
+          "thread_cpu_ms": 2.895
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3333.911,
+          "wall_ms": 3.607,
+          "thread_cpu_ms": 3.413
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3337.796,
+          "wall_ms": 1.024,
+          "thread_cpu_ms": 0.196
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 3338.824,
+          "wall_ms": 2.535,
+          "thread_cpu_ms": 2.537
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 3337.559,
+          "wall_ms": 3.854,
+          "thread_cpu_ms": 3.026
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3338.27,
+          "wall_ms": 3.345,
+          "thread_cpu_ms": 0.246
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3341.826,
+          "wall_ms": 2.038,
+          "thread_cpu_ms": 0.214
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 3343.869,
+          "wall_ms": 2.322,
+          "thread_cpu_ms": 2.323
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 3334.293,
+          "wall_ms": 11.947,
+          "thread_cpu_ms": 3.726
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3346.458,
+          "wall_ms": 0.515,
+          "thread_cpu_ms": 0.177
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3341.792,
+          "wall_ms": 14.023,
+          "thread_cpu_ms": 3.758
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3355.821,
+          "wall_ms": 168.22,
+          "thread_cpu_ms": 167.848
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3341.464,
+          "wall_ms": 183.085,
+          "thread_cpu_ms": 172.294
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3346.916,
+          "wall_ms": 182.106,
+          "thread_cpu_ms": 5.683
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 3529.029,
+          "wall_ms": 364.097,
+          "thread_cpu_ms": 362.974
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 3346.664,
+          "wall_ms": 547.229,
+          "thread_cpu_ms": 369.617
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3347.214,
+          "wall_ms": 556.001,
+          "thread_cpu_ms": 6.466
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 3903.222,
+          "wall_ms": 234.671,
+          "thread_cpu_ms": 232.047
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 3343.47,
+          "wall_ms": 794.924,
+          "thread_cpu_ms": 239.9
+        }
+      ],
+      "run": 2
+    },
+    {
+      "schedule": "orders_first",
+      "wall_ms": 4240.889,
+      "process_cpu_ms": 4205.84,
+      "versions": {
+        "python": "3.12.14",
+        "motor": "3.7.1",
+        "pymongo": "4.18.3",
+        "bson_c_extension": true
+      },
+      "error": null,
+      "row_counts": {
+        "unified_orders": 19200,
+        "mezan_preparation_pieces_v1": 4800,
+        "store_delivery_assignments": 4800,
+        "store_delivery_collections": 4800
+      },
+      "sha256": {
+        "unified_orders": "f5355ebbd2b6160b956b2f7b9f0b911c3967fe9256642449f5863ab766189933",
+        "mezan_preparation_pieces_v1": "ab6d73a8f459a334be4381a6047450afdf1e947db415c1f4ba110b35d64dfb9b",
+        "store_delivery_assignments": "2fe51ed7aac03aa2ad19eae17aec7cda43c0b60e5f085bb65f5b0f0f4d39b900",
+        "store_delivery_collections": "c6fc75004fe1d8393420b730ae454716ddae7b5bc08bc329f0cef03a1f99dae2"
+      },
+      "resident_snapshot_bson_bytes": 22344918,
+      "rss_before_kib": 222060,
+      "rss_after_kib": 1486860,
+      "process_peak_rss_before_kib": 242724,
+      "process_peak_rss_after_kib": 1486224,
+      "read_rss_growth_kib": 1264800,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "gc_by_generation": {
+        "0": {
+          "count": 13,
+          "wall_sum_ms": 1016.491,
+          "wall_max_ms": 354.879,
+          "collected": 5
+        },
+        "1": {
+          "count": 1,
+          "wall_sum_ms": 575.536,
+          "wall_max_ms": 575.536,
+          "collected": 6
+        },
+        "2": {
+          "count": 1,
+          "wall_sum_ms": 668.711,
+          "wall_max_ms": 668.711,
+          "collected": 2
+        }
+      },
+      "gc_counts_before": [
+        388,
+        8,
+        10
+      ],
+      "gc_counts_after": [
+        0,
+        10,
+        0
+      ],
+      "gc_stats_before": [
+        {
+          "collections": 602,
+          "collected": 463,
+          "uncollectable": 0
+        },
+        {
+          "collections": 54,
+          "collected": 29,
+          "uncollectable": 0
+        },
+        {
+          "collections": 4,
+          "collected": 5,
+          "uncollectable": 0
+        }
+      ],
+      "gc_stats_after": [
+        {
+          "collections": 615,
+          "collected": 468,
+          "uncollectable": 0
+        },
+        {
+          "collections": 55,
+          "collected": 35,
+          "uncollectable": 0
+        },
+        {
+          "collections": 5,
+          "collected": 7,
+          "uncollectable": 0
+        }
+      ],
+      "explicit_gc_collect_used": false,
+      "gc_enabled": true,
+      "event_loop_lag_ms": {
+        "samples": 42,
+        "max": 664.378,
+        "p95": 396.256
+      },
+      "nested_driver_stage_summaries": {
+        "socket_receive": {
+          "count": 18,
+          "wall_sum_ms": 1032.377,
+          "thread_cpu_sum_ms": 55.917,
+          "wall_max_ms": 641.789
+        },
+        "driver_refresh": {
+          "count": 15,
+          "wall_sum_ms": 5912.615,
+          "thread_cpu_sum_ms": 4121.683,
+          "wall_max_ms": 1054.373
+        },
+        "bson_unpack": {
+          "count": 15,
+          "wall_sum_ms": 4399.321,
+          "thread_cpu_sum_ms": 4003.219,
+          "wall_max_ms": 796.326
+        }
+      },
+      "driver_batch_operations": [
+        {
+          "collection": "unified_orders",
+          "started": 0.456,
+          "wall_ms": 11.684
+        },
+        {
+          "collection": "unified_orders",
+          "started": 12.271,
+          "wall_ms": 236.351
+        },
+        {
+          "collection": "unified_orders",
+          "started": 250.63,
+          "wall_ms": 229.088
+        },
+        {
+          "collection": "unified_orders",
+          "started": 482.32,
+          "wall_ms": 714.045
+        },
+        {
+          "collection": "unified_orders",
+          "started": 1198.283,
+          "wall_ms": 815.771
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2016.558,
+          "wall_ms": 215.987
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2234.623,
+          "wall_ms": 447.67
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2684.262,
+          "wall_ms": 221.455
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2907.866,
+          "wall_ms": 247.141
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3166.476,
+          "wall_ms": 5.103
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 3166.539,
+          "wall_ms": 13.105
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 3167.687,
+          "wall_ms": 11.754
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3171.668,
+          "wall_ms": 1050.581
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 3179.559,
+          "wall_ms": 1054.88
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 3179.755,
+          "wall_ms": 1048.057
+        }
+      ],
+      "primary_orders_reads": [
+        {
+          "collection": "unified_orders",
+          "outcome": "complete",
+          "cursor_kind": "motor",
+          "rows_retained": 19200,
+          "last_checkpoint_rows": 19200,
+          "queue_ms": 0.014,
+          "budget_ms": 15000,
+          "first_row_ms": 11.746,
+          "last_checkpoint_ms": 3156.323,
+          "read_elapsed_ms": 3156.522,
+          "cancel_join_ms": 0,
+          "close_ms": 0.171
+        }
+      ],
+      "stage_timings": [
+        {
+          "stage": "orders_cursor_build",
+          "duration_ms": 0.189,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_cursor_read",
+          "duration_ms": 3156.539,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_rows_validate",
+          "duration_ms": 8.887,
+          "outcome": "complete"
+        }
+      ],
+      "driver_events": [
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 0.945,
+          "wall_ms": 1.999,
+          "thread_cpu_ms": 0.559
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2.951,
+          "wall_ms": 8.932,
+          "thread_cpu_ms": 8.526
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 0.604,
+          "wall_ms": 11.39,
+          "thread_cpu_ms": 9.539
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 12.59,
+          "wall_ms": 13.764,
+          "thread_cpu_ms": 7.417
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 26.365,
+          "wall_ms": 221.879,
+          "thread_cpu_ms": 221.471
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 12.375,
+          "wall_ms": 236.09,
+          "thread_cpu_ms": 229.331
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 251.054,
+          "wall_ms": 7.879,
+          "thread_cpu_ms": 3.847
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 258.94,
+          "wall_ms": 220.323,
+          "thread_cpu_ms": 218.949
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 250.763,
+          "wall_ms": 228.727,
+          "thread_cpu_ms": 223.318
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 478.944,
+          "wall_ms": 3.814,
+          "thread_cpu_ms": 0.29
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 483.057,
+          "wall_ms": 8.712,
+          "thread_cpu_ms": 3.904
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 491.774,
+          "wall_ms": 704.11,
+          "thread_cpu_ms": 691.784
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 482.5,
+          "wall_ms": 713.606,
+          "thread_cpu_ms": 696.211
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1198.585,
+          "wall_ms": 18.666,
+          "thread_cpu_ms": 5.266
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 1217.259,
+          "wall_ms": 796.326,
+          "thread_cpu_ms": 796.071
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 1198.369,
+          "wall_ms": 815.485,
+          "thread_cpu_ms": 801.825
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2017.031,
+          "wall_ms": 6.079,
+          "thread_cpu_ms": 4.193
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2023.118,
+          "wall_ms": 209.055,
+          "thread_cpu_ms": 208.789
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2016.694,
+          "wall_ms": 215.719,
+          "thread_cpu_ms": 213.564
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2234.937,
+          "wall_ms": 6.992,
+          "thread_cpu_ms": 3.773
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2241.934,
+          "wall_ms": 439.91,
+          "thread_cpu_ms": 439.552
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2234.715,
+          "wall_ms": 447.338,
+          "thread_cpu_ms": 443.757
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2684.568,
+          "wall_ms": 11.306,
+          "thread_cpu_ms": 5.082
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2695.882,
+          "wall_ms": 209.436,
+          "thread_cpu_ms": 209.126
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2684.351,
+          "wall_ms": 221.19,
+          "thread_cpu_ms": 214.653
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2908.236,
+          "wall_ms": 6.25,
+          "thread_cpu_ms": 3.581
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2914.492,
+          "wall_ms": 240.056,
+          "thread_cpu_ms": 228.517
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2907.968,
+          "wall_ms": 246.815,
+          "thread_cpu_ms": 232.604
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3167.846,
+          "wall_ms": 0.853,
+          "thread_cpu_ms": 0.164
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3168.704,
+          "wall_ms": 2.389,
+          "thread_cpu_ms": 2.39
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3167.122,
+          "wall_ms": 4.026,
+          "thread_cpu_ms": 3.159
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3171.759,
+          "wall_ms": 0.238,
+          "thread_cpu_ms": 0.08
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3171.415,
+          "wall_ms": 0.981,
+          "thread_cpu_ms": 0.128
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3172.348,
+          "wall_ms": 1.853,
+          "thread_cpu_ms": 0.289
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 3174.205,
+          "wall_ms": 2.29,
+          "thread_cpu_ms": 2.291
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 3168.043,
+          "wall_ms": 8.501,
+          "thread_cpu_ms": 3.649
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3173.992,
+          "wall_ms": 2.69,
+          "thread_cpu_ms": 0.181
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 3176.686,
+          "wall_ms": 2.475,
+          "thread_cpu_ms": 2.476
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 3167.478,
+          "wall_ms": 11.767,
+          "thread_cpu_ms": 3.821
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3172.326,
+          "wall_ms": 16.684,
+          "thread_cpu_ms": 4.377
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3180.266,
+          "wall_ms": 281.826,
+          "thread_cpu_ms": 5.896
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3189.02,
+          "wall_ms": 578.237,
+          "thread_cpu_ms": 273.468
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 3462.1,
+          "wall_ms": 359.228,
+          "thread_cpu_ms": 305.26
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 3171.862,
+          "wall_ms": 650.044,
+          "thread_cpu_ms": 332.173
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 3180.247,
+          "wall_ms": 641.789,
+          "thread_cpu_ms": 6.891
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 3822.042,
+          "wall_ms": 404.676,
+          "thread_cpu_ms": 394.55
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 3180.081,
+          "wall_ms": 1047.545,
+          "thread_cpu_ms": 311.917
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 3179.903,
+          "wall_ms": 1054.373,
+          "thread_cpu_ms": 402.161
+        }
+      ],
+      "run": 3
+    },
+    {
+      "schedule": "concurrent",
+      "wall_ms": 3368.001,
+      "process_cpu_ms": 3363.773,
+      "versions": {
+        "python": "3.12.14",
+        "motor": "3.7.1",
+        "pymongo": "4.18.3",
+        "bson_c_extension": true
+      },
+      "error": null,
+      "row_counts": {
+        "unified_orders": 19200,
+        "mezan_preparation_pieces_v1": 4800,
+        "store_delivery_assignments": 4800,
+        "store_delivery_collections": 4800
+      },
+      "sha256": {
+        "unified_orders": "f5355ebbd2b6160b956b2f7b9f0b911c3967fe9256642449f5863ab766189933",
+        "mezan_preparation_pieces_v1": "ab6d73a8f459a334be4381a6047450afdf1e947db415c1f4ba110b35d64dfb9b",
+        "store_delivery_assignments": "2fe51ed7aac03aa2ad19eae17aec7cda43c0b60e5f085bb65f5b0f0f4d39b900",
+        "store_delivery_collections": "c6fc75004fe1d8393420b730ae454716ddae7b5bc08bc329f0cef03a1f99dae2"
+      },
+      "resident_snapshot_bson_bytes": 22344918,
+      "rss_before_kib": 222072,
+      "rss_after_kib": 1526048,
+      "process_peak_rss_before_kib": 242796,
+      "process_peak_rss_after_kib": 1525252,
+      "read_rss_growth_kib": 1303976,
+      "gc_thresholds": [
+        700,
+        10,
+        10
+      ],
+      "gc_by_generation": {
+        "0": {
+          "count": 14,
+          "wall_sum_ms": 1047.739,
+          "wall_max_ms": 147.65,
+          "collected": 5
+        },
+        "1": {
+          "count": 1,
+          "wall_sum_ms": 180.827,
+          "wall_max_ms": 180.827,
+          "collected": 4
+        },
+        "2": {
+          "count": 1,
+          "wall_sum_ms": 168.599,
+          "wall_max_ms": 168.599,
+          "collected": 2
+        }
+      },
+      "gc_counts_before": [
+        387,
+        8,
+        10
+      ],
+      "gc_counts_after": [
+        0,
+        11,
+        0
+      ],
+      "gc_stats_before": [
+        {
+          "collections": 602,
+          "collected": 463,
+          "uncollectable": 0
+        },
+        {
+          "collections": 54,
+          "collected": 29,
+          "uncollectable": 0
+        },
+        {
+          "collections": 4,
+          "collected": 5,
+          "uncollectable": 0
+        }
+      ],
+      "gc_stats_after": [
+        {
+          "collections": 616,
+          "collected": 468,
+          "uncollectable": 0
+        },
+        {
+          "collections": 55,
+          "collected": 33,
+          "uncollectable": 0
+        },
+        {
+          "collections": 5,
+          "collected": 7,
+          "uncollectable": 0
+        }
+      ],
+      "explicit_gc_collect_used": false,
+      "gc_enabled": true,
+      "event_loop_lag_ms": {
+        "samples": 35,
+        "max": 424.931,
+        "p95": 398.89
+      },
+      "nested_driver_stage_summaries": {
+        "driver_refresh": {
+          "count": 15,
+          "wall_sum_ms": 6086.502,
+          "thread_cpu_sum_ms": 3244.668,
+          "wall_max_ms": 1063.011
+        },
+        "socket_receive": {
+          "count": 19,
+          "wall_sum_ms": 2050.082,
+          "thread_cpu_sum_ms": 99.389,
+          "wall_max_ms": 410.726
+        },
+        "bson_unpack": {
+          "count": 15,
+          "wall_sum_ms": 3283.141,
+          "thread_cpu_sum_ms": 3053.262,
+          "wall_max_ms": 528.722
+        }
+      },
+      "driver_batch_operations": [
+        {
+          "collection": "unified_orders",
+          "started": 9.447,
+          "wall_ms": 76.473
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 9.903,
+          "wall_ms": 269.693
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 13.713,
+          "wall_ms": 668.988
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 14.792,
+          "wall_ms": 78.384
+        },
+        {
+          "collection": "unified_orders",
+          "started": 86.179,
+          "wall_ms": 601.555
+        },
+        {
+          "collection": "store_delivery_collections",
+          "started": 93.342,
+          "wall_ms": 1064.597
+        },
+        {
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 279.688,
+          "wall_ms": 671.191
+        },
+        {
+          "collection": "store_delivery_assignments",
+          "started": 682.814,
+          "wall_ms": 475.294
+        },
+        {
+          "collection": "unified_orders",
+          "started": 690.952,
+          "wall_ms": 703.519
+        },
+        {
+          "collection": "unified_orders",
+          "started": 1397.156,
+          "wall_ms": 382.101
+        },
+        {
+          "collection": "unified_orders",
+          "started": 1781.318,
+          "wall_ms": 219.818
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2004.221,
+          "wall_ms": 291.573
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2298.103,
+          "wall_ms": 230.035
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2530.2,
+          "wall_ms": 291.514
+        },
+        {
+          "collection": "unified_orders",
+          "started": 2823.643,
+          "wall_ms": 534.089
+        }
+      ],
+      "primary_orders_reads": [
+        {
+          "collection": "unified_orders",
+          "outcome": "complete",
+          "cursor_kind": "motor",
+          "rows_retained": 19200,
+          "last_checkpoint_rows": 19200,
+          "queue_ms": 0.72,
+          "budget_ms": 15000,
+          "first_row_ms": 78.66,
+          "last_checkpoint_ms": 3351.945,
+          "read_elapsed_ms": 3352.208,
+          "cancel_join_ms": 0,
+          "close_ms": 0.238
+        }
+      ],
+      "stage_timings": [
+        {
+          "stage": "orders_cursor_build",
+          "duration_ms": 2.884,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_cursor_read",
+          "duration_ms": 3352.282,
+          "outcome": "complete"
+        },
+        {
+          "stage": "orders_rows_validate",
+          "duration_ms": 8.095,
+          "outcome": "complete"
+        }
+      ],
+      "driver_events": [
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 15.108,
+          "wall_ms": 51.103,
+          "thread_cpu_ms": 5.857
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 66.286,
+          "wall_ms": 15.946,
+          "thread_cpu_ms": 15.152
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 11.206,
+          "wall_ms": 72.839,
+          "thread_cpu_ms": 24.48
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 66.106,
+          "wall_ms": 18.454,
+          "thread_cpu_ms": 0.408
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 55.846,
+          "wall_ms": 29.404,
+          "thread_cpu_ms": 0.305
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 85.036,
+          "wall_ms": 1.857,
+          "thread_cpu_ms": 0.405
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 86.903,
+          "wall_ms": 4.73,
+          "thread_cpu_ms": 4.379
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 36.434,
+          "wall_ms": 56.171,
+          "thread_cpu_ms": 10.788
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 85.009,
+          "wall_ms": 10.092,
+          "thread_cpu_ms": 0.763
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 95.107,
+          "wall_ms": 184.094,
+          "thread_cpu_ms": 158.384
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 14.03,
+          "wall_ms": 265.326,
+          "thread_cpu_ms": 166.881
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 94.173,
+          "wall_ms": 186.31,
+          "thread_cpu_ms": 1.33
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 280.488,
+          "wall_ms": 172.478,
+          "thread_cpu_ms": 167.937
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 14.968,
+          "wall_ms": 438.107,
+          "thread_cpu_ms": 176.32
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 456.794,
+          "wall_ms": 0.264,
+          "thread_cpu_ms": 0.171
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 456.908,
+          "wall_ms": 0.918,
+          "thread_cpu_ms": 0.148
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 94.919,
+          "wall_ms": 364.745,
+          "thread_cpu_ms": 31.076
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 459.672,
+          "wall_ms": 227.25,
+          "thread_cpu_ms": 220.759
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 91.968,
+          "wall_ms": 595.38,
+          "thread_cpu_ms": 252.962
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 280.407,
+          "wall_ms": 410.726,
+          "thread_cpu_ms": 7.04
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 691.141,
+          "wall_ms": 162.006,
+          "thread_cpu_ms": 153.919
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "mezan_preparation_pieces_v1",
+          "started": 280.035,
+          "wall_ms": 573.626,
+          "thread_cpu_ms": 161.83
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 458.014,
+          "wall_ms": 400.072,
+          "thread_cpu_ms": 6.997
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 790.348,
+          "wall_ms": 218.454,
+          "thread_cpu_ms": 10.939
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_collections",
+          "started": 858.097,
+          "wall_ms": 241.77,
+          "thread_cpu_ms": 143.627
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_collections",
+          "started": 94.201,
+          "wall_ms": 1063.011,
+          "thread_cpu_ms": 211.402
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "store_delivery_assignments",
+          "started": 1008.81,
+          "wall_ms": 148.566,
+          "thread_cpu_ms": 89.471
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "store_delivery_assignments",
+          "started": 686.567,
+          "wall_ms": 471.149,
+          "thread_cpu_ms": 101.499
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 853.032,
+          "wall_ms": 315.784,
+          "thread_cpu_ms": 7.523
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 1168.821,
+          "wall_ms": 225.232,
+          "thread_cpu_ms": 215.529
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 790.479,
+          "wall_ms": 603.829,
+          "thread_cpu_ms": 223.894
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1397.631,
+          "wall_ms": 9.02,
+          "thread_cpu_ms": 5.343
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 1406.659,
+          "wall_ms": 372.27,
+          "thread_cpu_ms": 370.403
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 1397.257,
+          "wall_ms": 381.911,
+          "thread_cpu_ms": 376.363
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 1782.265,
+          "wall_ms": 6.463,
+          "thread_cpu_ms": 3.545
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 1788.735,
+          "wall_ms": 211.947,
+          "thread_cpu_ms": 211.52
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 1781.45,
+          "wall_ms": 219.471,
+          "thread_cpu_ms": 216.124
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2004.734,
+          "wall_ms": 9.865,
+          "thread_cpu_ms": 5.322
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2014.607,
+          "wall_ms": 280.655,
+          "thread_cpu_ms": 271.516
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2004.419,
+          "wall_ms": 291.131,
+          "thread_cpu_ms": 277.447
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2298.568,
+          "wall_ms": 7.246,
+          "thread_cpu_ms": 4.658
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2305.821,
+          "wall_ms": 221.646,
+          "thread_cpu_ms": 217.654
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2298.214,
+          "wall_ms": 229.504,
+          "thread_cpu_ms": 222.921
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2530.675,
+          "wall_ms": 4.805,
+          "thread_cpu_ms": 4.101
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2535.487,
+          "wall_ms": 285.829,
+          "thread_cpu_ms": 284.95
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2530.313,
+          "wall_ms": 291.24,
+          "thread_cpu_ms": 289.656
+        },
+        {
+          "stage": "socket_receive",
+          "collection": null,
+          "started": 2824.086,
+          "wall_ms": 4.503,
+          "thread_cpu_ms": 3.458
+        },
+        {
+          "stage": "bson_unpack",
+          "collection": "unified_orders",
+          "started": 2828.595,
+          "wall_ms": 528.722,
+          "thread_cpu_ms": 528.062
+        },
+        {
+          "stage": "driver_refresh",
+          "collection": "unified_orders",
+          "started": 2823.761,
+          "wall_ms": 533.806,
+          "thread_cpu_ms": 532.1
+        }
+      ],
+      "run": 4
+    }
+  ],
+  "limitations": [
+    "Synthetic byte/object distributions and competing-source counts are not production measurements.",
+    "Loopback omits real Mongo query execution, server load and external network latency.",
+    "GC/driver/event-loop timings overlap; do not sum nested stages.",
+    "Socket receive metrics cover all synthetic sources; per-source BSON unpack metrics identify collections.",
+    "This isolated primary experiment verifies per-source15s only, not the whole visible85s refresh deadline.",
+    "Peak RSS is a fresh client-process high-water mark; before/after distinguishes fixture setup from reads.",
+    "Two observations per schedule are mechanism evidence, not a production percentile or reliability proof."
+  ]
+}
