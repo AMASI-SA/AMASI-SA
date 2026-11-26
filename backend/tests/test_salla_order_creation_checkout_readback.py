@@ -227,3 +227,66 @@ def test_signed_checkout_read_does_not_allow_customer_url_or_creation():
                 sign_action(invalid, STAMP, UUID_DELIVERY, SECRET),
                 SECRET, now=1800000000,
             )
+
+
+def post_create_db():
+    db = DB()
+    db.salla_ai_order_intents.rows[0]["state"] = "created_amount_unverified"
+    q = db.salla_ai_order_quotes.rows[0]
+    q.update({
+        "source": "mezan_verified_unpaid_order_intent_v1",
+        "state": "authorized_for_pending_creation",
+        "post_create_salla_total": True,
+        "online_only": True,
+        "products_verified": True,
+        "carrier_eligibility_verified": True,
+        "shipping_price_verified": False,
+        "pricing_verified": False,
+        "payment_methods_verified": True,
+        "total_sar": None,
+    })
+    return db
+
+
+def test_salla_post_create_total_from_mezan_is_authoritative():
+    db = post_create_db()
+    o = mezan_order()
+    o.totals.total = 298.75
+    row = check(db=db, result=o)
+    assert row["state"] == "ready"
+    assert row["amount_verified"] is True
+    assert row["total_sar"] == "298.75"
+    assert row["pricing_mode"] == "salla_post_create"
+    assert row["checkout_url"] == "https://amasi-sa.com/checkout/order-302076044"
+
+
+def test_salla_post_create_total_missing_is_never_sent():
+    db = post_create_db()
+    o = mezan_order()
+    o.totals.total = 0
+    row = check(db=db, result=o)
+    assert row["state"] == "salla_final_total_invalid"
+    assert row["checkout_url"] is None
+
+
+def test_salla_post_create_bad_scope_or_price_contract_blocks_checkout():
+    db = post_create_db()
+    q = db.salla_ai_order_quotes.rows[0]
+    q["carrier_eligibility_verified"] = False
+    assert check(db=db)["checkout_url"] is None
+    assert check(db=db)["state"] == "original_quote_not_verified"
+
+
+def test_salla_post_create_only_pending_payment_status_can_reveal_link():
+    db = post_create_db()
+    o = mezan_order()
+    o.status = "completed"
+    o.status_native = "تم التنفيذ"
+    assert check(db=db, result=o)["checkout_url"] is None
+
+
+def test_salla_post_create_untrusted_non_sar_total_denied():
+    db = post_create_db()
+    o = mezan_order()
+    o.totals.currency = "KWD"
+    assert check(db=db, result=o)["state"] == "payment_or_currency_not_verified"
