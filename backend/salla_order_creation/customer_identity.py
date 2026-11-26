@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from .payload import Customer
 
-_EMAIL = re.compile(r"^[A-Za-z0-9._%+\\-]{1,64}@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,24}$")
+_EMAIL = re.compile(r"^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}$")
 _SA = re.compile(r"^(?:\+966|00966|966|0)?(5[0-9]{8})$")
 _E164 = re.compile(r"^\+[1-9][0-9]{7,14}$")
 
