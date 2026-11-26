@@ -42,8 +42,66 @@
   "source_tests": "Exact-A Operational Balance/Stock gates pending; local Mongo-unavailable cases are not counted as passed.",
   "diagnostic": {
     "script_sha256": "1cbda56ef7fd0ad64fb9a9b10c33f30cbc69111ea2d6e5c547293f91b3f21fff",
-    "executed": false,
-    "reason": "Older live attempt exhausted its deadline during reconciliation; bounded offline valid-state tail profile before final publication decision."
+    "executed": true,
+    "reason": "Older live attempt exhausted its deadline during reconciliation; bounded offline valid-state tail profile before final publication decision.",
+    "exit_code": 0,
+    "total_seconds": 70.02885103225708,
+    "same_clock_replay_value_equal": true,
+    "inputs_unchanged": true,
+    "runtime_unchanged": true,
+    "runs": [
+      {
+        "mode": "first_reconcile",
+        "instrumented_wall_ms": 15886.088035,
+        "result_counts": {
+          "obligations": 90968,
+          "facts": 14364,
+          "audit": 90968,
+          "issues": 14364,
+          "order_versions": 19151,
+          "provider_reports": 0,
+          "cod_reports": 4787,
+          "delivery_register": 1,
+          "obligation_kinds": {
+            "supplier": 76604,
+            "provider": 14364
+          },
+          "issue_codes": {
+            "provider_fee_estimate_unavailable": 14364
+          },
+          "provider_fee_orders": 14364,
+          "manual_movements": 0,
+          "openings": 0,
+          "requests": 0
+        }
+      },
+      {
+        "mode": "retained_replay",
+        "instrumented_wall_ms": 17430.561146,
+        "result_counts": {
+          "obligations": 90968,
+          "facts": 14364,
+          "audit": 90968,
+          "issues": 14364,
+          "order_versions": 19151,
+          "provider_reports": 0,
+          "cod_reports": 4787,
+          "delivery_register": 1,
+          "obligation_kinds": {
+            "supplier": 76604,
+            "provider": 14364
+          },
+          "issue_codes": {
+            "provider_fee_estimate_unavailable": 14364
+          },
+          "provider_fee_orders": 14364,
+          "manual_movements": 0,
+          "openings": 0,
+          "requests": 0
+        }
+      }
+    ],
+    "limitations": "Instrumented synthetic reducer only; whole service and save excluded; no throughput or production completion claim. Base64 pstats preserve exact binary artifacts."
   },
   "next": "Complete exact-A CI and bounded diagnostic; create fresh B only after required acceptance gates. This evidence branch must never be merged or deployed."
 }
