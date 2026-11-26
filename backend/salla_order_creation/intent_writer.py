@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from .catalog_validation import CartUnverified, validate_selected_cart
 from .payload import PendingOrder
+from .quote_cipher import EncryptedOrderUnavailable, encrypt_order_payload
 from .readers import (
     SourceUnavailable,
     read_checkout_payment_methods,
@@ -141,6 +142,12 @@ async def prepare_salla_unpaid_order_intent(
         raise PrepareDenied("salla_cart_inputs_unverified") from exc
 
     digest = order_digest(order)
+    try:
+        encrypted_payload = encrypt_order_payload(
+            order, owner_id=user_id, intent_id=intent_id,
+        )
+    except EncryptedOrderUnavailable as exc:
+        raise PrepareDenied("private_quote_encryption_not_ready", 503) from None
     storage_id = hashlib.sha256(
         f"assisted-unpaid-quote:{user_id}:{intent_id}".encode("utf-8")
     ).hexdigest()
@@ -156,7 +163,7 @@ async def prepare_salla_unpaid_order_intent(
         # Keep required nullable Salla address fields (district/block/postal_code)
         # so the persisted payload survives PendingOrder.model_validate() later.
         # Only the Salla POST formatter decides which optional fields to omit.
-        "order_payload": order.model_dump(exclude_none=False),
+        "encrypted_order_payload": encrypted_payload,
         "source": "mezan_verified_unpaid_order_intent_v1",
         "state": "authorized_for_pending_creation",
         "post_create_salla_total": True,
