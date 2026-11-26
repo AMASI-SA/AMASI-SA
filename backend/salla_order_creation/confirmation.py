@@ -92,7 +92,9 @@ async def persist_signed_confirmation(
     message_time = datetime.fromtimestamp(
         action.message_created_at, tz=timezone.utc
     )
-    verified_at = quote["verified_at"].astimezone(timezone.utc)
+    verified_at = _utc(quote.get("verified_at"))
+    if verified_at is None:
+        raise ConfirmationDenied("invalid_authoritative_quote_timestamp")
     # Delayed messages, pre-quote approval or future message times
     # cannot authorize creating a new customer order.
     if (message_time < verified_at or
