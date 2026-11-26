@@ -50,6 +50,8 @@ async def prepare_salla_unpaid_order_intent(
     conversation_id: str,
     order: PendingOrder,
     selected_rate_id: int,
+    source_message_id: int | None = None,
+    source_contact_id: int | None = None,
     enabled: bool = False,
     product_reader: Callable[..., Awaitable[dict]] = read_exact_product,
     rate_reader: Callable[..., Awaitable[list[dict]]] = read_shipping_rate_candidates,
@@ -68,6 +70,12 @@ async def prepare_salla_unpaid_order_intent(
             not isinstance(order, PendingOrder) or
             type(selected_rate_id) is not int or selected_rate_id <= 0):
         raise PrepareDenied("invalid_verified_order_intent", 422)
+    # When supplied by a signed Chatwoot sender, both origin IDs must
+    # come from the same canonical public inbound customer snapshot.
+    if (source_message_id is not None or source_contact_id is not None):
+        if (type(source_message_id) is not int or source_message_id < 1 or
+                type(source_contact_id) is not int or source_contact_id < 1):
+            raise PrepareDenied("invalid_signed_customer_origin", 422)
     # Validate stable ID before doing ANY remote reads or Mongo writes.
     intent_storage_id(user_id, intent_id)
     if (not order.accepted_methods or
@@ -140,6 +148,8 @@ async def prepare_salla_unpaid_order_intent(
         "_id": storage_id,
         "user_id": user_id, "intent_id": intent_id,
         "inbox_id": inbox_id, "conversation_id": conversation_id,
+        "source_message_id": source_message_id,
+        "source_contact_id": source_contact_id,
         "quote_ref": "quote." + uuid4().hex,
         "version": 1,
         "payload_digest": digest,
@@ -175,6 +185,8 @@ async def prepare_salla_unpaid_order_intent(
         if (previous.get("payload_digest") != digest or
                 previous.get("inbox_id") != inbox_id or
                 previous.get("conversation_id") != conversation_id or
+                previous.get("source_message_id") != source_message_id or
+                previous.get("source_contact_id") != source_contact_id or
                 quote_pricing_mode(previous) != "salla_post_create"):
             raise PrepareDenied("quote_intent_reused_with_different_cart")
         old_expiry = previous.get("expires_at")
