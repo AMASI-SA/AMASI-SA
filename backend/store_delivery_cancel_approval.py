@@ -21,7 +21,6 @@ from store_delivery_driver_app_routes import _call_salla, _salla_order_id
 from store_delivery_domain import normalize_text
 
 _CANCEL = "customer_requested_cancel"
-_IN_FLIGHT = "cancel_syncing"
 _FINAL = "canceled"
 _FINANCIAL_COLLECTIONS = (
     "store_delivery_collections",
@@ -116,7 +115,8 @@ async def _finish_local_cancellation(
             async with tx.start_transaction():
                 a = await db[ASSIGNMENTS].find_one(
                     {"user_id": owner, "id": assignment_id, "driver_id": driver_id,
-                     "active": True, "status": _IN_FLIGHT,
+                     "active": True, "status": {"$in": list(_ACTIVE)},
+                     "cancel_approval_state": "reserved",
                      "cancel_approval_request_id": request_id},
                     {"_id": 0}, session=tx,
                 )
@@ -154,7 +154,8 @@ async def _finish_local_cancellation(
                 old_status = normalize_text(a.get("cancel_previous_delivery_status"))
                 updated = await db[ASSIGNMENTS].update_one(
                     {"user_id": owner, "id": assignment_id, "driver_id": driver_id,
-                     "active": True, "status": _IN_FLIGHT,
+                     "active": True, "status": {"$in": list(_ACTIVE)},
+                     "cancel_approval_state": "reserved",
                      "cancel_approval_request_id": request_id},
                     {"$set": {
                         "active": False, "status": _FINAL,
@@ -260,7 +261,7 @@ def attach_cancel_approval_route(
         sid = _salla_order_id(order, a)
         if not sid or not sid.isdecimal():
             raise HTTPException(409, detail={"code": "cancel_salla_order_id_unverified"})
-        if a.get("status") == _IN_FLIGHT:
+        if a.get("cancel_approval_state") == "reserved":
             if a.get("cancel_approval_request_id") != request_id:
                 raise HTTPException(409, detail={"code": "cancel_other_approval_in_progress"})
             # Deliberately GET-only on recovery: the one external POST could
@@ -280,8 +281,9 @@ def attach_cancel_approval_route(
             raise HTTPException(409, detail={"code": "cancel_salla_reference_mismatch"})
         if slug not in _ALLOWED_SALLA and slug not in _CANCELED_SALLA:
             raise HTTPException(409, detail={"code": "cancel_salla_status_not_eligible", "salla_status": slug})
-        # The CAS status freezes driver delivery transitions without setting
-        # active=False until after Salla readback and local transaction commit.
+        # A reserved cancellation approval freezes driver delivery transitions,
+        # but the original status and active assignment remain visible in the
+        # courier app until Salla confirms cancellation and Mongo commits.
         claimed = await db[ASSIGNMENTS].update_one(
             {"user_id": owner, "id": aid, "driver_id": driver_id,
              "active": True, "status": a["status"],
@@ -289,7 +291,7 @@ def attach_cancel_approval_route(
              "cancel_approval_state": {"$nin": ["reserved", "completed"]},
              "delivered_at": {"$in": [None, ""]}},
             {"$set": {
-                "status": _IN_FLIGHT, "cancel_previous_delivery_status": a["status"],
+                "cancel_previous_delivery_status": a["status"],
                 "cancel_approval_state": "reserved",
                 "cancel_approval_request_id": request_id,
                 "cancel_approval_actor_id": actor_id, "cancel_approval_started_at": _now(),
