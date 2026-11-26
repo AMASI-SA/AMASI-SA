@@ -16,7 +16,7 @@ MAX_BODY_BYTES = 2048
 MAX_AGE_SECONDS = 300
 NONCE = re.compile(r"[A-Za-z0-9_-]{22,96}\Z", re.ASCII)
 KEY_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z", re.ASCII)
-EXPECTED_PATH = "/internal/whatsapp/order-stage/read"
+EXPECTED_PATH = "/api/internal/whatsapp/order-stage/read"
 EXPECTED_METHOD = "POST"
 
 
