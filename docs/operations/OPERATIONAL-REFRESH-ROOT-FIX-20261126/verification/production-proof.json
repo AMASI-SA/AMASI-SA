@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "original_host_preservation_and_rehearsal_started",
-  "updated_utc": "2026-11-26 00:10:04 UTC",
+  "phase": "original_host_local_verified_ready_for_lease",
+  "updated_utc": "2026-11-26 00:13:11 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -70,7 +70,7 @@
     "last_guard_observation": {
       "active": false
     },
-    "last_observed_head": "37fd7851bb76b39b74e434da19183262e4d42f26",
+    "last_observed_head": "570b173d1dc6438624c39a5c511311f2a33be9a3",
     "tracked_clean": true,
     "untracked_count": 432,
     "untracked_files_untouched": true,
@@ -83,8 +83,24 @@
     "current_receipt": "/app/.git/operational-refresh-2132-d7ea8f0d/receipt.json",
     "preserved_files": "432-path content/metadata baseline retained privately. Previous generated ownership identified; fresh compressed backup being prepared before cleanup. Original dependency backup retained.",
     "derived_bytecode": "Two inherited generated Python bytecode files identified; reversible preservation outside backend package. Local development backend stopped by task; restore only after matching lease is inactive.",
-    "host_setup_notes": "Filesystem device changed from prior receipt; known platform-file metadata differences preserved at new baseline. Initial source verifier refused inherited cache; official release rules unchanged. Detached preparation resumed after treating supervisor STOPPED exit 3 as expected status."
+    "host_setup_notes": "Filesystem device changed from prior receipt; known platform-file metadata differences preserved at new baseline. Initial source verifier refused inherited cache; official release rules unchanged. Detached preparation resumed after treating supervisor STOPPED exit 3 as expected status.",
+    "current_phase": "local_verified",
+    "adapter": {
+      "exit_code": 0,
+      "started_at": "2026-11-26T00:10:29.318709+00:00",
+      "finished_at": "2026-11-26T00:12:09.496496+00:00",
+      "local_verified_at": "2026-11-26T00:12:14.899081+00:00",
+      "frontend_verification_sha256": "bfc93e7ede5b7e30007392722b24f1455d95a66693f246494216649d5bddfe5b",
+      "package_verification_sha256": "a0235f452e749b11915e0b3cf20afc96544041a839de4d7ecd9c438a17fafc2b",
+      "isolated_package_checks_passed": true
+    },
+    "foreign_preserved": true,
+    "free_mib_after_build": 288,
+    "current_generated_backup": {
+      "bytes": 97041771,
+      "sha256": "9ee77a6a75da47569bc96e5c9edf8d30233feff92ead8bfb4d268f8a88d83772"
+    }
   },
   "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Inspect original receipt and adapter logs. Require local_verified and inactive guard before prepare/prepublish and one Production action."
+  "next_safe_action": "Run original guard prepare with task actor and prepublish; immediately perform one authorized Production publication. Require a newer explicit Deployment finished, then original three-probe verification. Restore only task-stopped development backend after lease closure."
 }
