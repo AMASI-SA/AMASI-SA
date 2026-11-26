@@ -49,19 +49,44 @@ def assemble_pending_from_private_fields(
     if type(accepted_methods) is not list or not accepted_methods:
         raise PrivateOrderAssemblyDenied("verified_online_method_required")
 
-    # For this first privacy-safe bridge, only numeric catalog option value
-    # IDs may travel in the conversational action. Name engraving must use
-    # a separate encrypted option-text vault before production enablement.
+    # ChatGPT/Chatwoot may reference a personalized option by the exact
+    # opaque token private.option_text_<salla_option_id>. The actual engraved
+    # name is resolved ONLY from Mezan's encrypted private customer vault,
+    # then checked against the authoritative Salla product option schema.
+    resolved_products=[]
     for row in products:
         if type(row) is not dict:
             raise PrivateOrderAssemblyDenied("invalid_private_catalog_row")
-        for option in row.get("options") or []:
-            if (type(option) is not dict or
-                    type(option.get("value")) is not list or
-                    any(type(v) is not str or not v.isascii() or
-                        not v.isdecimal() or str(int(v)) != v
-                        for v in option["value"])):
-                raise PrivateOrderAssemblyDenied("private_personalization_not_yet_supported")
+        item=dict(row)
+        raw_options=item.get("options") or []
+        if type(raw_options) is not list:
+            raise PrivateOrderAssemblyDenied("invalid_private_catalog_options")
+        options=[]
+        for option in raw_options:
+            if type(option) is not dict or type(option.get("id")) is not int:
+                raise PrivateOrderAssemblyDenied("invalid_private_catalog_option")
+            raw_values=option.get("value")
+            if type(raw_values) is not list or not raw_values:
+                raise PrivateOrderAssemblyDenied("invalid_private_option_values")
+            values=[]
+            for value in raw_values:
+                if type(value) is not str:
+                    raise PrivateOrderAssemblyDenied("invalid_private_option_value")
+                if (value.isascii() and value.isdecimal() and
+                        str(int(value)) == value):
+                    values.append(value)
+                    continue
+                expected=f"private.option_text_{option['id']}"
+                if value != expected:
+                    raise PrivateOrderAssemblyDenied("private_personalization_not_yet_supported")
+                actual=data.get(f"option_text_{option['id']}")
+                if type(actual) is not str or not actual.strip():
+                    raise PrivateOrderAssemblyDenied("private_option_text_missing")
+                values.append(actual)
+            options.append({**option,"value":values})
+        if raw_options:
+            item["options"]=options
+        resolved_products.append(item)
 
     fields = {
         "customer": {
@@ -88,7 +113,7 @@ def assemble_pending_from_private_fields(
             "additional_number": data.get("additional_number"),
         },
         "accepted_methods": accepted_methods,
-        "products": products,
+        "products": resolved_products,
     }
     if receiver_country_code == "SA":
         if not data.get("geo_lat") or not data.get("geo_lng"):
