@@ -188,6 +188,8 @@ async def read_shipping_rate_candidates(
         rates.append({
             "rate_id": rate_id,
             "shipping_company_id": company_id,
+            "destination_country_id": country_id,
+            "destination_city_id": city_id,
             "name": str(row.get("title") or "")[:180],
             "estimated_shipping_sar": amount,
             "cod_service_found": bool(cod_fees),
