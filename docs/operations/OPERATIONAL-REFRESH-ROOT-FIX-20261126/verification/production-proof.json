@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-ROOT-FIX-20261126",
-  "phase": "production_verified_live_financial_acceptance_pending",
-  "updated_utc": "2026-11-26 00:42:32 UTC",
+  "phase": "production_verified_live_financial_acceptance_failed_orders_timeout",
+  "updated_utc": "2026-11-26 00:48:01 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2132,
   "task_branch": "codex/operational-refresh-root-fix-20261126",
@@ -105,8 +105,8 @@
     "development_backend_restored": true,
     "development_backend_restored_at": "2026-11-26T00:41:50.801272+00:00"
   },
-  "live_validation": "Pre-release financial receipt and sample recorded privately. No production acceptance yet.",
-  "next_safe_action": "Perform one owner-visible refresh; keep its page visible until complete, retain private recovery proof, compare preservation/no-new-duplicate evidence and live samples. Use next natural scheduled run around 03:53 Asia/Riyadh for scheduler timing/replay acceptance; do not change scheduling settings.",
+  "live_validation": "One owner-visible manual refresh failed at the primary unified_orders source deadline. Last saved snapshot retained; no acceptance of new financial calculation. First fix removed redundant copy but is insufficient for reliability.",
+  "next_safe_action": "Diagnose remaining cursor/payload and unpack bottlenecks with regression evidence. Observe next existing scheduled run; do not change automation settings or issue blind retries. Additional reviewed source/intent/release only after validated fix.",
   "guard": {
     "actor": "operational-refresh-root-fix-20261126",
     "prepared": true,
@@ -160,5 +160,39 @@
     "final_guard_status": {
       "active": false
     }
+  },
+  "manual_live_attempt": {
+    "started_utc": "2026-11-26T00:42:56.558Z",
+    "console_observed_utc": "2026-11-26T00:43:38.068Z",
+    "outcome": "operational_source_read_timeout",
+    "source": "unified_orders",
+    "source_stage_ms": {
+      "native_evidence": 13764.259,
+      "snapshot_raw_read": 76.083,
+      "snapshot_unpack": 9685.698,
+      "snapshot_copy_prepare": 0.002,
+      "snapshot_load": 9762.564,
+      "orders_cursor_build": 0.201,
+      "orders_cursor_read": 15501.483,
+      "source_primary_reads": 16042.392,
+      "source_collection": 16043.201,
+      "aggregate": 25893.911
+    },
+    "primary_orders_read": {
+      "collection": "unified_orders",
+      "outcome": "failed",
+      "cursor_kind": "motor",
+      "rows_retained": 18432,
+      "last_checkpoint_rows": 18432,
+      "queue_ms": 0.018,
+      "budget_ms": 15000,
+      "first_row_ms": 5.906,
+      "last_checkpoint_ms": 15499.808,
+      "read_elapsed_ms": 15501.464,
+      "cancel_join_ms": 1.634,
+      "close_ms": 1.57
+    },
+    "production_write_confirmed": false,
+    "automatic_retry": false
   }
 }
