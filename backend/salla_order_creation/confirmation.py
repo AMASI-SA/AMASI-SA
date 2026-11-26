@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .service import _is_verified_quote
+from .service import _is_verified_quote, _utc
 from .signature import DIGEST, ID, REF, SignatureDenied, verify_signed_json
 
 
