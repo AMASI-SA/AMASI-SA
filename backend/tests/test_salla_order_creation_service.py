@@ -100,13 +100,16 @@ def test_exactly_one_post_and_replay(salla_pending_order):
 
     async def salla(*args, **kwargs):
         calls.append((args, kwargs))
-        return {"success": True, "data": {"id": 90001, "reference_id": 80001}}
+        return {"success": True, "data": {
+            "id": 90001, "reference_id": 80001,
+            "amounts": {"total": {"amount": 200, "currency": "SAR"}},
+        }}
 
     first = asyncio.run(call_create(db, salla_pending_order, salla))
     second = asyncio.run(call_create(db, salla_pending_order, salla))
     assert first == {
         "state": "created", "salla_order_id": 90001,
-        "reference_id": 80001, "replayed": False,
+        "reference_id": 80001, "replayed": False, "amount_confirmed": True,
     }
     assert second["replayed"] is True
     assert second["salla_order_id"] == 90001
@@ -210,3 +213,35 @@ def test_same_intent_cannot_be_reused_with_different_order(salla_pending_order):
     # This is denied even before duplicate lookup due to quote digest mismatch.
     with pytest.raises(CreationDenied):
         asyncio.run(call_create(db, altered, salla))
+
+
+def test_changed_salla_total_records_order_without_authorizing_checkout(salla_pending_order):
+    db = fixture_db(salla_pending_order)
+    async def salla(*args, **kwargs):
+        return {"success": True, "data": {
+            "id": 90002, "reference_id": 80002,
+            "amounts": {"total": {"amount": 210, "currency": "SAR"}},
+        }}
+    result = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert result["state"] == "created_amount_unverified"
+    assert result["salla_order_id"] == 90002
+    assert result["amount_confirmed"] is False
+
+
+def test_missing_salla_total_is_not_marked_verified(salla_pending_order):
+    db = fixture_db(salla_pending_order)
+    async def salla(*args, **kwargs):
+        return {"success": True, "data": {"id": 90003}}
+    result = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert result["state"] == "created_amount_unverified"
+    assert result["amount_confirmed"] is False
+
+
+def test_foreign_currency_requires_separate_reconciliation(salla_pending_order):
+    db = fixture_db(salla_pending_order)
+    async def salla(*args, **kwargs):
+        return {"success": True, "data": {
+            "id": 90004, "amounts": {"total": {"amount": 200, "currency": "KWD"}},
+        }}
+    result = asyncio.run(call_create(db, salla_pending_order, salla))
+    assert result["state"] == "created_amount_unverified"
