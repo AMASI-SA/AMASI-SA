@@ -269,11 +269,17 @@ def run_child(mode, destination):
         output, _ = process.communicate(timeout=135)
     except BaseException:
         if process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
         try:
             output, _ = process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             output, _ = process.communicate()
         (destination.parent / f'{mode}.log').write_text(output)
         raise

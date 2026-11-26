@@ -156,9 +156,10 @@
     "source_identities_filled": false
   },
   "bundle_prototype": {
-    "script_sha256": "9f2424738075ae1a575a4c293c2f92211fc343e69fbc5944ee43a617c34c6e0a",
+    "script_sha256": "684aaef8fd0149b3aa1d42fe28c3f035feff1efc0d6dcf227965196c14520735",
     "status": "checkpointed_not_executed",
     "source_a_unchanged": true,
-    "plan": "One fresh-process baseline/prototype pair; only private full-item copy guard; runtime adoption requires separate tests and new source A."
+    "plan": "One fresh-process baseline/prototype pair; only private full-item copy guard; runtime adoption requires separate tests and new source A.",
+    "independent_review": "No blocker after owned-child signaling race correction; not executed."
   }
 }
