@@ -57,6 +57,19 @@ class SallaCatalogTest(unittest.TestCase):
         self.assertNotIn("supplier_cost",str(info))
         self.assertNotIn("customer_mobile",str(info))
 
+    def test_salla_discount_price_not_free_zero(self):
+        sale=public_salla_product(
+            product(sale_price={"amount":80,"currency":"SAR"}),
+            fetched_at=NOW,detailed=True
+        )
+        self.assertEqual(sale["base_price_sar"],"99.00")
+        self.assertEqual(sale["display_price_sar"],"80.00")
+        zero=public_salla_product(
+            product(sale_price={"amount":0,"currency":"SAR"}),
+            fetched_at=NOW,detailed=True
+        )
+        self.assertEqual(zero["display_price_sar"],"99.00")
+
     def test_unrecognized_options_not_claimed(self):
         row=product(options=[{"unknown_option":"unverified"}])
         result=public_salla_product(row,fetched_at=NOW,detailed=True)
