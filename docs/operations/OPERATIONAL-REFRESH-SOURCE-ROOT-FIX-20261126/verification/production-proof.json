@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "OPERATIONAL-REFRESH-SOURCE-ROOT-FIX-20261126",
-  "phase": "production_verified_local_restore_pending",
-  "updated_utc": "2026-11-26T02:40:20Z",
+  "phase": "production_verified_live_refresh_failed",
+  "updated_utc": "2026-11-26T02:43:06.228Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 2133,
   "task_branch": "codex/operational-refresh-source-root-fix-20261126",
@@ -577,7 +577,7 @@
       ]
     }
   },
-  "next_safe_action": "Run the independently reviewed restore-only continuation exactly once. Preserve original failed receipt, prove bookkeeping prefix and exact scoped metadata variance, restore owned Backend to RUNNING, then one live owner refresh.",
+  "next_safe_action": "No blind retry or republish of PR2133. Diagnose and measure remaining archive/native/source-loop critical path, preserve exact financial contracts, then a new source/intent release only if justified. User root-fix task remains open.",
   "candidate_intent": {
     "artifact_id": 15079120933,
     "run_id": 45735625726,
@@ -671,7 +671,7 @@
     "wrapper_pid": 25412,
     "invocations": 1,
     "original_guard_unchanged": true,
-    "phase": "official_guard_passed_local_preservation_check_failed",
+    "phase": "official_guard_passed",
     "expected_source": "50cbe07da4e29fa41c7a184addffdeb8d2169f1a",
     "expected_deployment": "317dc183485566ba9e05c5afca5d4ea1b84e291e",
     "guard_pid": 25434,
@@ -688,7 +688,7 @@
     "frontend_shell_cache_records": 3,
     "frontend_service_worker_records": 2,
     "wrapper_error": "foreign root metadata changed",
-    "backend_restore_required": true
+    "backend_restore_required": false
   },
   "host_preservation_variance": {
     "foreign_roots_total": 59,
@@ -714,7 +714,7 @@
       "bytes_after": 123984,
       "sha256_before": "d5b80825f11475ab020a337db56a98990ccfe4c1a8c034f96fbeca064bb5807d",
       "sha256_after": "494d31d20be48ca6fa02bf9134fd31b2ab7ebf561a1914e475516a6829edff12",
-      "original_prefix_check": "required_by_restore_continuation"
+      "original_prefix_check": "passed"
     },
     "actor_attribution": "not established",
     "original_baseline_unchanged": true
@@ -723,7 +723,58 @@
     "file": "verification/restore_original_backend.py",
     "sha256": "354b177ad76233f51e0a5cc62c83f39e1685d5612171fc4fd737e4f92632b18b",
     "independent_review": "no remaining blocker after exact env metadata pin",
-    "phase": "reviewed_not_executed",
-    "scope": "One supervisor start for the local Backend stopped by this task; no original receipt/guard/baseline or foreign-file edit."
+    "phase": "production_verified_local_backend_restored",
+    "scope": "One supervisor start for the local Backend stopped by this task; no original receipt/guard/baseline or foreign-file edit.",
+    "checkpoint": "a83a012274a8277618a41e8bd2ba44adad646f53",
+    "created_at": "2026-11-26T02:41:21.516633+00:00",
+    "restored_at": "2026-11-26T02:41:22.858577+00:00",
+    "development_backend_restored": true,
+    "supervisor_after": {
+      "state": "RUNNING",
+      "exit_code": 0
+    },
+    "original_receipt_unchanged": true,
+    "original_receipt_sha256": "0ef141cb905ebd2ca3593cd3bc42d0d78578652e9712637cd6e090816d343d53",
+    "original_prefix_preserved": true,
+    "bookkeeping_appended_bytes": 378
+  },
+  "live_acceptance": {
+    "phase": "failed",
+    "manual_attempts_on_this_release": 1,
+    "started_at": "2026-11-26T02:41:38.999Z",
+    "observed_at": "2026-11-26T02:43:06.228Z",
+    "observed_ui_wall_seconds": 87.229,
+    "previous_saved_as_of": "2026-11-25T22:51:55.742037+00:00",
+    "saved_as_of_advanced": false,
+    "code": "operational_refresh_timeout",
+    "timing_ms": {
+      "native_evidence": 11142.523,
+      "snapshot_raw_read": 119.896,
+      "snapshot_unpack": 16287.066,
+      "snapshot_copy_prepare": 0.012,
+      "snapshot_load": 16408.738,
+      "orders_cursor_read": 18058.509,
+      "source_primary_reads": 18124.681,
+      "source_bundles": 14857.234,
+      "source_option_catalog": 2616.166,
+      "source_order_indexes": 1512.51,
+      "source_orders_cancelled": 17848.574,
+      "source_collection_cancelled": 57312.655,
+      "aggregate_cancelled": 73830.229,
+      "profit_snapshot": 25845.285
+    },
+    "primary_orders": {
+      "outcome": "complete",
+      "rows_retained": 19151,
+      "last_checkpoint_rows": 18944,
+      "queue_ms": 0.033,
+      "budget_ms": 20000,
+      "first_row_ms": 11.132,
+      "last_checkpoint_ms": 18002.183,
+      "read_elapsed_ms": 18058.464,
+      "cancel_join_ms": 0,
+      "close_ms": 51.534
+    },
+    "no_new_saved_recovery_report": true
   }
 }
