@@ -39,7 +39,9 @@ def _url_from(value):
     if isinstance(value,str):
         return value
     if isinstance(value,dict):
-        return value.get("url") or value.get("original") or value.get("src")
+        # Salla detail photos can use "image" while others use "original".
+        # The downstream projector still allowlists only official CDN URLs.
+        return value.get("url") or value.get("original") or value.get("image") or value.get("src")
     return None
 
 

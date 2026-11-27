@@ -101,6 +101,25 @@ class SallaCatalogTest(unittest.TestCase):
         self.assertEqual(result["options"][1]["values"][0]["name"],"ذهبي")
         self.assertNotIn("supplier_cost",str(result))
 
+    def test_official_salla_image_field_without_main_image(self):
+        info=public_salla_product(
+            product(main_image=None,images=[{
+                "image":"https://cdn.salla.sa/salla-gallery.jpg",
+                "thumbnail":"https://cdn.salla.sa/salla-thumbnail.jpg"
+            }]),fetched_at=NOW,detailed=True
+        )
+        self.assertEqual(info["image_urls"],[
+            "https://cdn.salla.sa/salla-gallery.jpg"
+        ])
+
+    def test_untrusted_gallery_image_remains_blocked(self):
+        with self.assertRaises(Exception):
+            public_salla_product(
+                product(main_image=None,images=[{
+                    "image":"https://other.invalid/gallery.jpg"
+                }]),fetched_at=NOW,detailed=True
+            )
+
     def test_unrecognized_options_not_claimed(self):
         row=product(options=[{"unknown_option":"unverified"}])
         result=public_salla_product(row,fetched_at=NOW,detailed=True)
