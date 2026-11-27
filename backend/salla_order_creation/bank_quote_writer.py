@@ -44,6 +44,8 @@ async def prepare_bank_receipt_order_intent(
     inbox_id: str, conversation_id: str,
     source_contact_id: int, source_message_id: int,
     order: PendingOrder, selected_rate_id: int,
+    private_vault_revision: int | None = None,
+    private_vault_ref: str | None = None,
     enabled: bool = False,
     product_reader: Callable[..., Awaitable[dict]] = read_exact_product,
     rate_reader: Callable[..., Awaitable[list[dict]]] = read_shipping_rate_candidates,
@@ -61,6 +63,13 @@ async def prepare_bank_receipt_order_intent(
             order.accepted_methods != ["bank"]):
         raise PrepareBankOrderDenied("bank_transfer_order_scope_unverified")
 
+    if private_vault_revision is not None or private_vault_ref is not None:
+        if (type(private_vault_revision) is not int or
+                private_vault_revision <= 0 or
+                type(private_vault_ref) is not str or
+                not private_vault_ref.startswith("vault.") or
+                len(private_vault_ref) != 38):
+            raise PrepareBankOrderDenied("invalid_private_vault_bank_binding")
     intent_storage_id(owner_id, intent_id)
     moment = now or datetime.now(timezone.utc)
     if moment.tzinfo is None:
@@ -144,6 +153,8 @@ async def prepare_bank_receipt_order_intent(
         "inbox_id": inbox_id, "conversation_id": conversation_id,
         "source_contact_id": source_contact_id,
         "source_message_id": source_message_id,
+        "private_vault_revision": private_vault_revision,
+        "private_vault_ref": private_vault_ref,
         "quote_ref": "quote." + uuid4().hex,
         "version": 1, "payload_digest": digest,
         "encrypted_order_payload": sealed,
@@ -176,6 +187,7 @@ async def prepare_bank_receipt_order_intent(
                 "user_id", "intent_id", "inbox_id", "conversation_id",
                 "source_contact_id", "payload_digest", "store_bank_id",
                 "receipt_preflight_id", "receipt_image_sha256",
+                "private_vault_revision", "private_vault_ref",
             )
         ):
             raise PrepareBankOrderDenied("bank_quote_intent_conflict")
