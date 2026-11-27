@@ -86,11 +86,13 @@ def fixture_db(order, **edits):
 
 
 async def call_create(db, order, provider, *, enabled=True, intent="intent-0001",
-                      conversation="chat-1", actor="owner"):
+                      conversation="chat-1", actor="owner",
+                      bank_status_setter=None):
     return await create_confirmed_salla_order(
         db, user_id="owner", actor_id=actor, intent_id=intent,
         inbox_id="inbox-1", conversation_id=conversation,
         order=order, post_salla=provider, enabled=enabled,
+        bank_review_status_setter=bank_status_setter,
     )
 
 
@@ -408,6 +410,14 @@ BANK_REVIEW_QUOTE = {
 }
 
 
+async def confirmed_bank_review_status(*args, **kwargs):
+    return {
+        "state":"confirmed_under_review",
+        "salla_order_id":kwargs.get("salla_order_id"),
+        "bank_credit_confirmed":False,
+    }
+
+
 def bank_review_fixture(pending_order):
     from datetime import datetime, timedelta, timezone
     db = fixture_db(
@@ -446,8 +456,14 @@ def test_bank_review_creates_only_one_pending_unpaid_bank_order(
             "id":90010,"reference_id":30001,
             "amounts":{"total":{"amount":165,"currency":"SAR"}},
         }}
-    first=asyncio.run(call_create(db,order,bank_salla))
-    second=asyncio.run(call_create(db,order,bank_salla))
+    first=asyncio.run(call_create(
+        db,order,bank_salla,
+        bank_status_setter=confirmed_bank_review_status,
+    ))
+    second=asyncio.run(call_create(
+        db,order,bank_salla,
+        bank_status_setter=confirmed_bank_review_status,
+    ))
     assert first["state"]=="created_bank_review_pending"
     assert first["salla_order_id"]==90010
     assert first["pricing_mode"]=="salla_bank_review"
@@ -503,10 +519,57 @@ def test_bank_review_queue_failure_never_reposts_salla(salla_pending_order):
     async def bank_salla(*args,**kwargs):
         calls.append(1)
         return {"success":True,"data":{"id":90010}}
-    first=asyncio.run(call_create(db,order,bank_salla))
-    replay=asyncio.run(call_create(db,order,bank_salla))
+    first=asyncio.run(call_create(
+        db,order,bank_salla,
+        bank_status_setter=confirmed_bank_review_status,
+    ))
+    replay=asyncio.run(call_create(
+        db,order,bank_salla,
+        bank_status_setter=confirmed_bank_review_status,
+    ))
     assert first["state"]=="created_bank_review_unqueued"
     assert first["needs_reconciliation"] is True
     assert first["bank_credit_confirmed"] is False
     assert replay["replayed"] is True
     assert len(calls)==1
+
+
+
+def test_bank_order_creation_requires_custom_status_guard_before_post(
+    salla_pending_order,
+):
+    order=salla_pending_order.model_copy(deep=True)
+    order.accepted_methods=["bank"]
+    db=bank_review_fixture(order)
+    async def never(*args,**kwargs):
+        raise AssertionError("must not POST without exact status setter")
+    with pytest.raises(CreationDenied,match="bank_review_status_transition_not_enabled"):
+        asyncio.run(call_create(db,order,never))
+    assert db.salla_ai_order_intents.rows==[]
+
+
+def test_unknown_bank_custom_status_result_is_quarantined_once(
+    salla_pending_order,
+):
+    order=salla_pending_order.model_copy(deep=True)
+    order.accepted_methods=["bank"]
+    db=bank_review_fixture(order)
+    sent=[]
+    async def bank_salla(*args,**kwargs):
+        sent.append(1)
+        return {"success":True,"data":{"id":90011,"reference_id":30111}}
+    async def uncertain_status(*args,**kwargs):
+        return {"state":"status_update_needs_reconciliation",
+                "bank_credit_confirmed":False}
+    first=asyncio.run(call_create(
+        db,order,bank_salla,bank_status_setter=uncertain_status
+    ))
+    second=asyncio.run(call_create(
+        db,order,bank_salla,bank_status_setter=uncertain_status
+    ))
+    assert first["state"]=="created_bank_review_status_unverified"
+    assert first["needs_reconciliation"] is True
+    assert first["bank_credit_confirmed"] is False
+    assert second["replayed"] is True
+    assert len(sent)==1
+    assert len(db.salla_ai_bank_staff_reviews.rows)==1
