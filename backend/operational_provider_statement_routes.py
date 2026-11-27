@@ -49,7 +49,7 @@ async def _read_provider_statement_file(file: UploadFile, *, max_bytes: int) -> 
             "code": "provider_statement_size_invalid" if content else "provider_statement_file_empty",
             "message": "ملف الكشف فارغ أو يتجاوز الحد المسموح"})
     try:
-        header = next(csv.reader(StringIO(content[:8192].decode('utf-8-sig').splitlines()), strict=True))
+        header = next(csv.reader(StringIO(content[:8192].decode('utf-8-sig')), strict=True))
     except (UnicodeError, ValueError, StopIteration, csv.Error):
         header = []
     required = {"Date", "Type", "Status", "Currency", "Gross", "Fee", "Net", "Transaction ID"}
