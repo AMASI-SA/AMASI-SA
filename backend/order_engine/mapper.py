@@ -988,6 +988,22 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
 
     status_raw = raw_order.get("status")
     status_obj = _dict(status_raw)
+    customized = _dict(status_obj.get("customized"))
+    custom_raw_id = customized.get("id")
+    # The top-level Salla status.name may be CANONICAL ("بإنتظار المراجعة")
+    # even while the merchant customized child status is "تم المراجعة".
+    # The original customized child identity is indispensable for bank review.
+    status_customized_id = (
+        custom_raw_id if type(custom_raw_id) is int and custom_raw_id > 0
+        else None
+    )
+    status_customized_name = _text(
+        _first(
+            customized.get("name"),
+            customized.get("label"),
+            customized.get("title"),
+        )
+    ) or None
 
     status_native = _text(
         _first(
@@ -1195,6 +1211,8 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         created_at=created_at,
         status=status,
         status_native=status_native,
+        status_customized_id=status_customized_id,
+        status_customized_name=status_customized_name,
         completed_at=_parse_datetime(raw_order.get("completed_at")),
         cancelled_at=_parse_datetime(raw_order.get("cancelled_at")),
         refunded_at=_parse_datetime(raw_order.get("refunded_at")),
