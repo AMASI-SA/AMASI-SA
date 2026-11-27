@@ -42,6 +42,7 @@ from dashboard_v2_ad_costs import (
 from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_cooperative
 from dashboard_ads_account_results import build_dashboard_ads_account_results
 from dashboard_tiktok_coverage import tiktok_reporting_coverage
+from operational_tiktok_reporting import build_tiktok_reported_account_rows
 from dashboard_ads_costs import DashboardAdsCostCollector
 from dashboard_payment_fees import (
     BASIS as PAYMENT_FEE_BASIS, FEE_SOURCE_PROJECTION, attach_fee_source_evidence,
@@ -2792,6 +2793,56 @@ def make_dashboard_v2_router(
             "totals": summarize(rows),
             "source": "unified_orders.quantity + received_supplier_invoice_cost_and_current_unreceived_cost_with_preserved_bundle_and_correction_authority",
         }
+
+    @router.get("/dashboard-v2/tiktok-accounts-reporting-summary")
+    async def tiktok_accounts_reporting_summary(
+        from_date: str | None = Query(default=None),
+        to_date: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        # Source-only information in Operational Balances. The approved
+        # financial posting engine remains the sole accounting authority.
+        current = owner(user)
+        user_id = str(current["id"])
+        today = _today_riyadh()
+        start = from_date or today.replace(day=1).isoformat()
+        end = to_date or today.isoformat()
+        try:
+            first, last = date.fromisoformat(start), date.fromisoformat(end)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail="invalid_date_range") from exc
+        if first > last or (last - first).days > 30:
+            raise HTTPException(status_code=422, detail="invalid_date_range")
+        account_rows = await _to_list(
+            db.mezan_integration_accounts_v2.find(
+                {
+                    "user_id": user_id,
+                    "provider": TIKTOK_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                },
+                {
+                    "_id": 0, "ad_account_id": 1, "external_account_id": 1,
+                    "mezan_integration_account_id": 1, "display_name": 1,
+                    "currency": 1, "timezone": 1, "last_sync_at": 1,
+                },
+            ),
+            201,
+        )
+        if len(account_rows) > 200:
+            raise HTTPException(status_code=409, detail="tiktok_reporting_account_limit_exceeded")
+        facts = await _provider_rows(db, user_id, "tiktok", start, end)
+        bindings = await _to_list(
+            db.mz2_ad_account_bindings_v2.find(
+                {"user_id": user_id, "platform": "tiktok"},
+                {"_id": 0, "platform": 1, "integration_account_id": 1,
+                 "platform_account_id": 1, "confirmed_by": 1, "confirmed_at": 1},
+            ),
+            300,
+        )
+        return build_tiktok_reported_account_rows(
+            account_rows, facts, bindings, start, end
+        )
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")
     async def snapchat_accounts_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
