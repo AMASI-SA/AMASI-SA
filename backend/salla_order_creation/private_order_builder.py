@@ -171,12 +171,12 @@ async def prepare_from_private_vault(
             account_id=account_id, inbox_id=inbox_id,
             conversation_id=conversation_id,
             intent_id=intent_id, contact_id=contact_id,
-            now=now,
+            now=now, with_revision=True,
         )
     except PrivateOrderFieldDenied as exc:
         raise PrivateOrderAssemblyDenied("private_order_fields_unavailable") from exc
     payload = assemble_pending_from_private_fields(
-        private, receiver_country_code=receiver_country_code,
+        private["fields"], receiver_country_code=receiver_country_code,
         country_id=country_id, city_id=city_id, district_id=district_id,
         courier_id=courier_id, products=products,
         accepted_methods=accepted_methods, branch_id=branch_id,
@@ -187,6 +187,8 @@ async def prepare_from_private_vault(
         conversation_id=str(conversation_id),
         source_message_id=current_message_id,
         source_contact_id=contact_id,
+        private_vault_revision=private["revision"],
+        private_vault_ref=private["vault_ref"],
         order=payload, selected_rate_id=selected_rate_id,
         enabled=enabled,
         **({"product_reader": product_reader} if product_reader else {}),
