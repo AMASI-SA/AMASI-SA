@@ -2833,6 +2833,11 @@ def make_dashboard_v2_router(
         if len(account_rows) > 200:
             raise HTTPException(status_code=409, detail="tiktok_reporting_account_limit_exceeded")
         facts = await _provider_rows(db, user_id, "tiktok", start, end)
+        # Use the same per-account FX settings as the executive dashboard.
+        costed = await apply_mezan_v2_ad_account_costs(
+            db, user_id, {"snapchat": [], "meta": [], "tiktok": facts}
+        )
+        dashboard_basis_facts = costed["platform_rows"]["tiktok"]
         bindings = await _to_list(
             db.mz2_ad_account_bindings_v2.find(
                 {"user_id": user_id, "platform": "tiktok"},
