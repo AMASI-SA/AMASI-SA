@@ -1293,7 +1293,7 @@ def _save_statement_average(state, document, actor, stamp):
 
 
 async def upload(db, owner, actor, *, content, filename, request_id, expected_session_scope, expected_started_at, clock=None, saved_source=None, selected_provider=None):
-    await _access(db, owner, actor)
+    _, uploadable, _ = await _access(db, owner, actor)
     if expected_session_scope != digest([owner, actor]):
         fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح صفحة الكشوف', 409)
     if not content or len(content) > MAX_FILE_BYTES:
@@ -1324,6 +1324,14 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
     if selected_provider is not None and normalized['provider'] != selected_provider:
         raise HTTPException(422, detail={'code': 'provider_statement_provider_mismatch',
             'message': 'المنصة المختارة لا تطابق ملف الكشف؛ اختر المنصة الصحيحة', 'not_applied': True})
+    # Auto-detected provider must be in the employee's upload grant BEFORE
+    # original bytes, review evidence or accounting state can be persisted.
+    # This early denial is safe to discard; later permission failures must
+    # remain uncertain because a committed upload may already exist.
+    if normalized['provider'] not in uploadable:
+        raise HTTPException(403, detail={'code': 'provider_statement_provider_not_permitted',
+            'message': 'لم تُمنح صلاحية رفع كشف المنصة التي تم التعرف عليها',
+            'not_applied': True})
     await _bind_provider(db, owner, actor, normalized['provider'])
     if saved_source and (normalized['provider'] != saved_source['provider'] or normalized['file_hash'] != saved_source['file_hash']):
         fail('provider_statement_saved_provider_conflict', 'هوية المنصة في الملف الأصلي لا تطابق فهرس الكشف المحفوظ؛ لم تتغير الأرصدة', 409)
