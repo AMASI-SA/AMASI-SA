@@ -6,7 +6,8 @@ from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import APIRouter
+from fastapi import APIRouter, FastAPI
+from fastapi.testclient import TestClient
 from backend.order_engine.whatsapp_stage_mount import mount_if_enabled, _fresh_salla_source
 
 class MountTest(unittest.TestCase):
@@ -32,11 +33,26 @@ class MountTest(unittest.TestCase):
              patch("backend.order_engine.whatsapp_stage_mount.MongoNonceClaim") as nonce, \
              patch("backend.order_engine.whatsapp_stage_mount.MongoAssistantRateLimit") as limit, \
              patch("backend.order_engine.whatsapp_stage_mount.ChatwootVerifiedSenderReader") as sender:
-            router=APIRouter()
+            # Check the resolved HTTP app rather than APIRouter.routes:
+            # FastAPI >= 0.137 stores included routers as _IncludedRouter,
+            # whose entries intentionally do not expose a .path attribute.
+            router=APIRouter(prefix="/api")
             self.assertTrue(mount_if_enabled(router,object()))
-            paths={r.path for r in router.routes}
-            self.assertIn("/internal/whatsapp/catalog/read",paths)
-            self.assertNotIn("/internal/whatsapp/order-stage/read",paths)
+            app=FastAPI()
+            app.include_router(router)
+            paths=set(app.openapi()["paths"])
+            self.assertIn("/api/internal/whatsapp/catalog/read",paths)
+            self.assertNotIn("/api/internal/whatsapp/order-stage/read",paths)
+            # Exercise the effective route: unsigned requests must be denied,
+            # and buyer-specific stage must remain unmounted (not merely hidden).
+            with TestClient(app) as client:
+                self.assertEqual(client.post(
+                    "/api/internal/whatsapp/catalog/read",
+                    json={"action":"search","keyword":"bracelet"},
+                ).status_code,401)
+                self.assertEqual(client.post(
+                    "/api/internal/whatsapp/order-stage/read",json={}
+                ).status_code,404)
             nonce.assert_called_once()
             limit.assert_called_once()
             sender.assert_not_called()
