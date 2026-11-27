@@ -136,9 +136,18 @@ test.each(["tabby", "tamara", "salla"])("explicit upload displays server-detecte
     expect(api.providerStatements).toHaveBeenCalledTimes(1); expect(api.providerStatementReview).not.toHaveBeenCalled(); expect(api.confirmProviderStatement).not.toHaveBeenCalled();
 });
 
-test.each(["statement.csv", "statement.xls", "statement.pdf"])("unsupported %s never uploads", async filename => {
+test.each(["statement.xls", "statement.pdf"])("unsupported %s never uploads", async filename => {
     await render(); await choose(new File(["file"], filename)); await submit('[data-testid="provider-statement-upload"]');
     expect(host.textContent).toContain(".xlsx"); expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+});
+
+test("CSV Activity Download is accepted and server identifies PayPal without a local platform guess", async () => {
+    api.uploadProviderStatement.mockResolvedValue(fixture("paypal")); await render();
+    const file = await choose(new File(["Date,Type,Status,Currency,Gross,Fee,Net,Transaction ID"], "activity.csv", { type: "text/csv" }));
+    expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+    await click("رفع الكشف ومطابقته");
+    expect(api.uploadProviderStatement).toHaveBeenCalledWith(file, { request_id: "intent-1", expected_session_scope: scope, expected_started_at: snapshot.started_at }, { signal: expect.any(AbortSignal) });
+    expect(host.textContent).toContain("باي بال");
 });
 
 test("oversized and empty files stay local", async () => {
