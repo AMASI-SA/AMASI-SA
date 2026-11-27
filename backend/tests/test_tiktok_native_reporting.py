@@ -126,6 +126,7 @@ class FakeResponse:
             "message": "OK",
             "request_id": "tt-request-1",
             "data": {
+                "page_info": {"page": 1, "total_page": 1, "total_number": 1},
                 "list": [
                     {
                         "dimensions": {"advertiser_id": "700000000001"},
