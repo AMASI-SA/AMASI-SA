@@ -199,3 +199,34 @@ def test_bank_evidence_and_replay_fence_have_distinct_ttls():
     assert evidence["purge_after"]==NOW+timedelta(days=7)
     assert replay["purge_after"]==NOW+timedelta(days=30)
     assert replay["purge_after"]>evidence["purge_after"]
+
+
+
+def test_verified_customer_text_claim_stages_without_attachment_but_never_paid():
+    db,out=stage(source_kind="text",attachment_id=0)
+    assert out["state"]=="appearance_plausible"
+    assert out["paid"] is False and out["bank_credit_confirmed"] is False
+    row=db.salla_ai_bank_receipt_evidence.rows[0]
+    assert row["source_kind"]=="text"
+    assert row["source_attachment_id"]==0
+    assert row["credit_received"] is False
+    assert IBAN not in str(row)
+
+
+def test_verified_pdf_attachment_keeps_only_protected_source_reference():
+    db,out=stage(source_kind="file",attachment_id=9015)
+    assert out["staff_review_required"] is True
+    row=db.salla_ai_bank_receipt_evidence.rows[0]
+    assert row["source_kind"]=="file"
+    assert row["source_attachment_id"]==9015
+    assert "PDF" not in str(row)
+    assert IBAN not in str(row)
+
+
+@pytest.mark.parametrize("kind,attachment",[
+    ("image",0),("file",0),("text",1),("text",-1),
+    ("video",9001),("file",None),
+])
+def test_unsigned_or_mismatched_source_kind_attachment_denied(kind,attachment):
+    with pytest.raises(BankReceiptStageDenied):
+        stage(source_kind=kind,attachment_id=attachment)
