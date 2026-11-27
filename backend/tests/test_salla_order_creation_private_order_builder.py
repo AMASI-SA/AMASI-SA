@@ -206,6 +206,8 @@ def test_end_to_end_encrypted_private_fields_to_unpriced_quote():
     assert o.receiver.name=="Synthetic Recipient"
     assert record["source_contact_id"]==77
     assert record["source_message_id"]==900
+    assert record["private_vault_revision"]==len(fields())
+    assert record["private_vault_ref"].startswith("vault.")
 
 
 def test_wrong_contact_cannot_read_private_vault_or_prepare_quote():
