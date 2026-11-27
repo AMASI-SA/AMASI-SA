@@ -310,7 +310,10 @@ def test_prewrite_timeout_is_quarantined_without_status_post_or_blind_retry():
             return {"success":True,"data":statuses()}
         if method=="GET" and path=="/orders/90001":
             get_count+=1
-            if get_count == 1:
+            if get_count % 2 == 1:
+                # Each invocation first gets a valid pending order; the
+                # original call's prewrite read times out. Replay is still
+                # denied at the durable intent fence, before another POST.
                 return {"success":True,"data":order()}
             raise TimeoutError("synthetic Salla status read uncertain")
         if method=="POST":
