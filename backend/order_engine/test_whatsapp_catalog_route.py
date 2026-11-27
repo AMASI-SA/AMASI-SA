@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.order_engine.whatsapp_catalog_route import (
-    public_salla_product, make_whatsapp_catalog_router
+    public_salla_product, make_whatsapp_catalog_router, InvalidProduct
 )
 from backend.order_engine.whatsapp_stage_service_auth import CATALOG_PATH
 
@@ -24,6 +24,9 @@ def product(**changes):
         "id":963652299,
         "name":"سوار بالاسم وزهرة لامعة",
         "price":{"amount":99,"currency":"SAR"},
+        "pre_tax_price":{"amount":99,"currency":"SAR"},
+        "tax":{"amount":7.92,"currency":"SAR"},
+        "taxed_price":{"amount":106.92,"currency":"SAR"},
         "status":"sale","quantity":4,"unlimited_quantity":False,
         "urls":{"customer":"https://amasi-sa.com/ar/swar/p963652299"},
         "main_image":"https://cdn.salla.sa/product.png",
@@ -53,22 +56,27 @@ class SallaCatalogTest(unittest.TestCase):
         info=public_salla_product(product(),fetched_at=NOW,detailed=True)
         self.assertEqual(info["base_price_sar"],"99.00")
         self.assertEqual(info["image_urls"],["https://cdn.salla.sa/product.png"])
+        self.assertEqual(info["display_price_sar"],"106.92")
+        self.assertTrue(info["price_includes_tax"])
         self.assertTrue(info["options_verified"])
         self.assertNotIn("supplier_cost",str(info))
         self.assertNotIn("customer_mobile",str(info))
 
     def test_salla_discount_price_not_free_zero(self):
         sale=public_salla_product(
-            product(sale_price={"amount":80,"currency":"SAR"}),
+            product(sale_price={"amount":80,"currency":"SAR"},
+                    pre_tax_price={"amount":80,"currency":"SAR"},
+                    tax={"amount":6.40,"currency":"SAR"},
+                    taxed_price={"amount":86.40,"currency":"SAR"}),
             fetched_at=NOW,detailed=True
         )
         self.assertEqual(sale["base_price_sar"],"99.00")
-        self.assertEqual(sale["display_price_sar"],"80.00")
+        self.assertEqual(sale["display_price_sar"],"86.40")
         zero=public_salla_product(
             product(sale_price={"amount":0,"currency":"SAR"}),
             fetched_at=NOW,detailed=True
         )
-        self.assertEqual(zero["display_price_sar"],"99.00")
+        self.assertEqual(zero["display_price_sar"],"106.92")
 
     def test_real_salla_detail_field_shapes_with_options(self):
         # Same public field structure verified against Amasi Salla read API.
@@ -92,7 +100,7 @@ class SallaCatalogTest(unittest.TestCase):
         )
         result=public_salla_product(row,fetched_at=NOW,detailed=True)
         self.assertTrue(result["options_verified"])
-        self.assertEqual(result["display_price_sar"],"99.00")
+        self.assertEqual(result["display_price_sar"],"106.92")
         self.assertEqual(result["inventory_hint"],"unlimited")
         self.assertEqual(len(result["options"]),2)
         self.assertFalse(result["options"][0]["required"])
@@ -119,6 +127,30 @@ class SallaCatalogTest(unittest.TestCase):
                     "image":"https://other.invalid/gallery.jpg"
                 }]),fetched_at=NOW,detailed=True
             )
+
+    def test_real_salla_100_pre_tax_108_storefront(self):
+        result=public_salla_product(product(
+            price={"amount":100,"currency":"SAR"},
+            pre_tax_price={"amount":100,"currency":"SAR"},
+            tax={"amount":8,"currency":"SAR"},
+            taxed_price={"amount":108,"currency":"SAR"},
+            sale_price={"amount":0,"currency":"SAR"},
+        ),fetched_at=NOW,detailed=True)
+        self.assertEqual(result["base_price_sar"],"100.00")
+        self.assertEqual(result["display_price_sar"],"108.00")
+        self.assertIs(result["price_includes_tax"],True)
+        self.assertNotIn("supplier_cost",str(result))
+
+    def test_unverified_or_inconsistent_storefront_tax_denied(self):
+        for change in (
+            {"taxed_price":None},
+            {"taxed_price":{"amount":99,"currency":"USD"}},
+            {"taxed_price":{"amount":100,"currency":"SAR"}},
+            {"tax":{"amount":-1,"currency":"SAR"}},
+            {"taxed_price":{"amount":"NaN","currency":"SAR"}},
+        ):
+            with self.subTest(change=change),self.assertRaises(InvalidProduct):
+                public_salla_product(product(**change),fetched_at=NOW,detailed=True)
 
     def test_unrecognized_options_not_claimed(self):
         row=product(options=[{"unknown_option":"unverified"}])

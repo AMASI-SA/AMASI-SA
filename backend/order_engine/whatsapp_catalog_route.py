@@ -97,19 +97,22 @@ def public_salla_product(row, *, fetched_at, detailed):
         options_verified=False
     if facts["list_status"]!="sale" or facts["inventory_hint"]=="out":
         raise InvalidProduct("not_publicly_purchasable")
-    # A positive Salla sale price overrides the regular list price.
-    # sale_price=0 does not mean a free product.
-    sale=raw.get("sale_price")
-    original=Decimal(facts["base_price_sar"])
-    if sale is not None:
-        discounted=Decimal(amount(sale))
-        facts["display_price_sar"]=(
-            f"{discounted:.2f}"
-            if discounted>0 and discounted<=original else
-            facts["base_price_sar"]
-        )
-    else:
-        facts["display_price_sar"]=facts["base_price_sar"]
+    # The merchant's pre-tax/list price is NOT necessarily the price shown
+    # on the public storefront. Salla's authoritative taxed_price includes
+    # the store-configured tax: example, pre-tax 100.00 -> storefront 108.00.
+    # Never invent a tax percentage or derive it from a global Saudi VAT rate.
+    # Missing/conflicting Salla price evidence is a rejected product, not a
+    # recommendation at the wrong price.
+    if raw.get("taxed_price") is None:
+        raise InvalidProduct("missing_storefront_taxed_price")
+    customer_price=Decimal(amount(raw["taxed_price"]))
+    if raw.get("pre_tax_price") is not None and raw.get("tax") is not None:
+        net=Decimal(amount(raw["pre_tax_price"]))
+        tax=Decimal(amount(raw["tax"]))
+        if abs(net+tax-customer_price)>Decimal("0.01"):
+            raise InvalidProduct("storefront_tax_breakdown_conflict")
+    facts["display_price_sar"]=f"{customer_price:.2f}"
+    facts["price_includes_tax"]=True
     facts["options_verified"]=options_verified
     # Exact source time; no cached indefinite item links or prices.
     facts["source"]="verified_salla_mezan_read_v1"
