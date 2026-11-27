@@ -10,7 +10,7 @@ reference, attachment URL or payment/GL mutation.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
@@ -78,8 +78,12 @@ def _source(row: dict) -> dict:
     if reference is not None and not _positive(reference):
         raise BankWorklistDenied("bank_review_reference_untrusted")
     created_at = row.get("created_at")
-    if not isinstance(created_at, datetime) or created_at.tzinfo is None:
+    if not isinstance(created_at, datetime):
         raise BankWorklistDenied("bank_review_created_at_untrusted")
+    # Motor's default tz_aware=False returns Mongo UTC BSON datetimes naive.
+    # Mongo dates are UTC by contract; restore UTC only for presentation.
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     return {
         "intent_id": intent,
         "salla_order_id": order_id,
