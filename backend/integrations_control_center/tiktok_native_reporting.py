@@ -529,6 +529,7 @@ async def run_tiktok_reporting_sync(
         "complete"
         if accounts_complete == len(account_summaries)
         and accounts_deferred == 0
+        and backfill_pending_accounts == 0
         and discovery["status"] == "complete"
         else "partial"
     )
@@ -579,6 +580,7 @@ async def run_tiktok_reporting_sync(
         "accounts_complete": accounts_complete,
         "accounts_total": len(all_accounts),
         "accounts_deferred": accounts_deferred,
+        "backfill_pending_accounts": backfill_pending_accounts,
         "discovery": discovery,
         "rows_saved": rows_saved,
         "errors_count": len(error_items),
