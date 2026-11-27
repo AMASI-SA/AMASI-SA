@@ -86,6 +86,48 @@ def _customized_id(data: dict) -> int | None:
     return number if type(number) is int and number > 0 else None
 
 
+def _zero_sar_amount(value: Any) -> bool:
+    """Only an explicit finite zero paid amount is acceptable, never NULL."""
+    if isinstance(value, dict):
+        if value.get("currency") != "SAR":
+            return False
+        value = value.get("amount")
+    if value is None or type(value) is bool:
+        return False
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    return amount.is_finite() and amount == Decimal("0")
+
+
+def explicitly_unpaid_salla_order(order: Any) -> bool:
+    """Confirm zero paid using supported top-level or Salla payment_actions.
+
+    Salla's 2026 order detail docs show payment_actions.remaining_action.
+    paid_amount as a SAR money object. Missing values are NEVER assumed zero.
+    Conflicting explicit sources and paid/refunded payment states fail closed.
+    """
+    if not isinstance(order, dict):
+        return False
+    payment = order.get("payment")
+    if isinstance(payment, dict) and payment.get("status") in (
+        "paid", "partial", "refunded",
+    ):
+        return False
+    if order.get("payment_status") in ("paid", "partial", "refunded"):
+        return False
+    sources = []
+    if order.get("paid_amount") is not None:
+        sources.append(order["paid_amount"])
+    actions = order.get("payment_actions")
+    if isinstance(actions, dict):
+        remaining = actions.get("remaining_action")
+        if isinstance(remaining, dict) and remaining.get("paid_amount") is not None:
+            sources.append(remaining["paid_amount"])
+    return bool(sources) and all(_zero_sar_amount(value) for value in sources)
+
+
 async def ensure_bank_review_custom_status(
     db: Any, *, user_id: str, intent_id: str,
     salla_order_id: int, request: Request,
@@ -138,15 +180,8 @@ async def ensure_bank_review_custom_status(
     current_slug = current.get("slug")
     if current_slug not in (REVIEW_SLUG, PENDING_PAYMENT_SLUG):
         raise BankStatusDenied("bank_order_not_in_pre_review_status")
-    paid = order.get("paid_amount")
-    # Missing/unknown payment is NOT proof of zero received.
-    try:
-        received = Decimal(str(paid))
-    except (InvalidOperation, ValueError, TypeError):
-        raise BankStatusDenied("bank_order_payment_amount_unverified") from None
-    if (type(paid) is bool or not received.is_finite()
-            or received != Decimal("0")):
-        raise BankStatusDenied("bank_order_must_be_unpaid")
+    if not explicitly_unpaid_salla_order(order):
+        raise BankStatusDenied("bank_order_payment_amount_unverified")
 
     response = await request(
         db, user_id, "GET", "/orders/statuses",
@@ -220,15 +255,7 @@ async def ensure_bank_review_custom_status(
         }
     before_status = before_write.get("status")
     before_id = _customized_id(before_write)
-    before_paid = before_write.get("paid_amount")
-    try:
-        before_zero = (
-            type(before_paid) is not bool
-            and Decimal(str(before_paid)).is_finite()
-            and Decimal(str(before_paid)) == Decimal("0")
-        )
-    except (ValueError, TypeError, InvalidOperation):
-        before_zero = False
+    before_zero = explicitly_unpaid_salla_order(before_write)
     if (before_write.get("id") != salla_order_id
             or before_write.get("payment_method") != "bank"
             or not isinstance(before_status, dict)
@@ -269,15 +296,7 @@ async def ensure_bank_review_custom_status(
             "status_post_performed": True,
             "bank_credit_confirmed": False,
         }
-    paid_after = later.get("paid_amount")
-    try:
-        still_unpaid = (
-            type(paid_after) is not bool
-            and Decimal(str(paid_after)).is_finite()
-            and Decimal(str(paid_after)) == Decimal("0")
-        )
-    except (InvalidOperation, TypeError, ValueError):
-        still_unpaid = False
+    still_unpaid = explicitly_unpaid_salla_order(later)
     later_status = later.get("status")
     if (later.get("id") != salla_order_id
             or _customized_id(later) != exact_id
