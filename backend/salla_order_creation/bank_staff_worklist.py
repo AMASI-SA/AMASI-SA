@@ -131,7 +131,9 @@ async def list_pending_bank_reviews(
         "items": [_source(row) for row in values],
         "offset": offset,
         "limit": limit,
-        "next_offset": offset + len(values) if len(values) == limit else None,
+        "next_offset": (offset + len(values)
+                        if len(values) == limit and offset + len(values) <= 1000
+                        else None),
         "read_only": True,
         "review_owner": "customer_service",
     }
