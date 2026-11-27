@@ -383,3 +383,130 @@ def test_confirmed_chatwoot_contact_must_match_private_quote_source(
         asyncio.run(call_create(db,salla_pending_order,no_salla))
     assert sent==[]
     assert db.salla_ai_order_intents.rows==[]
+
+
+
+BANK_REVIEW_QUOTE = {
+    "source": "mezan_verified_unpaid_bank_review_intent_v1",
+    "state": "authorized_for_pending_bank_review",
+    "post_create_salla_total": True,
+    "online_only": False,
+    "bank_only": True,
+    "bank_id": 11,
+    "receipt_ref": "receipt." + "a" * 32,
+    "receipt_appearance_verified": True,
+    "bank_method_verified": True,
+    "bank_credit_confirmed": False,
+    "staff_review_required": True,
+    "total_sar": None,
+    "pricing_verified": False,
+    "shipping_price_verified": False,
+    "products_verified": True,
+    "carrier_eligibility_verified": True,
+    "payment_methods_verified": True,
+    "source_contact_id": 77,
+}
+
+
+def bank_review_fixture(pending_order):
+    from datetime import datetime, timedelta, timezone
+    db = fixture_db(
+        pending_order, quote=BANK_REVIEW_QUOTE,
+        confirm={"source_contact_id": 77},
+    )
+    receipt = {
+        "_id": "a" * 64,
+        "user_id": "owner", "intent_id": "intent-0001",
+        "inbox_id": "inbox-1", "conversation_id": "chat-1",
+        "source_contact_id": 77, "bank_id": 11,
+        "source_message_id": 502, "source_attachment_id": 9001,
+        "source": "chatwoot_verified_image_bank_receipt_v1",
+        "state": "appearance_plausible", "credit_received": False,
+        "staff_review_required": True, "receipt_amount_sar": "165.00",
+        "reference_fingerprint": "b" * 64,
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+    }
+    # Reuse trusted fixture's scoped intent and quote metadata.
+    receipt["intent_id"] = "intent-0001"
+    db.salla_ai_bank_receipt_evidence = FakeCollection([receipt])
+    db.salla_ai_bank_staff_reviews = FakeCollection()
+    return db
+
+
+def test_bank_review_creates_only_one_pending_unpaid_bank_order(
+    salla_pending_order,
+):
+    order = salla_pending_order.model_copy(deep=True)
+    order.accepted_methods = ["bank"]
+    db=bank_review_fixture(order)
+    calls=[]
+    async def bank_salla(*args,**kwargs):
+        calls.append((args,kwargs))
+        return {"success":True,"data":{
+            "id":90010,"reference_id":30001,
+            "amounts":{"total":{"amount":165,"currency":"SAR"}},
+        }}
+    first=asyncio.run(call_create(db,order,bank_salla))
+    second=asyncio.run(call_create(db,order,bank_salla))
+    assert first["state"]=="created_bank_review_pending"
+    assert first["salla_order_id"]==90010
+    assert first["pricing_mode"]=="salla_bank_review"
+    assert first["staff_review_required"] is True
+    assert first["bank_credit_confirmed"] is False
+    assert first["checkout_url"] is None
+    assert len(calls)==1
+    payment=calls[0][1]["json"]["payment"]
+    assert payment=={
+        "status":"pending_payment","method":"bank",
+        "accepted_methods":["bank"],
+    }
+    assert second["replayed"] is True
+    assert second["salla_order_id"]==90010
+    assert len(db.salla_ai_bank_staff_reviews.rows)==1
+    case=db.salla_ai_bank_staff_reviews.rows[0]
+    assert case["review_state"]=="awaiting_staff_bank_verification"
+    assert case["paid"] is False
+    assert case["fulfillment_eligible"] is False
+
+
+def test_bank_quote_may_not_create_mada_order(salla_pending_order):
+    db=bank_review_fixture(salla_pending_order)
+    async def forbidden(*args,**kwargs):
+        raise AssertionError("no Salla POST")
+    with pytest.raises(CreationDenied,match="bank_only"):
+        asyncio.run(call_create(db,salla_pending_order,forbidden))
+    assert db.salla_ai_order_intents.rows==[]
+
+
+def test_bank_visual_evidence_must_be_present_and_current(salla_pending_order):
+    order=salla_pending_order.model_copy(deep=True)
+    order.accepted_methods=["bank"]
+    db=bank_review_fixture(order)
+    db.salla_ai_bank_receipt_evidence.rows=[]
+    async def forbidden(*args,**kwargs):
+        raise AssertionError("no Salla POST")
+    with pytest.raises(CreationDenied,match="independent_bank_receipt"):
+        asyncio.run(call_create(db,order,forbidden))
+
+
+def test_bank_review_queue_failure_never_reposts_salla(salla_pending_order):
+    order=salla_pending_order.model_copy(deep=True)
+    order.accepted_methods=["bank"]
+    db=bank_review_fixture(order)
+    class BrokenQueue:
+        async def insert_one(self,doc):
+            raise ConnectionError("synthetic Mongo issue")
+        async def find_one(self,query):
+            return None
+    db.salla_ai_bank_staff_reviews=BrokenQueue()
+    calls=[]
+    async def bank_salla(*args,**kwargs):
+        calls.append(1)
+        return {"success":True,"data":{"id":90010}}
+    first=asyncio.run(call_create(db,order,bank_salla))
+    replay=asyncio.run(call_create(db,order,bank_salla))
+    assert first["state"]=="created_bank_review_unqueued"
+    assert first["needs_reconciliation"] is True
+    assert first["bank_credit_confirmed"] is False
+    assert replay["replayed"] is True
+    assert len(calls)==1
