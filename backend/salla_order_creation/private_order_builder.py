@@ -152,6 +152,7 @@ async def prepare_from_private_vault(
     products: list[dict],
     accepted_methods: list[str],
     branch_id: int | None = None,
+    payment_flow: str = "online",
     enabled: bool = False,
     product_reader: Callable[..., Awaitable[dict]] | None = None,
     rate_reader: Callable[..., Awaitable[list[dict]]] | None = None,
