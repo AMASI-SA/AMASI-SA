@@ -54,6 +54,7 @@ async def ensure_staff_bank_review(
         "source_contact_id": receipt["source_contact_id"],
         "source_message_id": receipt["source_message_id"],
         "source_attachment_id": receipt["source_attachment_id"],
+        "source_kind": receipt.get("source_kind", "image"),
         "bank_id": receipt["bank_id"],
         "receipt_reference_fingerprint": receipt["reference_fingerprint"],
         "receipt_amount_sar": _amount(receipt["receipt_amount_sar"]),
