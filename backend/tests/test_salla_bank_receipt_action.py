@@ -124,6 +124,8 @@ def test_wrong_mac_and_wrong_clock_are_denied():
 
 
 def test_missing_timezone_fails_visual_timestamp_validation():
-    row=signed(screen(transfer_at_iso="2026-11-27T02:00:00"))
+    # Keep a schema-valid length but omit UTC offset: cryptographic payload
+    # parsing succeeds and the semantic time-zone check must reject it.
+    row=signed(screen(transfer_at_iso="2026-11-27T02:00:00.0"))
     with pytest.raises(SignatureDenied,match="timezone_required"):
         as_visual_evidence(row)
