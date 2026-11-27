@@ -61,5 +61,24 @@ jobs:
               assert (original/'b.txt').is_file()
               module.safe_remove(copy)
               assert original.is_dir() and not copy.exists()
+
+              # Regression: release_identity.json must hash identically when
+              # staged under a different basename before the atomic swap.
+              live = p/'release_identity.json'
+              staged = p/'.release_identity.json.v5-new-123456'
+              backup = p/'backup'/'release_identity.json'
+              backup.parent.mkdir()
+              live.write_bytes(b'{"release_id":"rg5-test"}\\n')
+              shutil.copy2(live, staged)
+              shutil.copy2(live, backup)
+              assert module.tree_hash(live) == module.tree_hash(staged)
+              assert module.tree_hash(live) == module.tree_hash(backup)
+              staged.write_bytes(b'{"release_id":"rg5-WRONG"}\\n')
+              assert module.tree_hash(live) != module.tree_hash(staged)
+              shutil.copy2(live, staged)
+              assert module.tree_hash(live) == module.tree_hash(staged)
+              staged.rename(p/'release_identity-renamed-again.json')
+              assert module.tree_hash(live) == module.tree_hash(p/'release_identity-renamed-again.json')
+              print('V5_RENAMED_FILE_HASH_REGRESSION_PASS')
           print('SAFE_V5_OPERATOR_STATIC_AND_HELPER_TESTS_PASS')
           PY
