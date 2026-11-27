@@ -208,6 +208,9 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
             "currency": 1,
             "timezone": 1,
             "last_sync_at": 1,
+            "last_reporting_attempt_at": 1,
+            "tiktok_backfill_next_date": 1,
+            "tiktok_backfill_complete_at": 1,
         },
     )
     if hasattr(cursor, "sort"):
@@ -246,10 +249,10 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
             f"At most {MAX_REPORTING_ACCOUNTS} TikTok accounts may sync per run.",
             status_code=409,
         )
-    # New accounts have no last_sync_at, so always receive the next available
-    # bounded batch. Older accounts eventually rotate to the front.
+    # Fair even when one advertiser repeatedly fails: last attempt, not the
+    # last successful sync, determines which accounts are processed next.
     return sorted(output, key=lambda row: (
-        str(row.get("last_sync_at") or ""), row["ad_account_id"]
+        str(row.get("last_reporting_attempt_at") or ""), row["ad_account_id"]
     ))
 
 
@@ -344,7 +347,9 @@ async def run_tiktok_reporting_sync(
             "reason": "tiktok_authorized_account_discovery_unavailable",
         }
     all_accounts = await _accounts(db, user_id)
-    batch_size = max(1, MAX_REPORTING_CALLS_PER_SYNC // len(days))
+    # Reserve two optional history days per account without ever exceeding the
+    # provider request budget. Previous valid daily facts are only upserted.
+    batch_size = max(1, MAX_REPORTING_CALLS_PER_SYNC // (len(days) + 2))
     accounts = all_accounts[:batch_size]
     accounts_deferred = len(all_accounts) - len(accounts)
     account_summaries = []
@@ -360,7 +365,27 @@ async def run_tiktok_reporting_sync(
             account_errors = []
             currency = str(account.get("currency") or "").strip().upper() or None
             fx_rate, fx_source = _fx_to_sar(currency)
-            for day in days:
+            history_start = None
+            if (account.get("tiktok_backfill_next_date")
+                    and not account.get("tiktok_backfill_complete_at")):
+                try:
+                    history_start = date.fromisoformat(
+                        str(account["tiktok_backfill_next_date"])
+                    )
+                except ValueError:
+                    account_errors.append({
+                        "ad_account_id": account["ad_account_id"],
+                        "code": "tiktok_backfill_cursor_invalid",
+                    })
+                    error_items.append(account_errors[-1])
+            historical_days = []
+            if history_start and history_start < min(days):
+                historical_days = [
+                    history_start + timedelta(days=i) for i in range(2)
+                    if history_start + timedelta(days=i) < min(days)
+                ]
+            next_history_date = history_start
+            for day in [*historical_days, *days]:
                 try:
                     row = await _fetch_day(client, access_token, account, day)
                     provider_calls += 1
@@ -411,6 +436,8 @@ async def run_tiktok_reporting_sync(
                         upsert=True,
                     )
                     saved += 1
+                    if day in historical_days and next_history_date == day:
+                        next_history_date = day + timedelta(days=1)
                 except TikTokReportingError as exc:
                     provider_calls += 1
                     if exc.code == "tiktok_needs_reauth":
@@ -424,6 +451,20 @@ async def run_tiktok_reporting_sync(
                     error_items.append(item)
 
             complete = not account_errors
+            account_patch = {
+                "performance_rows_saved": saved,
+                "has_data": saved > 0,
+                "last_sync_at": observed_at if complete else account.get("last_sync_at"),
+                "last_reporting_attempt_at": observed_at,
+                "data_delay_minutes": 0 if complete else None,
+                "health_score": 100 if complete else 70,
+                "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
+                "last_observed_at": observed_at,
+            }
+            if history_start and next_history_date is not None:
+                account_patch["tiktok_backfill_next_date"] = next_history_date.isoformat()
+                if next_history_date >= min(days):
+                    account_patch["tiktok_backfill_complete_at"] = observed_at
             await db.mezan_integration_accounts_v2.update_one(
                 {
                     "user_id": user_id,
@@ -431,15 +472,7 @@ async def run_tiktok_reporting_sync(
                     "external_account_id": account["ad_account_id"],
                 },
                 {
-                    "$set": {
-                        "performance_rows_saved": saved,
-                        "has_data": saved > 0,
-                        "last_sync_at": observed_at if complete else account.get("last_sync_at"),
-                        "data_delay_minutes": 0 if complete else None,
-                        "health_score": 100 if complete else 70,
-                        "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
-                        "last_observed_at": observed_at,
-                    }
+                    "$set": account_patch
                 },
             )
             account_summaries.append(
