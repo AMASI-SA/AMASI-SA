@@ -92,6 +92,24 @@ def quote_pricing_mode(quote: dict | None) -> str | None:
         # The final amount must be read back from the same Salla order in
         # Mezan before any customer checkout link is released.
         return "salla_post_create"
+    if (quote.get("source") == "mezan_bank_receipt_pending_review_v1"
+            and quote.get("state") == "authorized_for_pending_creation"
+            and quote.get("bank_review_only") is True
+            and quote.get("bank_credit_confirmed") is False
+            and quote.get("receipt_appearance_checked") is True
+            and quote.get("post_create_salla_total") is True
+            and quote.get("online_only") is False
+            and quote.get("pricing_verified") is False
+            and quote.get("shipping_price_verified") is False
+            and quote.get("total_sar") is None
+            and type(quote.get("store_bank_id")) is int
+            and quote["store_bank_id"] > 0
+            and isinstance(quote.get("receipt_preflight_id"), str)
+            and all(quote.get(k) is True for k in (
+                "products_verified", "carrier_eligibility_verified",
+                "payment_methods_verified",
+            ))):
+        return "bank_pending_review"
     return None
 
 
@@ -164,11 +182,22 @@ async def create_confirmed_salla_order(
         raise CreationDenied("missing_authenticated_context", 403)
 
     storage_id = intent_storage_id(user_id, intent_id)
-    digest = order_digest(order)
     now = datetime.now(timezone.utc)
     quote = await db.salla_ai_order_quotes.find_one(
         {"user_id": user_id, "intent_id": intent_id}
     )
+    pricing_mode = quote_pricing_mode(quote)
+    if pricing_mode == "bank_pending_review":
+        from .bank_transfer import bank_order_digest, build_pending_bank_order_payload
+        digest = bank_order_digest(
+            order, store_bank_id=quote["store_bank_id"],
+        )
+        provider_body = build_pending_bank_order_payload(
+            order, store_bank_id=quote["store_bank_id"],
+        )
+    else:
+        digest = order_digest(order)
+        provider_body = build_pending_order_payload(order)
     if not _is_verified_quote(
         quote, digest=digest, user_id=user_id, intent_id=intent_id,
         inbox_id=inbox_id, conversation_id=conversation_id, now=now,
@@ -176,7 +205,23 @@ async def create_confirmed_salla_order(
         raise CreationDenied("fresh_server_verified_quote_required", 409)
     # Post-create Salla pricing is allowed ONLY for electronically payable
     # unpaid orders. COD/bank require a separately verified financial flow.
-    pricing_mode = quote_pricing_mode(quote)
+    if (pricing_mode == "bank_pending_review"):
+        if order.accepted_methods != ["bank"]:
+            raise CreationDenied("bank_transfer_method_must_be_only_bank")
+        receipt = await db.salla_ai_bank_receipt_preflights.find_one({
+            "_id": quote["receipt_preflight_id"],
+            "owner_id": user_id, "intent_id": intent_id,
+            "contact_id": quote.get("source_contact_id"),
+            "store_bank_id": quote["store_bank_id"],
+        })
+        if (not isinstance(receipt, dict) or
+                receipt.get("state") != "preliminary_pass_for_human_review" or
+                receipt.get("bank_credit_confirmed") is not False or
+                receipt.get("claimed_amount_sar") !=
+                quote.get("receipt_claimed_amount_sar") or
+                receipt.get("image_sha256") !=
+                quote.get("receipt_image_sha256")):
+            raise CreationDenied("preliminary_bank_receipt_not_verified")
     if (pricing_mode == "salla_post_create"
             and not set(order.accepted_methods).issubset(
                 {"mada", "credit_card"}
@@ -199,6 +244,8 @@ async def create_confirmed_salla_order(
         "actor_id": actor_id, "state": "sending", "payload_digest": digest,
         "quote_version": quote["version"],
         "pricing_mode": pricing_mode,
+        "store_bank_id": quote.get("store_bank_id") if isinstance(quote, dict) else None,
+        "receipt_preflight_id": quote.get("receipt_preflight_id") if isinstance(quote, dict) else None,
         "confirmation_message_id": str(confirmation["message_id"]),
         "created_at": now, "updated_at": now,
     }
@@ -229,7 +276,7 @@ async def create_confirmed_salla_order(
     try:
         result = await post_salla(
             db, user_id, "POST", "/orders",
-            json=build_pending_order_payload(order),
+            json=provider_body,
         )
         # Reject provider-level failure even when an error envelope happens
         # to contain a numeric id. An uncertain provider outcome is reconciled,
@@ -288,9 +335,36 @@ async def create_confirmed_salla_order(
             "updated_at": datetime.now(timezone.utc),
         }},
     )
+    review_state = None
+    if pricing_mode == "bank_pending_review":
+        from .bank_receipt_review import ensure_pending_bank_review
+        try:
+            review = await ensure_pending_bank_review(
+                db, owner_id=user_id, intent_id=intent_id,
+                order_id=int(order_id),
+                reference_id=int(reference) if reference is not None else None,
+            )
+            review_state = review["state"]
+        except Exception:
+            # The provider may already have created the Salla order. This
+            # is a reconciliation failure, NEVER permission to POST again.
+            return {
+                "state": "created_bank_review_unavailable",
+                "salla_order_id": int(order_id),
+                "reference_id": int(reference) if reference is not None else None,
+                "pricing_mode": pricing_mode,
+                "bank_credit_confirmed": False,
+                "human_review_required": True,
+                "replayed": False, "needs_reconciliation": True,
+            }
     return {
         "state": final_state, "salla_order_id": int(order_id),
         "reference_id": int(reference) if reference is not None else None,
         "pricing_mode": pricing_mode,
         "replayed": False, "amount_confirmed": amount_confirmed,
+        **({
+            "bank_review_state": review_state,
+            "bank_credit_confirmed": False,
+            "human_review_required": True,
+        } if pricing_mode == "bank_pending_review" else {}),
     }
