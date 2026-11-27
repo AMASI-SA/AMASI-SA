@@ -326,3 +326,51 @@ async def test_reporting_saves_two_accounts_once_and_replay_is_idempotent(monkey
     assert {row["ad_account_id"] for row in rows} == {"100", "200"}
     assert sum(row["spend_sar"] for row in rows) == pytest.approx(57.5)
     assert not {"general_ledger", "ad_account_ledger", "qoyod_invoices"}.intersection(db.writes)
+
+
+def test_operational_read_only_tiktok_spend_keeps_financial_binding_separate():
+    from operational_tiktok_reporting import build_tiktok_reported_account_rows
+
+    accounts = [
+        {"mezan_integration_account_id": "int-100", "ad_account_id": "100",
+         "display_name": "USD ads", "currency": "USD"},
+        {"mezan_integration_account_id": "int-200", "ad_account_id": "200",
+         "display_name": "SAR ads", "currency": "SAR"},
+    ]
+
+    def fact(account, value):
+        return {
+            "ad_account_id": account, "date": "2026-11-27",
+            "currency_native": "USD" if account == "100" else "SAR",
+            "account_timezone": "Asia/Riyadh",
+            "spend_native": value,
+            "spend_sar": value,
+            "source_close_proof": {
+                "account_id": account, "business_date": "2026-11-27",
+                "complete": True, "complete_response": True,
+                "explicit_spend_present": True,
+            },
+        }
+
+    facts = [fact("100", 35.0), fact("200", 20.0)]
+    binds = [{"platform": "tiktok", "integration_account_id": "int-100",
+              "platform_account_id": "100", "confirmed_by": "owner",
+              "confirmed_at": "2026-11-01T00:00:00+03:00"}]
+    result = build_tiktok_reported_account_rows(
+        accounts, facts, binds, "2026-11-27", "2026-11-27")
+    assert result["accounts"] == 2
+    assert result["total_source_spend_sar"] == 55.0
+    assert result["posted_to_operational_balances"] is False
+    assert result["source_only"] is True
+    assert {row["account_id"]: row["binding_state"] for row in result["items"]} == {
+        "100": "approved", "200": "setup_required",
+    }
+
+    partial = build_tiktok_reported_account_rows(
+        accounts, facts[:1], binds, "2026-11-27", "2026-11-27")
+    assert partial["coverage_complete"] is False
+    assert partial["known_subtotal_sar"] == 35.0
+    assert partial["total_source_spend_sar"] is None
+    repeated = build_tiktok_reported_account_rows(
+        accounts, facts + facts[:1], binds, "2026-11-27", "2026-11-27")
+    assert repeated["coverage_complete"] is False
