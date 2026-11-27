@@ -15,6 +15,7 @@ import httpx
 from pydantic import BaseModel, Field, model_validator
 
 from .ad_daily_close_proof import close_proof, tiktok_evidence
+from .tiktok_account_refresh import refresh_tiktok_authorized_accounts
 
 from .tiktok_oauth_security import (
     TIKTOK_CREDENTIALS_COLLECTION,
@@ -31,7 +32,9 @@ TIKTOK_REPORTING_SOURCE_MODE = "tiktok_marketing_reporting_v2"
 TIKTOK_REPORTING_ENABLED_ENV = "TIKTOK_NATIVE_REPORTING_SYNC_ENABLED"
 TIKTOK_USD_TO_SAR_RATE_ENV = "TIKTOK_USD_TO_SAR_RATE"
 MAX_REPORTING_DAYS = 31
-MAX_REPORTING_ACCOUNTS = 20
+MAX_REPORTING_ACCOUNTS = 200
+# Explicit request ceiling avoids an unbounded accounts × days API fan-out.
+MAX_REPORTING_CALLS_PER_SYNC = 120
 
 
 class TikTokReportingError(RuntimeError):
@@ -217,11 +220,19 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
         else [row async for row in cursor]
     )
     output = []
+    seen_ids: set[str] = set()
     for row in rows:
         account_id = str(
             row.get("ad_account_id") or row.get("external_account_id") or ""
         ).strip()
         if account_id:
+            if account_id in seen_ids:
+                raise TikTokReportingError(
+                    "tiktok_reporting_duplicate_account_identity",
+                    "TikTok account identity is duplicated; reporting cannot safely aggregate it.",
+                    status_code=409,
+                )
+            seen_ids.add(account_id)
             output.append({**row, "ad_account_id": account_id})
     if not output:
         raise TikTokReportingError(
@@ -235,7 +246,11 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
             f"At most {MAX_REPORTING_ACCOUNTS} TikTok accounts may sync per run.",
             status_code=409,
         )
-    return output
+    # New accounts have no last_sync_at, so always receive the next available
+    # bounded batch. Older accounts eventually rotate to the front.
+    return sorted(output, key=lambda row: (
+        str(row.get("last_sync_at") or ""), row["ad_account_id"]
+    ))
 
 
 async def _fetch_day(
@@ -300,11 +315,28 @@ async def run_tiktok_reporting_sync(
 
     await ensure_tiktok_reporting_indexes(db)
     access_token = await _credential(db, user_id)
-    accounts = await _accounts(db, user_id)
     days = _dates(payload, now().astimezone(timezone.utc).date())
     observed_at = _iso(now())
+    try:
+        discovery = await refresh_tiktok_authorized_accounts(
+            db, user_id, access_token, observed_at
+        )
+    except Exception:
+        # Never erase previously discovered identities or their daily rows
+        # because TikTok account enumeration was temporarily unavailable.
+        discovery = {
+            "status": "degraded",
+            "reason": "tiktok_authorized_account_discovery_unavailable",
+        }
+    all_accounts = await _accounts(db, user_id)
+    batch_size = max(1, MAX_REPORTING_CALLS_PER_SYNC // len(days))
+    accounts = all_accounts[:batch_size]
+    accounts_deferred = len(all_accounts) - len(accounts)
     account_summaries = []
-    error_items = []
+    error_items = (
+        [{"code": discovery["reason"], "kind": "discovery"}]
+        if discovery["status"] != "complete" else []
+    )
     provider_calls = 0
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -424,10 +456,14 @@ async def run_tiktok_reporting_sync(
         )
 
     sync_status = (
-        "complete" if accounts_complete == len(account_summaries) else "partial"
+        "complete"
+        if accounts_complete == len(account_summaries)
+        and accounts_deferred == 0
+        and discovery["status"] == "complete"
+        else "partial"
     )
     hierarchy = None
-    if payload.include_hierarchy:
+    if payload.include_hierarchy and not accounts_deferred:
         from .tiktok_native_hierarchy import sync_tiktok_hierarchy
         hierarchy = await sync_tiktok_hierarchy(db, user_id, days, observed_at=observed_at)
         if hierarchy["status"] != "complete":
@@ -471,6 +507,9 @@ async def run_tiktok_reporting_sync(
         "date_to": days[-1].isoformat(),
         "accounts_attempted": len(account_summaries),
         "accounts_complete": accounts_complete,
+        "accounts_total": len(all_accounts),
+        "accounts_deferred": accounts_deferred,
+        "discovery": discovery,
         "rows_saved": rows_saved,
         "errors_count": len(error_items),
         "items": account_summaries,
