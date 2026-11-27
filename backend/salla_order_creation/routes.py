@@ -25,7 +25,7 @@ from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
 from .prepare_action import verify_prepare_unpaid_order
 from .private_field_action import verify_private_field
 from .private_fields import PrivateOrderFieldDenied, save_private_order_field
-from .private_fields import require_private_fields_ttl
+from .private_fields import require_private_fields_ttl, require_unchanged_private_vault
 from .private_vault_action import verify_private_vault_prepare
 from .private_order_builder import PrivateOrderAssemblyDenied, prepare_from_private_vault
 from .quote_cipher import EncryptedOrderUnavailable, decrypt_order_payload
@@ -537,6 +537,26 @@ def make_assisted_salla_order_router(
         if (not confirmation or
                 str(confirmation.get("message_id")) != str(action.confirmation_message_id)):
             raise HTTPException(status_code=409, detail={"code": "confirmation_reference_missing"})
+        # If quote preparation read the encrypted private customer vault,
+        # prevent a different edit/revision from being submitted even if
+        # another worker changes fields concurrently after initial validation.
+        if quote.get("private_vault_revision") is not None:
+            try:
+                await require_unchanged_private_vault(
+                    db, owner_id=owner_id,
+                    account_id=action.account_id,
+                    inbox_id=action.inbox_id,
+                    conversation_id=action.conversation_id,
+                    intent_id=action.intent_id,
+                    contact_id=quote.get("source_contact_id"),
+                    expected_revision=quote["private_vault_revision"],
+                    expected_vault_ref=quote.get("private_vault_ref"),
+                )
+            except PrivateOrderFieldDenied:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "private_order_fields_changed_or_expired"},
+                ) from None
         try:
             # Full customer/product/address data comes from Mezan storage,
             # never from the AI caller or signed action body.
