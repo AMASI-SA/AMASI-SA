@@ -12,6 +12,11 @@ def test_progress_details_include_empty_string_archive_marker():
     assert '"experiment_archived_at": None' not in source
 
 
+def test_employee_workspace_hydration_accepts_empty_archive_marker():
+    source = (Path(__file__).resolve().parents[1] / "preparation_supplier_dispatch.py").read_text()
+    assert '"experiment_archived_at": {"$in": [None, ""]}' in source
+
+
 def test_count_only_directory_accepts_same_archive_markers():
     source = (Path(__file__).resolve().parents[1] / "preparation_progress_counts.py").read_text()
     assert '"experiment_archived_at": {"$in": [None, ""]}' in source
