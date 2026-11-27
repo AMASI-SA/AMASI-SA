@@ -13,6 +13,12 @@ const sidebar = fs.readFileSync(
 const app = fs.readFileSync(
     path.join(__dirname, "../App.js"), "utf8",
 );
+const v2 = fs.readFileSync(
+    path.join(__dirname, "../components/MezanV2NavigationShell.jsx"), "utf8",
+);
+const layout = fs.readFileSync(
+    path.join(__dirname, "../components/Layout.jsx"), "utf8",
+);
 
 describe("read-only WhatsApp bank evidence review", () => {
     test("only GETs owner-scoped review endpoints", () => {
@@ -40,5 +46,8 @@ describe("read-only WhatsApp bank evidence review", () => {
         expect(app).toContain("<WhatsAppBankReview />");
         expect(page).toContain("لم يؤكد النظام وصول المبلغ");
         expect(page).toContain("لا توجد بها إجراءات لتأكيد الدفع");
+        expect(v2).toContain("bankReviewAllowed");
+        expect(layout).toContain("bankReviewAllowed={user?.is_owner");
+        expect(v2).toContain('requiredPermission: "bank_receipts.view"');
     });
 });
