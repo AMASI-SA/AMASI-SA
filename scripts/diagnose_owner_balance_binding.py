@@ -13,8 +13,6 @@ import json
 import os
 from pathlib import Path
 
-from motor.motor_asyncio import AsyncIOMotorClient
-
 
 def active(row):
     return bool(row) and not any(row.get(key) for key in (
@@ -90,6 +88,12 @@ async def run(email):
     uri, db_name = os.getenv("MONGO_URL"), os.getenv("DB_NAME")
     if not uri or not db_name:
         return {"read_only": True, "result": "DB_CONFIGURATION_UNAVAILABLE"}
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+    except ModuleNotFoundError as exc:
+        if exc.name in {"motor", "pymongo"}:
+            return {"read_only": True, "result": "MONGO_DRIVER_UNAVAILABLE"}
+        raise
     client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=4000)
     try:
         return await asyncio.wait_for(diagnose(client[db_name], email), timeout=12)
