@@ -1,0 +1,107 @@
+name: Stage exact reviewed WhatsApp V5 intent B (no deployment)
+on:
+  push:
+    branches:
+      - ops/stage-whatsapp-v5-intent-20261128
+    paths:
+      - .github/workflows/stage-exact-whatsapp-v5-intent.yml
+permissions:
+  contents: write
+  actions: read
+jobs:
+  stage-intent-only:
+    if: github.repository == 'AMASI-SA/AMASI-SA' && github.ref == 'refs/heads/ops/stage-whatsapp-v5-intent-20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout isolated staging branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify provenance and stage B only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REPO="AMASI-SA/AMASI-SA"
+          PROD_BRANCH="hotfix/prod-snap-meta-final"
+          P="d4a623657fd3cb47c769095e5886b2f52dabaa3c"
+          A="8d8654815751da1eb3f1b91314f418b8f872be09"
+          J="19ea1404010b9c5e5135e5dbb4b40657157ff2b1"
+          A_TREE="5a0b6e19ebb7eb4f9be8636e12c617e0a3b258f0"
+          ARTIFACT="15232645879"
+          ZIP_SHA="ad06b1bf4f6c562a7a0409aed238637056d63c88fe75df24eb113713c35b0bee"
+          JSON_SHA="f17b93557b895000c10849da0b780e254d05ee23163b2f0dd758ca02d65f1078"
+          RELEASE_ID="rg5-fcfd19a55e748bdadcb2af6a95371ab4c0a0c1683ff81bf8394cf8b8768a33fd"
+          B_BRANCH="release/whatsapp-readonly-v5-intent-20261128"
+          github_json() {
+            curl -fLsS --retry 2 --connect-timeout 10 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$REPO/$1"
+          }
+          git fetch --no-tags origin "$PROD_BRANCH"
+          test "$(git rev-parse FETCH_HEAD)" = "$P"
+          git cat-file -e "$A^{commit}"
+          git cat-file -e "$J^{commit}"
+          git merge-base --is-ancestor "$J" "$A"
+          git merge-base --is-ancestor "$A" "$P"
+          test "$(git rev-parse "$A^{tree}")" = "$A_TREE"
+          test "$(git rev-parse "$P^{tree}")" = "$A_TREE"
+          github_json "pulls/2177" | jq -e --arg a "$A" '.merged == true and .head.sha == $a' >/dev/null
+          github_json "actions/runs?head_sha=$A&per_page=100" | jq -e --arg a "$A" '
+            [.workflow_runs[] | select(.head_sha == $a and .event == "pull_request")] as $runs
+            | ($runs | length) == 26
+            and all($runs[]; .status == "completed" and .conclusion == "success")
+          ' >/dev/null
+          github_json "actions/artifacts/$ARTIFACT" | jq -e --arg a "$A" --arg digest "sha256:$ZIP_SHA" '
+            .expired == false and .digest == $digest
+            and .workflow_run.head_sha == $a
+          ' >/dev/null
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          curl -fLsS --retry 2 --connect-timeout 10 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT/zip" \
+            -o "$tmp/artifact.zip"
+          printf '%s  %s\n' "$ZIP_SHA" "$tmp/artifact.zip" | sha256sum -c --status
+          test "$(unzip -Z -1 "$tmp/artifact.zip")" = "release-intent-v5.json"
+          unzip -p "$tmp/artifact.zip" release-intent-v5.json > "$tmp/intent.json"
+          printf '%s  %s\n' "$JSON_SHA" "$tmp/intent.json" | sha256sum -c --status
+          python3 - "$tmp/intent.json" "$A" "$J" "$RELEASE_ID" <<'PY'
+          import json, sys
+          path, a, j, release_id = sys.argv[1:]
+          with open(path, encoding="utf-8") as stream:
+              payload = json.load(stream)
+          assert payload["schema_version"] == 2
+          assert payload["protocol_version"] == 5
+          assert payload["source_git_sha"] == a
+          assert payload["source_base_git_sha"] == j
+          assert payload["branch"] == "hotfix/prod-snap-meta-final"
+          assert payload["runtime_identity"]["release_id"] == release_id
+          assert payload["backend_runtime_source"]["file_count"] > 0
+          assert payload["release_control_source"]["file_count"] > 0
+          PY
+          git switch --detach "$P"
+          git switch -c "$B_BRANCH"
+          cp "$tmp/intent.json" release/release-intent-v5.json
+          git add -- release/release-intent-v5.json
+          test "$(git diff --cached --name-only)" = "release/release-intent-v5.json"
+          ! git diff --cached --quiet
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Release V5: exact approved WhatsApp intent-only B (A $A)"
+          git merge-base --is-ancestor "$A" HEAD
+          test "$(git diff --name-only "$P" HEAD)" = "release/release-intent-v5.json"
+          git diff --quiet "$A" HEAD -- . ':(exclude)release/release-intent-v5.json'
+          ! git diff --quiet "$A" HEAD -- release/release-intent-v5.json
+          test "$(git rev-parse "$P")" = "d4a623657fd3cb47c769095e5886b2f52dabaa3c"
+          authorization="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $authorization" \
+            push origin "HEAD:refs/heads/$B_BRANCH"
+          echo "Safe staged intent-only B sha: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production branch remained untouched. No deployment was attempted." >> "$GITHUB_STEP_SUMMARY"
