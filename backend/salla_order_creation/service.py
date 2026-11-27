@@ -17,6 +17,7 @@ from typing import Any, Awaitable, Callable
 
 from .payload import PendingOrder, build_pending_order_payload
 from .bank_receipt_review import bank_pending_payload
+from .bank_staff_review import BankReviewDenied, ensure_staff_bank_review
 
 PostSalla = Callable[..., Awaitable[dict[str, Any]]]
 _INTENT_RE = re.compile(r"^[a-zA-Z0-9_-]{8,100}$")
@@ -274,6 +275,9 @@ async def create_confirmed_salla_order(
             "replayed": True,
             "staff_review_required": prior.get("pricing_mode") == "salla_bank_review",
             "bank_credit_confirmed": False,
+            "needs_reconciliation": prior.get("state") in (
+                "created_bank_review_unqueued", "unknown",
+            ),
         }
 
     # One and only one POST. Never retry on network exception or ambiguous
@@ -346,6 +350,36 @@ async def create_confirmed_salla_order(
             "updated_at": datetime.now(timezone.utc),
         }},
     )
+    if pricing_mode == "salla_bank_review":
+        # Creating the Salla order does NOT book a received transfer.
+        # Queue a private staff case referencing the original Chatwoot image.
+        # If this local queue fails, never re-POST Salla: the original ID
+        # remains recorded and staff can reconcile the case separately.
+        try:
+            await ensure_staff_bank_review(
+                db, user_id=user_id, intent_id=intent_id,
+                salla_order_id=int(order_id),
+                reference_id=int(reference) if reference is not None else None,
+                receipt=bank_receipt, now=datetime.now(timezone.utc),
+            )
+        except Exception:
+            final_state = "created_bank_review_unqueued"
+            await db.salla_ai_order_intents.update_one(
+                {"_id": storage_id,
+                 "state": "created_bank_review_pending"},
+                {"$set": {
+                    "state": final_state,
+                    "updated_at": datetime.now(timezone.utc),
+                }},
+            )
+            return {
+                "state": final_state, "salla_order_id": int(order_id),
+                "reference_id": int(reference) if reference is not None else None,
+                "pricing_mode": pricing_mode, "replayed": False,
+                "amount_confirmed": False, "staff_review_required": True,
+                "bank_credit_confirmed": False,
+                "needs_reconciliation": True, "checkout_url": None,
+            }
     return {
         "state": final_state, "salla_order_id": int(order_id),
         "reference_id": int(reference) if reference is not None else None,
@@ -353,4 +387,5 @@ async def create_confirmed_salla_order(
         "replayed": False, "amount_confirmed": amount_confirmed,
         "staff_review_required": pricing_mode == "salla_bank_review",
         "bank_credit_confirmed": False,
+        "checkout_url": None if pricing_mode == "salla_bank_review" else None,
     }
