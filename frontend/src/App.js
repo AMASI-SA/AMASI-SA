@@ -157,6 +157,7 @@ function AppRoutes() {
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Layout><ProductsPage /></Layout></ProtectedRoute>} />
             <Route path="/bank-transfer-review" element={<ProtectedRoute><Layout><BankTransferReview /></Layout></ProtectedRoute>} />
+            <Route path="/assisted-bank-receipts" element={<ProtectedRoute><Layout><AssistedBankReceiptReview /></Layout></ProtectedRoute>} />
             <Route path="/settlement-engine" element={<ProtectedRoute><Layout><SettlementDashboard /></Layout></ProtectedRoute>} />
             <Route path="/product-preparation" element={<ProtectedRoute><Layout><ProductPreparation /></Layout></ProtectedRoute>} />
             <Route path="/image-catalog" element={<ProtectedRoute><Layout><ImageCatalog /></Layout></ProtectedRoute>} />
