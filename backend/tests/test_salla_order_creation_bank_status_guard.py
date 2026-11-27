@@ -370,3 +370,44 @@ def test_post_update_readback_never_reports_confirmed_when_bank_or_status_change
     assert result["status_post_performed"] is True
     assert result["bank_credit_confirmed"] is False
     assert [m for m,_ in operations].count("POST")==1
+
+
+
+def test_documented_nested_salla_paid_amount_zero_is_safely_supported():
+    # Salla 2026 orders detail can return paid_amount under
+    # payment_actions.remaining_action, as SAR money object.
+    current=order()
+    del current["paid_amount"]
+    current["payment_actions"]={
+        "remaining_action":{"paid_amount":{"amount":"0.00","currency":"SAR"}}
+    }
+    _,result,calls=run(source=current)
+    assert result["state"]=="confirmed_under_review"
+    assert result["status_post_performed"] is True
+    assert [method for method,_,_ in calls].count("POST")==1
+
+
+@pytest.mark.parametrize("changed", [
+    {},
+    {"payment_actions":{"remaining_action":{"paid_amount":{"amount":0,"currency":"USD"}}}},
+    {"payment_actions":{"remaining_action":{"paid_amount":{"amount":165,"currency":"SAR"}}}},
+    {"payment_actions":{"remaining_action":{"paid_amount":{"amount":None,"currency":"SAR"}}}},
+    {"payment_actions":{"remaining_action":{"paid_amount":False}}},
+    {"payment_status":"paid"},
+    {"payment":{"status":"refunded"}},
+])
+def test_unknown_or_nonzero_nested_provider_amount_cannot_trigger_status_write(changed):
+    current=order()
+    del current["paid_amount"]
+    current.update(changed)
+    with pytest.raises(BankStatusDenied):
+        run(source=current)
+
+
+def test_conflicting_explicit_top_and_nested_paid_amount_is_denied():
+    source=order()
+    source["payment_actions"]={
+        "remaining_action":{"paid_amount":{"amount":"1.00","currency":"SAR"}}
+    }
+    with pytest.raises(BankStatusDenied):
+        run(source=source)
