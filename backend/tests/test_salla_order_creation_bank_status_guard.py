@@ -112,6 +112,7 @@ def test_one_once_only_update_status_with_send_sms_disabled():
     assert [(m,p) for m,p,_ in calls]==[
         ("GET","/orders/90001"),
         ("GET","/orders/statuses"),
+        ("GET","/orders/90001"),  # last-moment prewrite guard
         ("POST","/orders/90001/status"),
         ("GET","/orders/90001"),
     ]
@@ -231,7 +232,7 @@ def test_unknown_post_result_is_quarantined():
         salla_order_id=90001,request=ambiguous,enabled=True,
     ))
     assert result["state"]=="status_update_needs_reconciliation"
-    assert calls==["GET","GET","POST"]
+    assert calls==["GET","GET","GET","POST"]
 
 
 
@@ -256,3 +257,76 @@ def test_real_merchant_status_snapshot_without_is_active_selects_only_payment_re
     assert exact_active_review_status(current) == 780246489
     assert exact_active_review_status(current) != 1539366206
     assert exact_active_pending_payment_status(current) == 1555791576
+
+
+
+@pytest.mark.parametrize("after", [
+    order(customized=OTHER_ID, slug="under_review"),
+    order(customized=REVIEW_ID, slug="under_review"),
+    order(customized=PENDING_ID, slug="payment_pending") | {"paid_amount":165},
+    order(customized=PENDING_ID, slug="payment_pending") | {"paid_amount":None},
+    order(customized=PENDING_ID, slug="payment_pending") | {"payment_method":"mada"},
+])
+def test_race_at_last_status_read_never_reverts_advanced_or_paid_order(after):
+    db=DB()
+    operations=[]
+    get_count=0
+    async def request(db_arg,owner,method,path,**kwargs):
+        nonlocal get_count
+        operations.append((method,path))
+        if method=="GET" and path=="/orders/statuses":
+            return {"success":True,"data":statuses()}
+        if method=="GET" and path=="/orders/90001":
+            get_count+=1
+            return {
+                "success":True,
+                "data":order() if get_count == 1 else after,
+            }
+        if method=="POST":
+            raise AssertionError("must never move an advanced order backwards")
+        raise AssertionError("unrecognized synthetic operation")
+    result=asyncio.run(ensure_bank_review_custom_status(
+        db,user_id="owner",intent_id="intent-0001",
+        salla_order_id=90001,request=request,enabled=True,
+    ))
+    assert result["state"]=="status_prewrite_order_changed"
+    assert result["status_post_performed"] is False
+    assert result["bank_credit_confirmed"] is False
+    assert operations==[
+        ("GET","/orders/90001"),
+        ("GET","/orders/statuses"),
+        ("GET","/orders/90001"),
+    ]
+
+
+def test_prewrite_timeout_is_quarantined_without_status_post_or_blind_retry():
+    db=DB()
+    operations=[]
+    get_count=0
+    async def request(db_arg,owner,method,path,**kwargs):
+        nonlocal get_count
+        operations.append((method,path))
+        if method=="GET" and path=="/orders/statuses":
+            return {"success":True,"data":statuses()}
+        if method=="GET" and path=="/orders/90001":
+            get_count+=1
+            if get_count == 1:
+                return {"success":True,"data":order()}
+            raise TimeoutError("synthetic Salla status read uncertain")
+        if method=="POST":
+            raise AssertionError("no unverified status write")
+        raise AssertionError("unexpected call")
+    first=asyncio.run(ensure_bank_review_custom_status(
+        db,user_id="owner",intent_id="intent-0001",
+        salla_order_id=90001,request=request,enabled=True,
+    ))
+    assert first["state"]=="status_prewrite_read_unavailable"
+    assert first["status_post_performed"] is False
+    assert first["bank_credit_confirmed"] is False
+    second=asyncio.run(ensure_bank_review_custom_status(
+        db,user_id="owner",intent_id="intent-0001",
+        salla_order_id=90001,request=request,enabled=True,
+    ))
+    assert second["state"]=="status_update_previously_attempted"
+    assert second["status_post_performed"] is False
+    assert all(m!="POST" for m,_ in operations)
