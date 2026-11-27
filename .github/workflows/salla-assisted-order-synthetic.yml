@@ -5,6 +5,10 @@ on:
     paths:
       - 'backend/salla_order_creation/**'
       - 'backend/tests/test_salla_order_creation_*.py'
+      - 'frontend/src/pages/WhatsAppBankReview.jsx'
+      - 'frontend/src/pages/WhatsAppBankReview.test.js'
+      - 'frontend/src/App.js'
+      - 'frontend/src/components/Sidebar.jsx'
       - '.github/workflows/salla-assisted-order-synthetic.yml'
   workflow_dispatch:
 
@@ -27,3 +31,23 @@ jobs:
         run: python -m compileall -q backend/salla_order_creation backend/server.py
       - name: Run no-network synthetic test suite
         run: PYTHONPATH=backend python -m pytest --noconftest backend/tests/test_salla_order_creation_payload.py backend/tests/test_salla_order_creation_service.py backend/tests/test_salla_order_creation_signature.py backend/tests/test_salla_order_creation_readers.py backend/tests/test_salla_order_creation_confirmation.py backend/tests/test_salla_order_creation_customer_identity.py backend/tests/test_salla_order_creation_catalog_validation.py backend/tests/test_salla_order_creation_http_limits.py backend/tests/test_salla_order_creation_shipping_selection.py backend/tests/test_salla_order_creation_quote_preview.py backend/tests/test_salla_order_creation_personalization.py backend/tests/test_salla_order_creation_checkout_readback.py backend/tests/test_salla_order_creation_intent_writer.py backend/tests/test_salla_order_creation_reference_reconciliation.py backend/tests/test_salla_order_creation_prepare_action.py backend/tests/test_salla_order_creation_retention.py backend/tests/test_salla_order_creation_private_fields.py backend/tests/test_salla_order_creation_private_field_action.py backend/tests/test_salla_order_creation_private_order_builder.py backend/tests/test_salla_order_creation_private_vault_action.py backend/tests/test_salla_order_creation_quote_cipher.py backend/tests/test_salla_order_creation_bank_receipt_review.py backend/tests/test_salla_order_creation_bank_source.py backend/tests/test_salla_order_creation_bank_receipt_stage.py backend/tests/test_salla_order_creation_bank_quote.py backend/tests/test_salla_order_creation_bank_staff_review.py backend/tests/test_salla_order_creation_bank_staff_worklist.py backend/tests/test_salla_order_creation_bank_receipt_action.py backend/tests/test_salla_order_creation_bank_review_readback.py backend/tests/test_salla_order_creation_bank_status_guard.py -q
+
+
+      - name: Verify read-only bank staff review UI without dependencies
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const page = fs.readFileSync('frontend/src/pages/WhatsAppBankReview.jsx','utf8');
+          const app = fs.readFileSync('frontend/src/App.js','utf8');
+          const nav = fs.readFileSync('frontend/src/components/Sidebar.jsx','utf8');
+          function demand(condition, reason) {
+            if (!condition) throw new Error(reason);
+          }
+          demand(page.includes('api.get(BASE + "/worklist"'),'missing bank worklist GET');
+          demand(page.includes('api.get(BASE + "/" + encodeURIComponent(selected.intent_id))'),'missing read-only detail GET');
+          demand(!/api\.(post|put|patch|delete)\s*\(/i.test(page),'bank UI must never have write APIs');
+          demand(nav.includes('requiredPermission: "bank_receipts.view"'),'missing restricted staff menu');
+          demand(app.includes('path="/whatsapp-bank-review"'),'missing isolated route');
+          demand(!page.includes('/bank-transfer-review/confirm'),'legacy GL-writing route prohibited');
+          console.log('BANK_REVIEW_UI_READ_ONLY_STATIC: PASS');
+          NODE
