@@ -9,6 +9,9 @@ on:
       - 'frontend/src/pages/WhatsAppBankReview.test.js'
       - 'frontend/src/App.js'
       - 'frontend/src/components/Sidebar.jsx'
+      - 'frontend/src/components/Layout.jsx'
+      - 'frontend/src/components/MezanV2NavigationShell.jsx'
+      - 'frontend/src/components/MezanV2NavigationShell.test.jsx'
       - '.github/workflows/salla-assisted-order-synthetic.yml'
   workflow_dispatch:
 
@@ -40,6 +43,8 @@ jobs:
           const page = fs.readFileSync('frontend/src/pages/WhatsAppBankReview.jsx','utf8');
           const app = fs.readFileSync('frontend/src/App.js','utf8');
           const nav = fs.readFileSync('frontend/src/components/Sidebar.jsx','utf8');
+          const v2 = fs.readFileSync('frontend/src/components/MezanV2NavigationShell.jsx','utf8');
+          const layout = fs.readFileSync('frontend/src/components/Layout.jsx','utf8');
           function demand(condition, reason) {
             if (!condition) throw new Error(reason);
           }
@@ -48,6 +53,8 @@ jobs:
           demand(!/api\.(post|put|patch|delete)\s*\(/i.test(page),'bank UI must never have write APIs');
           demand(nav.includes('requiredPermission: "bank_receipts.view"'),'missing restricted staff menu');
           demand(app.includes('path="/whatsapp-bank-review"'),'missing isolated route');
+          demand(v2.includes('requiredPermission: "bank_receipts.view"'),'Mezan2 bank nav must carry explicit permission');
+          demand(layout.includes('bankReviewAllowed={user?.is_owner'),'Mezan2 nav must read authenticated permission');
           demand(!page.includes('/bank-transfer-review/confirm'),'legacy GL-writing route prohibited');
           console.log('BANK_REVIEW_UI_READ_ONLY_STATIC: PASS');
           NODE
