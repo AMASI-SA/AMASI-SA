@@ -52,6 +52,7 @@ async def stage_bank_receipt(
     reference_secret: bytes,
     bank_reader: Callable[..., Awaitable[dict]] = read_active_salla_payment_bank,
     enabled: bool = False,
+    source_kind: str = "image",
     now: datetime | None = None,
 ) -> dict:
     """Store first plausible receipt once, no Salla POST and never mark paid."""
@@ -59,8 +60,12 @@ async def stage_bank_receipt(
         raise BankReceiptStageDenied("bank_receipt_review_disabled")
     if (not user_id or not all(type(x) is int and x > 0 for x in (
             account_id, inbox_id, conversation_id, contact_id, message_id,
-            attachment_id, selected_bank_id,
-        )) or not isinstance(source_id_sha256, str)
+            selected_bank_id,
+        )) or source_kind not in ("image", "file", "text")
+            or type(attachment_id) is not int
+            or (source_kind == "text" and attachment_id != 0)
+            or (source_kind != "text" and attachment_id <= 0)
+            or not isinstance(source_id_sha256, str)
             or len(source_id_sha256) != 64
             or any(c not in "0123456789abcdef" for c in source_id_sha256)):
         raise BankReceiptStageDenied("canonical_customer_image_source_required")
@@ -100,6 +105,7 @@ async def stage_bank_receipt(
         "conversation_id": str(conversation_id),
         "source_contact_id": contact_id, "source_message_id": message_id,
         "source_attachment_id": attachment_id,
+        "source_kind": source_kind,
         "source_id_sha256": source_id_sha256,
         "bank_id": selected_bank_id,
         "reference_fingerprint": reference_hash,
@@ -108,7 +114,7 @@ async def stage_bank_receipt(
     record = {
         "_id": key, **core,
         "state": "appearance_plausible",
-        "source": "chatwoot_verified_image_bank_receipt_v1",
+        "source": "chatwoot_verified_" + source_kind + "_bank_receipt_v1",
         "credit_received": False, "staff_review_required": True,
         "created_at": moment, "expires_at": moment + timedelta(hours=2),
         "purge_after": moment + RECEIPT_EVIDENCE_AGE,
