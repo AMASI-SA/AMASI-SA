@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .bank_receipt_review import ReceiptVisibleFields
 from .signature import ID, DIGEST, SignatureDenied, verify_signed_json
@@ -26,10 +26,22 @@ class SignedBankReceiptStage(BaseModel):
     intent_id: str = Field(pattern=ID)
     source_contact_id: int = Field(gt=0)
     source_message_id: int = Field(gt=0)
-    source_attachment_id: int = Field(gt=0)
+    source_attachment_id: int = Field(ge=0)
+    source_kind: Literal["image", "file", "text"] = "image"
     source_id_sha256: str = Field(pattern=DIGEST)
     selected_bank_id: int = Field(gt=0)
     visible: ReceiptVisibleFields
+
+    @model_validator(mode="after")
+    def require_canonical_attachment(self):
+        # Customer TEXT has no attachment. An uploaded image/PDF/document
+        # always has the exact original Chatwoot attachment ID. Reject
+        # accidental or adversarial source-kind/attachment substitution.
+        if ((self.source_kind == "text" and self.source_attachment_id != 0)
+                or (self.source_kind != "text" and
+                    self.source_attachment_id <= 0)):
+            raise ValueError("bank_receipt_source_kind_attachment_mismatch")
+        return self
 
 
 def verify_bank_receipt_action(
