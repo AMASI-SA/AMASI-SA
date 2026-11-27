@@ -141,6 +141,10 @@ def make_assisted_salla_order_router(
             raise HTTPException(status_code=401,detail={"code":exc.args[0]}) from exc
         if (action.account_id!=int(account) or action.inbox_id!=int(inbox)):
             raise HTTPException(status_code=403,detail={"code":"outside_approved_inbox"})
+        if action.accepted_methods == ["bank"] and (
+            os.environ.get("MEZAN_ASSISTED_SALLA_BANK_RECEIPT_REVIEW_ENABLED","0") != "1"
+        ):
+            raise HTTPException(status_code=503,detail={"code":"bank_review_disabled"})
         try:
             await require_assisted_quote_ttl(db)
             await require_private_fields_ttl(db)
@@ -157,6 +161,7 @@ def make_assisted_salla_order_router(
                 products=[p.model_dump(exclude_none=True) for p in action.products],
                 accepted_methods=list(action.accepted_methods),
                 branch_id=action.branch_id,
+                bank_review_ref=action.bank_review_ref,
                 enabled=True,
             )
         except (RetentionNotReady,PrivateOrderFieldDenied,PrivateOrderAssemblyDenied,
