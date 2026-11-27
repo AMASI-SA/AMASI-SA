@@ -1412,7 +1412,7 @@ async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[st
             query,
             {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "display_name": 1},
         ),
-        100,
+        200,
     )
     return [
         str(row.get("ad_account_id") or row.get("external_account_id"))
@@ -1441,6 +1441,63 @@ async def _provider_rows(
     if provider == "snapchat":
         query["entity_type"] = "ad_account"
     return await _to_list(db[collections[provider]].find(query, {"_id": 0}), 100000)
+
+
+async def _tiktok_reporting_coverage(
+    db: Any, user_id: str, start: str, end: str, rows: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Report partial TikTok advertiser coverage, never silently turn gaps into zero."""
+    account_ids = await _selected_account_ids(db, user_id, "tiktok")
+    unique_ids = set(account_ids)
+    num_days = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
+    observed_pairs: set[tuple[str, str]] = set()
+    invalid_pairs: set[tuple[str, str]] = set()
+    duplicate_pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        account = str(row.get("ad_account_id") or "")
+        report_day = str(row.get("date") or "")
+        if account not in unique_ids or not start <= report_day <= end:
+            continue
+        pair = (account, report_day)
+        if pair in observed_pairs or pair in invalid_pairs:
+            duplicate_pairs.add(pair)
+        proof = row.get("source_close_proof") or {}
+        has_source = (
+            row.get("spend_native") is not None
+            and row.get("spend_sar") is not None
+            and bool(row.get("currency_native"))
+            and bool(row.get("account_timezone"))
+            and (
+                row.get("spend_native") != 0
+                or proof.get("zero_confirmed") is True
+            )
+        )
+        if has_source:
+            observed_pairs.add(pair)
+        else:
+            invalid_pairs.add(pair)
+    expected = len(unique_ids) * num_days
+    valid_pairs = observed_pairs - invalid_pairs - duplicate_pairs
+    covered_accounts = {key[0] for key in valid_pairs}
+    missing_accounts = sorted(unique_ids - covered_accounts)
+    covered = len(valid_pairs)
+    complete = (
+        len(unique_ids) == len(account_ids)
+        and covered == expected
+        and not invalid_pairs
+        and not duplicate_pairs
+    )
+    return {
+        "accounts_expected": len(unique_ids),
+        "accounts_with_facts": len(covered_accounts),
+        "expected_account_days": expected,
+        "covered_account_days": covered,
+        "missing_account_days": max(0, expected - covered),
+        "missing_account_ids": missing_accounts[:20],
+        "duplicate_account_days": len(duplicate_pairs),
+        "coverage_complete": complete,
+        "data_state": "complete" if complete else "incomplete",
+    }
 
 
 def _aggregate_provider_rows(rows: list[dict[str, Any]], start: str, end: str) -> dict[str, Any]:
@@ -1589,6 +1646,9 @@ async def build_mezan_v2_ads(
         for provider in ("meta", "tiktok")
     }
     raw_platform_rows["snapchat"] = []
+    tiktok_coverage = await _tiktok_reporting_coverage(
+        db, user_id, start, end, raw_platform_rows["tiktok"]
+    )
     account_costs = await apply_mezan_v2_ad_account_costs(
         db,
         user_id,
@@ -1699,6 +1759,7 @@ async def build_mezan_v2_ads(
         if provider != "snapchat"
     }
     provider_metrics["google"] = {"spend": google["total_sar"], **google_quality}
+    provider_metrics["tiktok"].update(tiktok_coverage)
     if amount_available:
         provider_metrics["snapchat"] = _aggregate_provider_rows(
             platform_rows["snapchat"], start, end
@@ -1739,7 +1800,10 @@ async def build_mezan_v2_ads(
         if provider not in {"snapchat", "google_transitional"} and value is not None
     ), 2)
     overall_available = amount_available and google_quality["amount_available"]
-    overall_complete = amount_complete and google_quality["amount_complete"]
+    overall_complete = (
+        amount_complete and google_quality["amount_complete"]
+        and tiktok_coverage["coverage_complete"]
+    )
     overall_provisional = (
         overall_available and not overall_complete
         and (provisional_amount or google_quality["provisional"])
@@ -1769,6 +1833,7 @@ async def build_mezan_v2_ads(
             "known_subtotal_sar": known_subtotal,
             "snapchat": snap_quality,
             "google": google_quality,
+            "tiktok": tiktok_coverage,
         },
         "bank_commissions": bank_commissions,
         "source_contract": {
