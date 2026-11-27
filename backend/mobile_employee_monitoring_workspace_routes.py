@@ -114,6 +114,13 @@ def make_mobile_employee_monitoring_workspace_router(
         result = await progress_count(db, user_id=owner_id, employee_id=account_id)
         return {**result, "target_employee_id": employee_id}
 
+    @router.get("/preparation/{employee_id}/progress-card-counts")
+    async def employee_progress_card_counts(employee_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id, account_id = await progress_target(employee_id, user)
+        from preparation_stage_card_counts import progress_stage_card_counts
+        result = await progress_stage_card_counts(db, user_id=owner_id, employee_id=account_id)
+        return {**result, "target_employee_id": employee_id}
+
     @router.get("/preparation/{employee_id}/progress-day-counts")
     async def employee_progress_day_counts(
         employee_id: str,

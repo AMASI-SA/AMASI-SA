@@ -765,7 +765,7 @@ async def test_employee_workspace_queries_only_pieces_assigned_to_that_employee(
     pieces_query = collection.find.call_args_list[0].args[0]
     assert pieces_query["user_id"] == "merchant-1"
     assert pieces_query["responsible_employee_id"] == "employee-1"
-    assert pieces_query["experiment_archived_at"] is None
+    assert pieces_query["experiment_archived_at"] == {"$in": [None, ""]}
     assert result["employee_id"] == "employee-1"
     assert result["files"] == []
 

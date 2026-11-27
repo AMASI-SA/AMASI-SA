@@ -9,7 +9,7 @@ from fastapi import HTTPException
 BASE = "/operational-balances"
 API = "/api" + BASE
 ASSETS = frozenset({"bank", "cash", "provider", "pos_receivable", "ad_account"})
-PROVIDERS = frozenset({"tabby", "tamara", "salla"})
+PROVIDERS = frozenset({"tabby", "tamara", "salla", "emkan", "paypal"})
 WRITE_ENTRY = "تسجيل الحركات الممنوحة على الحسابات والجهات المحددة"
 
 

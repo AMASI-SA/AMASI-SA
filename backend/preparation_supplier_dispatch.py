@@ -1273,7 +1273,8 @@ async def _employee_workspace(
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
-            "experiment_archived_at": None,
+            # Read parity with count-only progress: blank is not an archive date.
+            "experiment_archived_at": {"$in": [None, ""]},
             "status": {"$ne": PIECE_STATUS_CANCELLED},
             **({"batch_id": {"$in": batch_ids}} if batch_ids is not None else {}),
             **({"piece_id": {"$in": piece_ids}} if piece_ids is not None else {}),
@@ -1885,6 +1886,14 @@ def make_preparation_supplier_dispatch_router(
         await ensure_indexes_once()
         from preparation_progress_counts import progress_count
         return await progress_count(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
+
+    @router.get("/progress-card-counts")
+    async def current_progress_card_counts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_stage_card_counts import progress_stage_card_counts
+        return await progress_stage_card_counts(db, user_id=_merchant_user_id(worker),
+                                                employee_id=_actor_id(worker))
 
     @router.get("/progress-day-counts")
     async def current_progress_day_counts(
