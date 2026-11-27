@@ -61,7 +61,7 @@ test.each(['stocktake','adjustments','movements'])('native accounting inventory 
     expect(permitted(native,'/inventory-v2?tab=opening')).toBeUndefined();
 });
 
-test.each(['tabby','tamara','salla'])('a supported %s statement filter retains the same assigned page and read/write mode',provider=>{
+test.each(['tabby','tamara','salla','emkan'])('a supported %s statement filter retains the same assigned page and read/write mode',provider=>{
     for(const mode of ['read','write']) {
         const grant=selected('balances.statements',balances+'/provider-statements',{mode});
         for(const hash of ['','#history','#upload']) {
@@ -81,7 +81,7 @@ test('a statement provider filter preserves the exact reviewed alias and fragmen
 });
 
 test.each([
-    'provider=', 'provider=paypal', 'provider=emkan', 'provider=TABBY', 'provider=__proto__',
+    'provider=', 'provider=paypal', 'provider=TABBY', 'provider=__proto__',
     'provider=tabby&provider=tabby', 'provider=tabby&provider=tamara',
     ...['workspace','view','stage','tab','section','action','page','kind','id'].map(key=>'provider=tabby&'+key+'=other'),
 ])('statement filters reject unsupported, ambiguous or extra selectors: %s',query=>{
