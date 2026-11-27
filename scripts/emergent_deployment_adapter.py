@@ -584,8 +584,52 @@ def _tracked_intent_at(commit: str) -> dict[str, Any]:
     return payload
 
 
+_APPROVED_TEST_ONLY_ORACLE_STAGING = {
+    # Exactly one independently reviewed, 10/10 CI-green Oracle repair merge.
+    # This does NOT allow arbitrary backend/test staging or replace prior J.
+    "54a655ac88c1f67c280728cc723eddd069ac1741": (
+        "19ea1404010b9c5e5135e5dbb4b40657157ff2b1",  # prior valid intent B (J)
+        "dc97f36a4e257f420eed0ec6db0a7474cd3a974b",  # approved Oracle PR #2180
+        "95b643f6494fdcef052a36147d94e04e45d60a48",  # same reviewed Git tree
+        (
+            "backend/tests/dashboard_runtime_fee_contract.py",
+            "backend/tests/test_dashboard_runtime_fee_contract.py",
+        ),
+    ),
+}
+
+
+def _is_immutable_reviewed_oracle_staging(candidate: str, extra: list[str]) -> bool:
+    """Allow ONLY the pinned, content-addressed, test-only #2180 source merge.
+
+    Verify both parents, exact tree, changed paths and unchanged previous
+    release intent. The historical J remains an independently valid A/B pair.
+    No new approval can be inferred from path names alone.
+    """
+    record = _APPROVED_TEST_ONLY_ORACLE_STAGING.get(candidate)
+    if record is None:
+        return False
+    prior_j, oracle_source, reviewed_tree, reviewed_paths = record
+    if tuple(extra) != reviewed_paths:
+        return False
+    if _run_git_text("rev-list", "--parents", "-n", "1", candidate).split() != [
+        candidate, prior_j, oracle_source
+    ]:
+        return False
+    if (
+        _run_git_text("rev-parse", f"{candidate}^{{tree}}") != reviewed_tree
+        or _run_git_text("rev-parse", f"{oracle_source}^{{tree}}") != reviewed_tree
+        or tuple(_git_changed_paths(prior_j, candidate)) != reviewed_paths
+    ):
+        return False
+    intent_path = "release/release-intent-v5.json"
+    return _run_git_bytes("show", f"{candidate}:{intent_path}") == _run_git_bytes(
+        "show", f"{prior_j}:{intent_path}"
+    )
+
+
 def resolve_candidate_source_base(production_head: str, source_git_sha: str) -> str:
-    """Resolve the prior exact A/B pair across documentation-only staging.
+    """Resolve exact prior A/B intent across docs or one immutable reviewed staging.
 
     This selects J; it does not trust or materialize an intent. The workflow
     still validates J with its own adapter and all existing A/B checks remain.
@@ -604,6 +648,8 @@ def resolve_candidate_source_base(production_head: str, source_git_sha: str) -> 
             _assert_candidate_source_transition(source_git_sha=source, source_base_git_sha=candidate)
             return candidate
         extra = [path for path in paths if path != intent_path]
+        if _is_immutable_reviewed_oracle_staging(candidate, extra):
+            continue
         if not extra or any(path != "AGENTS.md" and not path.startswith("docs/") for path in extra):
             raise DeploymentAdapterError("production base contains unreviewed non-documentation changes")
         if _run_git_bytes("show", f"{candidate}:{intent_path}") != _run_git_bytes("show", f"{head}:{intent_path}"):
