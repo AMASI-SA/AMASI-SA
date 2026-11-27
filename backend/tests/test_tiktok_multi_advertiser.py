@@ -501,3 +501,41 @@ async def test_tiktok_report_timeout_is_isolated_to_one_advertiser():
             Client(), "token", {"ad_account_id": "100"},
             datetime(2026, 11, 27, tzinfo=timezone.utc).date())
     assert exc.value.code == "tiktok_reporting_request_unavailable"
+
+
+def test_operational_wallet_first_funding_binding_is_visible_read_only():
+    from operational_ad_funding import party_id, bindings
+    from operational_tiktok_reporting import build_tiktok_reported_account_rows
+
+    key = party_id("owner", "integration-1")
+    state = {
+        "owner_id": "owner",
+        "ad_funding": {
+            key: {
+                "mode": "wallet_first",
+                "integration_account_id": "integration-1",
+                "platform_account_id": "100",
+                "platform": "tiktok",
+                "currency": "USD",
+                "timezone": "Asia/Riyadh",
+                "confirmed_by": "owner",
+                "confirmed_at": "2026-11-01T08:00:00+03:00",
+            },
+        },
+    }
+    financial_bindings, conflicts = bindings(state, "owner", [])
+    assert conflicts == []
+    assert financial_bindings[0]["funding_mode"] == "hybrid"
+    account = {
+        "ad_account_id": "100",
+        "external_account_id": "100",
+        "mezan_integration_account_id": "integration-1",
+        "display_name": "TikTok primary",
+        "currency": "USD",
+    }
+    summary = build_tiktok_reported_account_rows(
+        [account], [], financial_bindings, "2026-11-27", "2026-11-27"
+    )
+    assert summary["items"][0]["binding_state"] == "approved"
+    assert summary["total_source_spend_sar"] is None
+    assert summary["posted_to_operational_balances"] is False
