@@ -49,6 +49,8 @@ jobs:
           yarn --cwd frontend install --frozen-lockfile --non-interactive
       - name: Reproducible A/B production build of merged source
         run: >-
+          env -u GITHUB_ACTIONS -u GITHUB_SHA -u GITHUB_WORKSPACE
+          -u GITHUB_EVENT_NAME -u GITHUB_EVENT_PATH
           MEZAN_RELEASE_BOOTSTRAP_INTENT=1
           python scripts/frontend_release_toolchain.py exec --
           yarn --cwd frontend build:release
