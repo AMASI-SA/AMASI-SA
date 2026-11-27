@@ -92,6 +92,22 @@ def quote_pricing_mode(quote: dict | None) -> str | None:
         # The final amount must be read back from the same Salla order in
         # Mezan before any customer checkout link is released.
         return "salla_post_create"
+    if (quote.get("source") == "mezan_verified_bank_review_intent_v1"
+            and quote.get("state") == "authorized_for_bank_review_creation"
+            and quote.get("post_create_salla_total") is True
+            and quote.get("bank_review_required") is True
+            and quote.get("payment_claim_confirmed") is False
+            and quote.get("online_only") is False
+            and quote.get("pricing_verified") is False
+            and quote.get("shipping_price_verified") is False
+            and quote.get("total_sar") is None
+            and all(quote.get(k) is True for k in (
+                "products_verified", "carrier_eligibility_verified",
+                "payment_methods_verified",
+            ))):
+        # Receipt appearance may be preliminarily checked, but bank receipt
+        # CANNOT authorize paid status or GL. Only human bank reconciliation.
+        return "salla_bank_review"
     return None
 
 
@@ -182,6 +198,9 @@ async def create_confirmed_salla_order(
                 {"mada", "credit_card"}
             )):
         raise CreationDenied("post_create_pricing_requires_online_payment", 409)
+    if (pricing_mode == "salla_bank_review"
+            and order.accepted_methods != ["bank"]):
+        raise CreationDenied("bank_review_requires_bank_only", 409)
 
     confirmation = await db.salla_ai_order_confirmations.find_one(
         {"user_id": user_id, "intent_id": intent_id}
