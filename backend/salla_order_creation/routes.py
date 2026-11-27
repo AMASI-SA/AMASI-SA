@@ -31,6 +31,8 @@ from .private_order_builder import PrivateOrderAssemblyDenied, prepare_from_priv
 from .quote_cipher import EncryptedOrderUnavailable, decrypt_order_payload
 from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
+from .bank_receipt_action import verify_bank_receipt_action
+from .bank_receipt_stage import stage_bank_receipt, BankReceiptStageDenied
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
@@ -60,6 +62,57 @@ def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    @router.post("/signed-bank-receipt")
+    async def signed_bank_receipt(request: Request) -> dict:
+        """Stage only an apparent bank receipt, never mark order paid.
+
+        The original image stays in protected Chatwoot. This route accepts
+        canonical image/message metadata and limited preliminary vision
+        fields from the separate trusted native bot service. It compares
+        against a current active Salla customer-transfer bank.
+        """
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_RECEIPT_ENABLED", "0") != "1":
+            raise HTTPException(status_code=503,detail={"code":"bank_receipt_disabled"})
+        owner_id=str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        secret=str(os.environ.get("MEZAN_ASSISTED_SALLA_BANK_RECEIPT_HMAC_SECRET") or "").encode()
+        reference_secret=str(
+            os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REFERENCE_HMAC_SECRET") or ""
+        ).encode()
+        account=str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
+        inbox=str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
+        if (not owner_id or len(secret)<32 or len(reference_secret)<32
+                or not account.isdigit() or not inbox.isdigit()):
+            raise HTTPException(status_code=503,detail={"code":"bank_receipt_scope_not_configured"})
+        try:
+            raw=await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(status_code=413,detail={"code":exc.args[0]}) from exc
+        try:
+            action=verify_bank_receipt_action(
+                raw,request.headers.get("x-mezan-action-timestamp",""),
+                request.headers.get("x-mezan-action-delivery",""),
+                request.headers.get("x-mezan-action-signature",""),secret,
+            )
+        except SignatureDenied as exc:
+            raise HTTPException(status_code=401,detail={"code":exc.args[0]}) from exc
+        if (action.account_id!=int(account) or action.inbox_id!=int(inbox)):
+            raise HTTPException(status_code=403,detail={"code":"outside_approved_inbox"})
+        try:
+            return await stage_bank_receipt(
+                db,user_id=owner_id,intent_id=action.intent_id,
+                account_id=action.account_id,inbox_id=action.inbox_id,
+                conversation_id=action.conversation_id,
+                contact_id=action.source_contact_id,
+                message_id=action.source_message_id,
+                attachment_id=action.source_attachment_id,
+                source_id_sha256=action.source_id_sha256,
+                selected_bank_id=action.selected_bank_id,
+                visible=action.visible,reference_secret=reference_secret,
+                enabled=True,
+            )
+        except BankReceiptStageDenied as exc:
+            raise HTTPException(status_code=409,detail={"code":str(exc)}) from exc
 
     @router.post("/signed-private-field")
     async def signed_private_field(request: Request) -> dict:
