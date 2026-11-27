@@ -280,6 +280,21 @@ async def _fetch_day(
     )
     data = _provider_data(response, "tiktok_integrated_report")
     rows = data.get("list") or []
+    if not isinstance(rows, list) or len(rows) > 1:
+        raise TikTokReportingError(
+            "tiktok_reporting_unexpected_advertiser_rows",
+            "TikTok returned an unexpected number of advertiser rows.",
+            status_code=502,
+        )
+    if rows:
+        item = rows[0]
+        dimensions = item.get("dimensions") if isinstance(item, dict) else None
+        if not isinstance(dimensions, dict) or str(dimensions.get("advertiser_id") or "") != account_id:
+            raise TikTokReportingError(
+                "tiktok_reporting_advertiser_mismatch",
+                "TikTok report advertiser did not match the requested account.",
+                status_code=502,
+            )
     metrics = (rows[0] or {}).get("metrics") if rows else {}
     metrics = metrics if isinstance(metrics, dict) else {}
     return {
