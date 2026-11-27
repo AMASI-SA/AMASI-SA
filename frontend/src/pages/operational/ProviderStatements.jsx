@@ -85,7 +85,7 @@ function Frame({ children, providerId }) {
     const pages = managedWebPages(useOptionalAuth()?.user);
     return <main className="op-page op-statements mz-finance-tool" dir="rtl" data-testid="provider-statements-page">
         <OperationalToolBack/><header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع{providerNames[providerId] ? ` · ${providerNames[providerId]}` : ""}</h1>
-            <p>ارفع كشف تابي أو تمارا أو سلة. نتعرف على المنصة تلقائيًا ونطابق عمليات الكشف مع سجلات الدفع والرد المحفوظة.</p>
+            <p>ارفع كشف تابي أو تمارا أو سلة أو إمكان. نتعرف على المنصة تلقائيًا ونطابق عمليات الكشف مع سجلات الدفع والرد المحفوظة.</p>
             {grantedWebLink(pages, "/operational-balances/financial-position?view=providers") && <a className="op-statement-link" href="/operational-balances/financial-position?view=providers">عرض أرصدة منصات الدفع</a>}
         </header>{children}
     </main>;
@@ -104,7 +104,7 @@ export default function ProviderStatements({ providerId: selectedProvider } = {}
     if (!user || (!owner && !grant)) return <Frame providerId={providerId}><p role="alert" className="op-error">تحتاج صلاحية كشوف منصات الدفع لعرض هذه الصفحة.</p></Frame>;
     if (!supported) return <Frame providerId={providerId}><section className="op-statement-upload" role="status">
         <h2>{providerNames[providerId] ? `كشوف ${providerNames[providerId]}` : "منصة غير معروفة"}</h2>
-        <p>الاستيراد الآلي المتاح هنا لكشوف تابي وتمارا وسلة فقط. لا يوجد مستورد معتمد لهذه المنصة في هذه الصفحة.</p>
+        <p>الاستيراد المتاح لكشوف تابي وتمارا وسلة وإمكان (إمكان للمراجعة فقط). لا يوجد مستورد معتمد لهذه المنصة في هذه الصفحة.</p>
         <a className="op-statement-link" href={statementPath()}>عرض الكشوف المدعومة</a>
     </section></Frame>;
     return <Frame providerId={providerId}><StatementWorkspace key={JSON.stringify([identity, providerId])} providerId={providerId} writable={owner || grant?.mode === "write"} /></Frame>;
@@ -292,7 +292,7 @@ function StatementWorkspace({ writable, providerId }) {
         setFile(null); setError(""); setNotice(""); setSelectedSavedId("");
         currentDetail.current = null; setDetail(null); clearSelection();
         if (!selected) return;
-        if (!/\.xlsx$/i.test(selected.name)) { setError("اختر ملف Excel أصليًا بصيغة .xlsx من تابي أو تمارا أو سلة."); return; }
+        if (!/\.xlsx$/i.test(selected.name)) { setError("اختر ملف Excel أصليًا بصيغة .xlsx من تابي أو تمارا أو سلة أو إمكان."); return; }
         if (!selected.size || selected.size > MAX_STATEMENT_FILE_BYTES) { setError("اختر ملفًا غير فارغ لا يتجاوز 10 ميجابايت."); return; }
         setFile(selected);
     }
@@ -374,7 +374,7 @@ function StatementWorkspace({ writable, providerId }) {
                     disabled={(Boolean(busy) && busy !== "saved_read") || Boolean(pending) || !readable}>
                     {savedFilesOpen ? "إغلاق قائمة الكشوف السابقة" : "استخدام كشف مرفوع سابقًا"}</button>}
                 {savedFilesOpen && <section className="op-statement-saved" aria-label="الكشوف المرفوعة سابقًا">
-                    <h2>الكشوف المرفوعة سابقًا</h2><p>اختر ملفًا أصليًا محفوظًا من تابي أو تمارا أو سلة، ثم استخدمه لمطابقة العمليات والرسوم داخل الأرصدة التشغيلية.</p>
+                    <h2>الكشوف المرفوعة سابقًا</h2><p>اختر ملفًا أصليًا محفوظًا من تابي أو تمارا أو سلة أو إمكان، ثم استخدمه لمطابقة العمليات والرسوم داخل الأرصدة التشغيلية.</p>
                     <button type="button" onClick={() => read("saved")} disabled={Boolean(busy) || !readable}>إعادة قراءة قائمة الكشوف السابقة</button>
                     {!savedFiles ? <p className="op-muted">{busy === "saved_read" ? "جارٍ قراءة بيانات الملفات المحفوظة…" : "لم تتوفر قائمة ملفات للعرض؛ أعد قراءتها عند الحاجة."}</p>
                         : <form onSubmit={useSavedFile} data-testid="provider-saved-file-use">
