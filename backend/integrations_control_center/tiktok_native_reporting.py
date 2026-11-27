@@ -394,6 +394,14 @@ async def run_tiktok_reporting_sync(
                         if fx_rate is not None
                         else None
                     )
+                    source_proof = close_proof(
+                        account_id=account["ad_account_id"],
+                        business_date=day.isoformat(),
+                        timezone=account.get("timezone"), currency=currency,
+                        source_mode=TIKTOK_REPORTING_SOURCE_MODE,
+                        observed_at=observed_at,
+                        **row["close_evidence"],
+                    )
                     await db[TIKTOK_REPORTING_COLLECTION].update_one(
                         {
                             "user_id": user_id,
@@ -420,11 +428,7 @@ async def run_tiktok_reporting_sync(
                                 "conversion_metric": "conversion",
                                 "empty_provider_row": row["empty"],
                                 "request_id": row["request_id"],
-                                "source_close_proof": close_proof(
-                                    account_id=account["ad_account_id"], business_date=day.isoformat(),
-                                    timezone=account.get("timezone"), currency=currency,
-                                    source_mode=TIKTOK_REPORTING_SOURCE_MODE, observed_at=observed_at,
-                                    **row["close_evidence"]),
+                                "source_close_proof": source_proof,
                                 "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,
@@ -437,7 +441,16 @@ async def run_tiktok_reporting_sync(
                     )
                     saved += 1
                     if day in historical_days and next_history_date == day:
-                        next_history_date = day + timedelta(days=1)
+                        if source_proof.get("complete") is True and spend_sar is not None:
+                            next_history_date = day + timedelta(days=1)
+                        else:
+                            item = {
+                                "ad_account_id": account["ad_account_id"],
+                                "date": day.isoformat(),
+                                "code": "tiktok_backfill_source_evidence_incomplete",
+                            }
+                            account_errors.append(item)
+                            error_items.append(item)
                 except TikTokReportingError as exc:
                     provider_calls += 1
                     if exc.code == "tiktok_needs_reauth":
@@ -484,11 +497,20 @@ async def run_tiktok_reporting_sync(
                     "rows_saved": saved,
                     "errors": len(account_errors),
                     "complete": complete,
+                    "backfill_pending": bool(
+                        history_start and next_history_date < min(days)
+                    ),
                 }
             )
 
     rows_saved = sum(item["rows_saved"] for item in account_summaries)
     accounts_complete = sum(bool(item["complete"]) for item in account_summaries)
+    backfill_pending_accounts = (
+        sum(bool(item.get("backfill_pending")) for item in account_summaries)
+        + sum(bool(item.get("tiktok_backfill_next_date")
+                   and not item.get("tiktok_backfill_complete_at"))
+              for item in all_accounts[len(accounts):])
+    )
     if rows_saved == 0:
         raise TikTokReportingError(
             "tiktok_reporting_no_rows",
