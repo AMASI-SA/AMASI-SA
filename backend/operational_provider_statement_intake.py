@@ -305,6 +305,11 @@ def normalize_statement(content: bytes) -> dict:
     """Return typed source evidence; row blockers prevent automatic acceptance."""
     if not isinstance(content, bytes) or not content or len(content) > MAX_FILE_BYTES:
         raise ValueError('statement_file_invalid')
+    # PayPal's official Activity Download is UTF-8 CSV, not XLSX. It is
+    # normalized as evidence only, never a synthetic customer capture.
+    if content.lstrip(b'\xef\xbb\xbf').startswith(b'Date,') and b'Transaction ID' in content[:8192]:
+        from operational_paypal_activity_csv import normalize_paypal_csv
+        return normalize_paypal_csv(content)
     try:
         workbook = openpyxl.load_workbook(BytesIO(content), data_only=True, read_only=True, keep_links=False)
     except Exception:
