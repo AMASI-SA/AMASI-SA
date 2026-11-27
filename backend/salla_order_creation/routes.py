@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from salla_integration.service import call_salla, get_integration
@@ -35,6 +35,9 @@ from .bank_receipt_action import verify_bank_receipt_action
 from .bank_receipt_stage import stage_bank_receipt, BankReceiptStageDenied
 from .bank_review_readback import read_synced_bank_review
 from .bank_status_guard import BankStatusDenied, ensure_bank_review_custom_status
+from .bank_staff_worklist import (
+    BankWorklistDenied, may_read_bank_review, list_pending_bank_reviews,
+)
 from .service import intent_storage_id
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
@@ -63,8 +66,25 @@ class AssistedPrepareRequest(BaseModel):
 
 def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
+    *, can_read_bank_review: Callable | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    def bank_review_reader_scope(user: dict) -> str:
+        # Staff permission is evaluated by Mezan's existing canonical RBAC
+        # resolver, supplied from server.py. Never trust a user-supplied
+        # permission field or use a staff user's ID as the Salla owner ID.
+        if not may_read_bank_review(user, can_read_bank_review):
+            raise HTTPException(status_code=403, detail={"code": "bank_review_access_denied"})
+        owner_id = str(
+            os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or ""
+        ).strip()
+        if not owner_id:
+            raise HTTPException(status_code=503, detail={"code": "bank_review_owner_unconfigured"})
+        if (str(user.get("role") or "").lower() == "owner"
+                and str(user.get("id")) != owner_id):
+            raise HTTPException(status_code=403, detail={"code": "bank_review_merchant_mismatch"})
+        return owner_id
 
     @router.post("/signed-bank-receipt")
     async def signed_bank_receipt(request: Request) -> dict:
@@ -380,6 +400,29 @@ def make_assisted_salla_order_router(
         except BankStatusDenied as exc:
             raise HTTPException(status_code=409,detail={"code":str(exc)}) from exc
 
+    @router.get("/bank-review/worklist")
+    async def get_bank_staff_worklist(
+        limit: int = Query(default=20, ge=1, le=25),
+        offset: int = Query(default=0, ge=0, le=1000),
+        user: dict = Depends(current_user),
+    ) -> dict:
+        """Redacted staff-visible bank review queue, NEVER bank settlement.
+
+        The Chatwoot attachment remains protected by Chatwoot staff ACL;
+        this returns only the existing source message/attachment identifiers.
+        """
+        owner_id = bank_review_reader_scope(user)
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_READ_ENABLED", "0") != "1":
+            raise HTTPException(status_code=503, detail={"code": "bank_review_read_disabled"})
+        try:
+            return await list_pending_bank_reviews(
+                db, owner_id=owner_id, limit=limit, offset=offset,
+            )
+        except BankWorklistDenied:
+            raise HTTPException(
+                status_code=503, detail={"code": "bank_review_worklist_unavailable"}
+            ) from None
+
     @router.get("/bank-review/{intent_id}")
     async def get_bank_review_readback(
         intent_id: str, user: dict = Depends(current_user),
@@ -390,9 +433,7 @@ def make_assisted_salla_order_router(
         real bank credit independently before any financial or fulfillment
         action. Broader staff ACL/UI requires separate owner-approved scope.
         """
-        role=str((user or {}).get("role") or "").strip().lower()
-        if not user or (role!="owner" and user.get("is_owner") is not True):
-            raise HTTPException(status_code=403,detail={"code":"owner_only"})
+        owner_id = bank_review_reader_scope(user)
         if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_READ_ENABLED","0") != "1":
             raise HTTPException(status_code=503,detail={"code":"bank_review_read_disabled"})
 
@@ -407,7 +448,7 @@ def make_assisted_salla_order_router(
 
         try:
             return await read_synced_bank_review(
-                db,user_id=str(user["id"]),
+                db,user_id=owner_id,
                 intent_id=intent_id,load_order=load_current_order,
             )
         except Exception:
