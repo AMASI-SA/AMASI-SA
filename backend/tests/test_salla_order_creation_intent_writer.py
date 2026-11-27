@@ -179,9 +179,12 @@ def test_expired_old_quote_requires_new_intent():
         create(db=db,now=NOW+timedelta(minutes=12))
 
 
-@pytest.mark.parametrize("method",["cod","bank"])
-def test_bank_and_cod_have_no_auto_salla_post_create_pricing(method):
-    with pytest.raises(PrepareDenied,match="online_only"):
+@pytest.mark.parametrize("method,expected",[
+    ("cod","online_only"),
+    ("bank","bank_review_requires_signed_customer_contact"),
+])
+def test_bank_and_cod_require_separate_financial_proof(method,expected):
+    with pytest.raises(PrepareDenied,match=expected):
         create(o=order(methods=[method]))
 
 
