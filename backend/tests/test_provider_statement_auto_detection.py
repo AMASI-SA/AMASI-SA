@@ -124,3 +124,25 @@ async def test_native_auto_detects_new_providers_as_review_only(provider, raw, f
         assert after["movements"] == before["movements"]
         assert after["engine"]["facts"] == before["engine"]["facts"]
         assert after["engine"]["obligations"] == before["engine"]["obligations"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename,raw", [
+    ("forged-paypal.csv", content(workbook("tabby"))),
+    ("forged-excel.xlsx", (
+        b"Date,Time,TimeZone,Name,Type,Status,Currency,Gross,Fee,Net,Transaction ID\\n"
+        b"11/27/2026,12:00,GMT,Synthetic,Payment,Completed,USD,100.00,-3.00,97.00,TEST-01\\n"
+    )),
+])
+async def test_auto_detection_requires_original_file_format_not_just_name(filename, raw):
+    db, client = await setup()
+    async with client:
+        assert (await grant(client, providers=["tabby", "paypal"]))[0].status_code == 200
+        before = await read(db, "owner")
+        response = await auto_upload(client, raw, filename,
+                                     request_id="invalid-mime-synthetic")
+        assert response.status_code == 400, response.text
+        assert response.json()["detail"].get("not_applied") is True
+        assert await db[STATEMENTS].count_documents({}) == 0
+        assert await db.accounting_source_files.count_documents({}) == 0
+        assert await read(db, "owner") == before
