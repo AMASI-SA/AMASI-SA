@@ -195,3 +195,15 @@ def test_authorization_uses_canonical_server_permission_callback_only():
     assert not may_read_bank_review({"id":"staff-4","role":"viewer"},lambda u:"yes")
     assert not may_read_bank_review(None,can)
     assert not may_read_bank_review(operator,lambda u:1/0)
+
+
+
+def test_pagination_stops_before_invalid_next_offset():
+    rows=[
+        item(intent_id="intent-"+str(i).zfill(4),salla_order_id=10000+i)
+        for i in range(1001)
+    ]
+    db=DB(rows)
+    out=read(db,limit=1,offset=1000)
+    assert len(out["items"])==1
+    assert out["next_offset"] is None
