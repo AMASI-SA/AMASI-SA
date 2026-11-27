@@ -539,3 +539,28 @@ def test_operational_wallet_first_funding_binding_is_visible_read_only():
     assert summary["items"][0]["binding_state"] == "approved"
     assert summary["total_source_spend_sar"] is None
     assert summary["posted_to_operational_balances"] is False
+
+
+@pytest.mark.asyncio
+async def test_partial_tiktok_advertiser_info_does_not_create_fake_connected_account(monkeypatch):
+    db = DB()
+
+    async def ids(*args):
+        return ["100", "200"]
+
+    async def incomplete(*args):
+        return [
+            {"external_account_id": "100", "currency": "SAR",
+             "timezone": "Asia/Riyadh"},
+            {"external_account_id": "200", "currency": None,
+             "timezone": None},
+        ]
+
+    monkeypatch.setattr(discovery, "authorized_advertiser_ids", ids)
+    monkeypatch.setattr(discovery, "discover_tiktok_advertisers", incomplete)
+    with pytest.raises(discovery.TikTokAccountRefreshError) as exc:
+        await discovery.refresh_tiktok_authorized_accounts(
+            db, "owner", "token", "2026-11-27T16:00:00+00:00")
+    assert str(exc.value) == "tiktok_discovery_account_profile_incomplete"
+    assert "mezan_integration_accounts_v2" not in db.data
+    assert "mezan_tiktok_oauth_credentials_v2" not in db.writes
