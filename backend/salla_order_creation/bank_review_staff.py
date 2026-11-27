@@ -39,6 +39,15 @@ def reconcile_bank_receipt_with_mezan_order(review: dict, order: Any) -> dict:
                 review.get("salla_reference_id")
             )):
         return {"state":"wrong_salla_order","amount_match":False}
+    status = str(getattr(order, "status", "") or "").strip().casefold()
+    native_status = str(getattr(order, "status_native", "") or "").strip()
+    if (status not in (
+        "under_review", "waiting", "pending_payment", "payment_pending",
+    ) and native_status not in (
+        "بإنتظار المراجعة", "بانتظار المراجعة",
+        "بإنتظار الدفع", "بانتظار الدفع",
+    )):
+        return {"state":"order_not_in_review_stage","amount_match":False}
     totals=getattr(order,"totals",None)
     payment=getattr(order,"payment",None)
     if totals is None or payment is None:
@@ -46,7 +55,8 @@ def reconcile_bank_receipt_with_mezan_order(review: dict, order: Any) -> dict:
     if (str(getattr(totals,"currency","")).upper()!="SAR" or
             str(getattr(payment,"method","")).lower() not in
             ("bank","bank_transfer","تحويل بنكي","حوالة بنكية") or
-            getattr(payment,"paid_amount",None) not in (0,0.0,"0","0.00")):
+            getattr(payment,"paid_amount",None) not in (0,0.0,"0","0.00") or
+            getattr(payment,"collection_status",None) in ("paid","partial")):
         return {"state":"bank_order_payment_unverified","amount_match":False}
     total=_money(getattr(totals,"total",None))
     claimed=_money(review.get("claimed_amount_sar"))
