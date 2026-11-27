@@ -374,3 +374,79 @@ def test_operational_read_only_tiktok_spend_keeps_financial_binding_separate():
     repeated = build_tiktok_reported_account_rows(
         accounts, facts + facts[:1], binds, "2026-11-27", "2026-11-27")
     assert repeated["coverage_complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_tiktok_new_account_backfills_history_in_bounded_verified_batches(monkeypatch):
+    db = DB()
+    db.data["mezan_tiktok_oauth_credentials_v2"] = [{
+        "user_id": "owner", "provider": "tiktok_ads",
+        "access_token_ciphertext": b"encrypted",
+    }]
+    db.data["mezan_integration_accounts_v2"] = [{
+        "user_id": "owner", "provider": "tiktok_ads",
+        "external_account_id": "100", "ad_account_id": "100",
+        "display_name": "New SAR advertiser", "currency": "SAR",
+        "timezone": "Asia/Riyadh",
+        "connection_status": "connected", "connection_provenance": "api_connection",
+        "tiktok_backfill_next_date": "2026-11-23",
+    }]
+    monkeypatch.setattr(reporting, "tiktok_oauth_configured", lambda: True)
+    monkeypatch.setattr(reporting, "tiktok_reporting_enabled", lambda: True)
+    monkeypatch.setattr(reporting, "decrypt_tiktok_token", lambda *_: "token")
+
+    async def discovered(*args):
+        return {"status": "complete", "authorized_accounts": 1,
+                "account_ids": ["100"]}
+    monkeypatch.setattr(reporting, "refresh_tiktok_authorized_accounts", discovered)
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": {
+                "page_info": {"page": 1, "total_page": 1, "total_number": 1},
+                "list": [{"dimensions": {"advertiser_id": "100"},
+                          "metrics": {"spend": "10", "impressions": "100",
+                                      "clicks": "5", "conversion": "1"}}]}}
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(reporting.httpx, "AsyncClient", Client)
+
+    async def sync():
+        return await reporting.run_tiktok_reporting_sync(
+            db, "owner", reporting.TikTokReportingSyncInput(days=2),
+            now=lambda: datetime(2026, 11, 27, 12, 0, tzinfo=timezone.utc),
+        )
+
+    first = await sync()
+    assert first["status"] == "partial"
+    assert first["backfill_pending_accounts"] == 1
+    assert first["provider_calls"] <= reporting.MAX_REPORTING_CALLS_PER_SYNC
+    acc = db.data["mezan_integration_accounts_v2"][0]
+    assert acc["tiktok_backfill_next_date"] == "2026-11-25"
+
+    second = await sync()
+    assert second["status"] == "complete"
+    assert second["backfill_pending_accounts"] == 0
+    assert acc["tiktok_backfill_complete_at"]
+    rows = db.data[reporting.TIKTOK_REPORTING_COLLECTION]
+    assert {row["date"] for row in rows} == {
+        "2026-11-23", "2026-11-24", "2026-11-25",
+        "2026-11-26", "2026-11-27",
+    }
+    assert len(rows) == 5
+    assert all(row["source_close_proof"]["complete"] for row in rows)
+    assert not {"general_ledger", "ad_account_ledger", "qoyod_invoices"}.intersection(db.writes)
