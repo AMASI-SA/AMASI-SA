@@ -316,6 +316,8 @@ def normalize_statement(content: bytes) -> dict:
         if {'Date', 'Type', 'Status', 'Currency', 'Gross', 'Fee', 'Net', 'Transaction ID'} <= set(header):
             from operational_paypal_activity_csv import normalize_paypal_csv
             return normalize_paypal_csv(content)
+        if {'Date', 'Transaction ID'} <= set(header):
+            raise ValueError('statement_provider_unknown')
     try:
         workbook = openpyxl.load_workbook(BytesIO(content), data_only=True, read_only=True, keep_links=False)
     except Exception:
