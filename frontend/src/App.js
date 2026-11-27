@@ -25,6 +25,7 @@ import AdsV2Report from "./pages/AdsV2Report";
 import ProductCosts from "./pages/ProductCosts";
 import ProductsPage from "./pages/ProductsPage";
 import BankTransferReview from "./pages/BankTransferReview";
+import AssistedBankReceiptReview from "./pages/AssistedBankReceiptReview";
 import SettlementDashboard from "./pages/SettlementDashboard";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
