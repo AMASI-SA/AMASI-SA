@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Awaitable, Callable
 
 from .payload import PendingOrder, build_pending_order_payload
+from .bank_receipt_review import bank_pending_payload
 
 PostSalla = Callable[..., Awaitable[dict[str, Any]]]
 _INTENT_RE = re.compile(r"^[a-zA-Z0-9_-]{8,100}$")
@@ -205,6 +206,29 @@ async def create_confirmed_salla_order(
             )):
         raise CreationDenied("post_create_pricing_requires_online_payment", 409)
 
+    bank_receipt = None
+    if pricing_mode == "salla_bank_review":
+        if order.accepted_methods != ["bank"]:
+            raise CreationDenied("bank_review_requires_bank_only_payment")
+        bank_receipt = await db.salla_ai_bank_receipt_evidence.find_one({
+            "user_id": user_id, "intent_id": intent_id,
+            "inbox_id": inbox_id, "conversation_id": conversation_id,
+            "source_contact_id": quote.get("source_contact_id"),
+            "bank_id": quote.get("bank_id"),
+            "state": "appearance_plausible",
+        })
+        if (not isinstance(bank_receipt, dict) or
+                quote.get("receipt_ref") !=
+                    "receipt." + str(bank_receipt.get("_id", ""))[:32]
+                or bank_receipt.get("credit_received") is not False
+                or bank_receipt.get("staff_review_required") is not True
+                or bank_receipt.get("source") !=
+                    "chatwoot_verified_image_bank_receipt_v1"):
+            raise CreationDenied("independent_bank_receipt_evidence_required")
+        expiry = _utc(bank_receipt.get("expires_at"))
+        if not expiry or expiry <= now:
+            raise CreationDenied("bank_receipt_evidence_expired")
+
     confirmation = await db.salla_ai_order_confirmations.find_one(
         {"user_id": user_id, "intent_id": intent_id}
     )
@@ -221,6 +245,10 @@ async def create_confirmed_salla_order(
         "actor_id": actor_id, "state": "sending", "payload_digest": digest,
         "quote_version": quote["version"],
         "pricing_mode": pricing_mode,
+        "receipt_ref": quote.get("receipt_ref") if bank_receipt else None,
+        "bank_id": quote.get("bank_id") if bank_receipt else None,
+        "bank_credit_confirmed": False,
+        "staff_review_required": bool(bank_receipt),
         "confirmation_message_id": str(confirmation["message_id"]),
         "created_at": now, "updated_at": now,
     }
@@ -244,6 +272,8 @@ async def create_confirmed_salla_order(
                 and prior.get("pricing_mode") == "preverified"
             ),
             "replayed": True,
+            "staff_review_required": prior.get("pricing_mode") == "salla_bank_review",
+            "bank_credit_confirmed": False,
         }
 
     # One and only one POST. Never retry on network exception or ambiguous
@@ -251,7 +281,10 @@ async def create_confirmed_salla_order(
     try:
         result = await post_salla(
             db, user_id, "POST", "/orders",
-            json=build_pending_order_payload(order),
+            json=(
+                bank_pending_payload(order) if pricing_mode == "salla_bank_review"
+                else build_pending_order_payload(order)
+            ),
         )
         # Reject provider-level failure even when an error envelope happens
         # to contain a numeric id. An uncertain provider outcome is reconciled,
@@ -301,7 +334,10 @@ async def create_confirmed_salla_order(
     # In salla_post_create mode, even a total returned by POST is not enough
     # to release payment; the same order must be read back via Mezan sync.
 
-    final_state = "created" if amount_confirmed else "created_amount_unverified"
+    final_state = (
+        "created_bank_review_pending" if pricing_mode == "salla_bank_review"
+        else ("created" if amount_confirmed else "created_amount_unverified")
+    )
     await db.salla_ai_order_intents.update_one(
         {"_id": storage_id, "state": "sending"},
         {"$set": {
@@ -315,4 +351,6 @@ async def create_confirmed_salla_order(
         "reference_id": int(reference) if reference is not None else None,
         "pricing_mode": pricing_mode,
         "replayed": False, "amount_confirmed": amount_confirmed,
+        "staff_review_required": pricing_mode == "salla_bank_review",
+        "bank_credit_confirmed": False,
     }
