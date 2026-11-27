@@ -269,9 +269,22 @@ async def ensure_bank_review_custom_status(
             "status_post_performed": True,
             "bank_credit_confirmed": False,
         }
+    paid_after = later.get("paid_amount")
+    try:
+        still_unpaid = (
+            type(paid_after) is not bool
+            and Decimal(str(paid_after)).is_finite()
+            and Decimal(str(paid_after)) == Decimal("0")
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        still_unpaid = False
+    later_status = later.get("status")
     if (later.get("id") != salla_order_id
             or _customized_id(later) != exact_id
-            or later.get("payment_method") != "bank"):
+            or not isinstance(later_status, dict)
+            or later_status.get("slug") != REVIEW_SLUG
+            or later.get("payment_method") != "bank"
+            or not still_unpaid):
         return {
             "state": "status_update_needs_reconciliation",
             "salla_order_id": salla_order_id,
