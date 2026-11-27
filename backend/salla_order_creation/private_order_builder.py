@@ -191,7 +191,7 @@ async def prepare_from_private_vault(
         private_vault_revision=private["revision"],
         private_vault_ref=private["vault_ref"],
         order=payload, selected_rate_id=selected_rate_id,
-        enabled=enabled,
+        payment_flow=payment_flow, enabled=enabled,
         **({"product_reader": product_reader} if product_reader else {}),
         **({"rate_reader": rate_reader} if rate_reader else {}),
         **({"methods_reader": methods_reader} if methods_reader else {}),
