@@ -65,7 +65,8 @@ async def ensure_staff_bank_review(
         "bank_credit_confirmed": False,
         "paid": False,
         "fulfillment_eligible": False,
-        "receipt_appearance_only": True,
+        "receipt_appearance_only": receipt.get("source_kind", "image") != "text",
+        "customer_text_claim_only": receipt.get("source_kind") == "text",
         "created_at": clock,
     }
     try:
