@@ -332,7 +332,7 @@ def test_bank_quote_duplicate_intent_may_not_become_online_quote():
     create(db=db,o=order(methods=["bank"]),payment_flow="bank_review",
            methods_reader=lambda *args:_bank_methods())
     with pytest.raises(PrepareDenied,match="different_cart"):
-        create(db=db,o=order(methods=["bank"]),payment_flow="online")
+        create(db=db,o=order(methods=["mada"]),payment_flow="online")
 
 
 def test_unknown_bank_payment_mode_denied():
