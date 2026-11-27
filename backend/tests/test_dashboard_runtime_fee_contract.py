@@ -34,7 +34,8 @@ def response_fixture(*, unknown_fx=False, inferred_hidden=False, electronic=True
         "range": {"from_date": "2026-10-01", "to_date": "2026-10-08"},
         "totals": {
             "total_orders": 1, "total_sales": 100.0, "total_payment_fees": 7.49,
-            "net_profit": 60.0, "net_sales": 95.0, "expected_salla_transfer": 97.7,
+            "net_profit": 60.0, "net_sales": 95.0, "regular_shipping_cost": 0.0,
+            "expected_salla_transfer": 97.7,
             "total_vat": .3, "other_payment_fees": 2.3, "electronic_net": 97.7,
             "electronic_net_before_settlements": 97.7,
             "tamara_fees": 0.0, "bnpl_fees": 0.0, "bnpl_net": 0.0,
@@ -60,8 +61,13 @@ def test_complete_sar_money_counts_and_ad_fees_are_exactly_preserved():
     assert authority == {
         "basis": FEE_BASIS, "complete": True, "known_payment_fees_sar": 2.3,
         "reason_codes": [], "incomplete_buckets": [], "electronic_complete": True,
-        "electronic_before_filter_complete": True, "legacy_analysis_fees_included": False,
+        "electronic_before_filter_complete": True,
+        "electronic_cash_basis_complete": True,
+        "electronic_cash_before_filter_complete": True,
+        "legacy_analysis_fees_included": False,
     }
+    wallet = response["totals"].pop("internal_wallet_paid_sar")
+    assert type(wallet) is float and wallet == 0.0
     assert response["totals"].pop("payment_fees_complete") is True
     assert response["totals"].pop("payment_fee_review_reasons") == []
     assert response["source_contract"]["payment_gateway_fees"] == FEE_SOURCE
@@ -87,6 +93,8 @@ def test_empty_payment_cohort_preserves_integer_zero_wire_contract_and_excludes_
     known = response['payment_fee_authority']['known_payment_fees_sar']
     assert type(known) is int and json.dumps(known) == '0'
     assert response['payment_breakdown'][0]['fee_amount'] == 5.19
+    wallet = response["totals"]["internal_wallet_paid_sar"]
+    assert type(wallet) is int and wallet == 0
 
 
 @pytest.mark.parametrize('case', ['no_matching_filter', 'arabic_status_normalization'])
@@ -144,6 +152,11 @@ def test_blank_method_masks_only_affected_totals_and_does_not_change_ad_fee():
     extend_frozen_fee_contract(response, fixture_case=fixture_key("no_matching_filter"))
     assert response["payment_fee_authority"]["known_payment_fees_sar"] == 0.0
     assert response["payment_fee_authority"]["electronic_complete"] is False
+    # Cash-basis source completeness is independent of unresolved fee terms.
+    assert type(response["totals"]["internal_wallet_paid_sar"]) is float
+    assert response["totals"]["internal_wallet_paid_sar"] == 0.0
+    assert response["payment_fee_authority"]["electronic_cash_basis_complete"] is True
+    assert response["payment_fee_authority"]["electronic_cash_before_filter_complete"] is True
     assert response["payment_fee_authority"]["reason_codes"] == ["payment_method_unconfigured"]
     assert response["totals"]["total_sales"] == 100.0
     assert response["totals"]["other_payment_fees"] is None
