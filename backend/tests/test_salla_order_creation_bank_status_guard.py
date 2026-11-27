@@ -206,3 +206,26 @@ def test_unknown_post_result_is_quarantined():
     ))
     assert result["state"]=="status_update_needs_reconciliation"
     assert calls==["GET","GET","POST"]
+
+
+
+def test_real_merchant_status_snapshot_without_is_active_selects_only_payment_review():
+    # Read-only Salla merchant status list confirmed 2026-11-27. Salla's
+    # actual response omits is_active and several unrelated custom statuses
+    # share the canonical under_review slug. Do NOT select "تم المراجعة".
+    current = [
+        {"id":1555791576,"name":"بإنتظار الدفع","slug":"payment_pending",
+         "original":{"id":1473353380,"name":"بإنتظار الدفع"}},
+        {"id":780246489,"name":"بإنتظار المراجعة","slug":"under_review",
+         "original":{"id":566146469,"name":"بإنتظار المراجعة"}},
+        {"id":1539366206,"name":"تم المراجعة","slug":"under_review",
+         "original":{"id":566146469,"name":"بإنتظار المراجعة"}},
+        {"id":2099877798,"name":"بانتظار تأكيد العميل","slug":"under_review",
+         "original":{"id":566146469,"name":"بإنتظار المراجعة"}},
+        {"id":2134842935,"name":"بانتظار مراجعة العميل","slug":"under_review",
+         "original":{"id":566146469,"name":"بإنتظار المراجعة"}},
+        {"id":2039291541,"name":"مراجعة الملاحظات","slug":"under_review",
+         "original":{"id":566146469,"name":"بإنتظار المراجعة"}},
+    ]
+    assert exact_active_review_status(current) == 780246489
+    assert exact_active_review_status(current) != 1539366206
