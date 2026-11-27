@@ -10,7 +10,6 @@ No routes are registered merely by importing this module. OFF by default.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 import hashlib
 import hmac
 import json
@@ -56,6 +55,15 @@ def derive_buyer_proof(key: bytes, *, mobile: str, account_id: int,
         str(conversation_id), str(message_id), str(attested_at), mobile,
     )).encode("ascii")
     return hmac.new(key, material, hashlib.sha256).hexdigest()
+
+
+def _unique_pairs(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError("duplicate_field")
+        result[name] = value
+    return result
 
 
 def make_whatsapp_attested_stage_router(
@@ -109,7 +117,8 @@ def make_whatsapp_attested_stage_router(
                 raise HTTPException(status_code=503, detail="rate_limit_unavailable") from None
 
         try:
-            data = json.loads(body)
+            data = json.loads(body, object_pairs_hook=_unique_pairs,
+                              parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid_constant")))
             if type(data) is not dict or set(data) != ALLOWED_KEYS:
                 raise ValueError("unexpected_fields")
             if (data["proof_version"] != VERSION
@@ -150,7 +159,7 @@ def make_whatsapp_attested_stage_router(
                 dto, order_number=data["order_number"],
                 verified_sender=buyer, source_checked_at=now, now=now,
             )
-        except (ValueError, TypeError, KeyError, OrderNotFoundError, StageNotVerified):
+        except (ValueError, UnicodeError, TypeError, KeyError, OrderNotFoundError, StageNotVerified):
             raise denied() from None
         except Exception:
             raise HTTPException(status_code=503, detail="status_unavailable") from None
