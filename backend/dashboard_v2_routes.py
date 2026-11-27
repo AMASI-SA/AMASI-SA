@@ -1744,7 +1744,10 @@ async def build_mezan_v2_ads(
         for provider, value in breakdown.items()
         if provider not in {"snapchat", "google_transitional"} and value is not None
     ), 2)
-    overall_available = amount_available and google_quality["amount_available"]
+    overall_available = (
+        amount_available and google_quality["amount_available"]
+        and tiktok_coverage["coverage_complete"]
+    )
     overall_complete = (
         amount_complete and google_quality["amount_complete"]
         and tiktok_coverage["coverage_complete"]
