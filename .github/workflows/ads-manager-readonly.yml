@@ -381,6 +381,13 @@ jobs:
               text=True,
           )
           current_source = pathlib.Path(path).read_text(encoding="utf-8")
+          # This guard audits an actual change to the Ads accounting filter.
+          # A WhatsApp/other-domain PR cannot alter its AST if the Git blob
+          # is byte-for-byte identical to the reviewed PR base. Keep all
+          # existing semantic + pinned-AST checks for changed accounting code.
+          if current_source == base_source:
+              print("Ads accounting filter unchanged; pinned AST guard not applicable.")
+              raise SystemExit(0)
 
           def isolate(source):
               tree = ast.parse(source)
