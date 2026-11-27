@@ -25,7 +25,7 @@ from operational_provider_statement_intake import MAX_FILE_BYTES, MAX_ROWS, norm
 
 STATEMENTS = 'operational_provider_statements_v1'
 RECONCILIATION = 'provider_statement_reconciliation'
-PROVIDERS = frozenset({'tabby', 'tamara', 'salla'})
+PROVIDERS = frozenset({'tabby', 'tamara', 'salla', 'emkan', 'paypal'})
 COUNTS = ('matched', 'missing', 'different', 'blocked', 'confirmed')
 KINDS = {'sale': 'capture', 'refund': 'refund', 'settlement_fee': 'payout_fee'}
 RIYADH = timezone(timedelta(hours=3))
