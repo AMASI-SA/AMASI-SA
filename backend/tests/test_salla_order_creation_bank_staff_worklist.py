@@ -207,3 +207,52 @@ def test_pagination_stops_before_invalid_next_offset():
     out=read(db,limit=1,offset=1000)
     assert len(out["items"])==1
     assert out["next_offset"] is None
+
+
+
+def test_actual_staff_review_writer_schema_flows_to_read_only_staff_queue():
+    from salla_order_creation.bank_staff_review import ensure_staff_bank_review
+
+    class StoredReviewRows(Rows):
+        async def insert_one(self,doc):
+            assert not any(v["_id"] == doc["_id"] for v in self.rows)
+            self.rows.append(dict(doc))
+
+        async def find_one(self,query):
+            for record in self.rows:
+                if all(record.get(k) == v for k,v in query.items()):
+                    return dict(record)
+            return None
+
+    db=DB([])
+    db.salla_ai_bank_staff_reviews=StoredReviewRows([])
+    raw_receipt={
+        "user_id":"owner-merchant","intent_id":"intent-0001",
+        "inbox_id":"2","conversation_id":"3",
+        "source_contact_id":77,"source_message_id":501,
+        "source_attachment_id":0,"source_kind":"text",
+        "bank_id":11,"reference_fingerprint":"f"*64,
+        "state":"appearance_plausible",
+        "credit_received":False,"receipt_amount_sar":"165.00",
+    }
+    receipt_result=asyncio.run(ensure_staff_bank_review(
+        db,user_id="owner-merchant",intent_id="intent-0001",
+        salla_order_id=123456,reference_id=302076044,
+        receipt=raw_receipt,now=NOW,
+    ))
+    assert receipt_result["state"]=="awaiting_staff_bank_verification"
+    response=read(db)
+    assert response["read_only"] is True
+    assert len(response["items"])==1
+    case=response["items"][0]
+    assert case["salla_order_id"]==123456
+    assert case["salla_reference_id"]==302076044
+    assert case["source_kind"]=="text"
+    assert case["source_message_id"]==501
+    assert case["source_attachment_id"]==0
+    assert case["receipt_amount_sar"]=="165.00"
+    assert case["paid"] is False
+    assert case["bank_credit_confirmed"] is False
+    assert case["fulfillment_eligible"] is False
+    assert "reference_fingerprint" not in str(response)
+    assert "source_contact_id" not in str(response)
