@@ -2836,7 +2836,8 @@ def make_dashboard_v2_router(
             db.mz2_ad_account_bindings_v2.find(
                 {"user_id": user_id, "platform": "tiktok"},
                 {"_id": 0, "platform": 1, "integration_account_id": 1,
-                 "platform_account_id": 1, "confirmed_by": 1, "confirmed_at": 1},
+                 "platform_account_id": 1, "confirmed_by": 1, "confirmed_at": 1,
+                 "funding_mode": 1, "status": 1},
             ),
             300,
         )
