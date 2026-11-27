@@ -462,6 +462,12 @@ def make_assisted_salla_order_router(
                 conversation_id=request.conversation_id,
                 order=request.order,
                 post_salla=call_salla,
+                bank_review_status_setter=(
+                    ensure_bank_review_custom_status
+                    if os.environ.get(
+                        "MEZAN_ASSISTED_SALLA_BANK_SET_REVIEW_STATUS_ENABLED","0"
+                    ) == "1" else None
+                ),
                 enabled=(
                     os.environ.get("MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED", "0") == "1"
                 ),
@@ -735,6 +741,12 @@ def make_assisted_salla_order_router(
                 conversation_id=str(action.conversation_id),
                 order=order,
                 post_salla=call_salla,
+                bank_review_status_setter=(
+                    ensure_bank_review_custom_status
+                    if os.environ.get(
+                        "MEZAN_ASSISTED_SALLA_BANK_SET_REVIEW_STATUS_ENABLED","0"
+                    ) == "1" else None
+                ),
                 enabled=True,
             )
         except CreationDenied as exc:
