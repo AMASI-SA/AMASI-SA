@@ -618,6 +618,12 @@ function AdsCard({ ads, unifiedShadow }) {
         </div>
         <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}><LineChart data={plotRows} margin={{ top: 6, right: 6, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 9 }} minTickGap={8} interval="preserveStartEnd" /><YAxis tick={{ fontSize: 9 }} width={38} /><Tooltip formatter={(value, name) => [`${money(value)} ر.س`, name]} labelFormatter={(value) => `الوقت: ${value}`} contentStyle={{ direction: "rtl", borderRadius: 10, fontFamily: "Cairo" }} />{PLATFORM_META.map((p) => <Line key={p.key} type="monotone" dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />)}</LineChart></ResponsiveContainer></div>
         <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => { const value = p.key === "google" ? (breakdown.google ?? breakdown.google_transitional) : breakdown[p.key]; const state = spendQuality?.[p.key]?.data_state; return <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{dashboardSpendDisplay(value, state)}</p></div>; })}</div>
+        {spendQuality?.tiktok?.coverage_complete === false && (
+            <p role="alert" data-testid="advanced-tiktok-multi-account-incomplete"
+               className="border-t border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-900">
+                بيانات تيك توك غير مكتملة: تمت تغطية {integer(spendQuality.tiktok.covered_account_days)} من {integer(spendQuality.tiktok.expected_account_days)} يوم/حساب إعلاني. إجمالي الصرف مؤقت حتى تكتمل مزامنة جميع الحسابات.
+            </p>
+        )}
         <div className="flex h-11 items-center justify-between border-t bg-amber-50 px-4 font-extrabold"><span>إجمالي المصروفات{totalProvisional && <small className="mr-1 text-[9px] text-amber-700">مؤقت حتى آخر مزامنة</small>}</span><span className="num">{chartTotal === null ? "غير مكتمل" : `${optionalMoney(chartTotal)} ر.س`}</span></div>
     </Panel>;
 }
