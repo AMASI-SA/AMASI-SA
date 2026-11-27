@@ -174,6 +174,7 @@ async def create_confirmed_salla_order(
     conversation_id: str,
     order: PendingOrder,
     post_salla: PostSalla,
+    bank_review_status_setter: Callable[..., Awaitable[dict]] | None = None,
     enabled: bool = False,
 ) -> dict[str, Any]:
     """Persist one immutable intent BEFORE POST; unknown outcome is not retried.
@@ -229,6 +230,13 @@ async def create_confirmed_salla_order(
         expiry = _utc(bank_receipt.get("expires_at"))
         if not expiry or expiry <= now:
             raise CreationDenied("bank_receipt_evidence_expired")
+
+    if (pricing_mode == "salla_bank_review" and
+            not callable(bank_review_status_setter)):
+        # The bank customer must not be told "under review" unless a trusted
+        # status writer can verify the exact merchant-customized status.
+        # Fails before any Salla order creation, not after.
+        raise CreationDenied("bank_review_status_transition_not_enabled", 503)
 
     confirmation = await db.salla_ai_order_confirmations.find_one(
         {"user_id": user_id, "intent_id": intent_id}
@@ -382,6 +390,37 @@ async def create_confirmed_salla_order(
                 "amount_confirmed": False, "staff_review_required": True,
                 "bank_credit_confirmed": False,
                 "needs_reconciliation": True, "checkout_url": None,
+            }
+
+        # The public generic under_review slug maps to several different
+        # Amasi statuses. Require Salla readback of EXACT active customized
+        # «بإنتظار المراجعة» before returning an ACK suitable for WhatsApp.
+        try:
+            status_result=await bank_review_status_setter(
+                db,user_id=user_id,intent_id=intent_id,
+                salla_order_id=int(order_id),request=post_salla,
+                enabled=True,
+            )
+        except Exception:
+            status_result=None
+        if (not isinstance(status_result,dict) or
+                status_result.get("state")!="confirmed_under_review" or
+                status_result.get("bank_credit_confirmed") is not False):
+            final_state="created_bank_review_status_unverified"
+            await db.salla_ai_order_intents.update_one(
+                {"_id":storage_id,"state":"created_bank_review_pending"},
+                {"$set":{
+                    "state":final_state,
+                    "updated_at":datetime.now(timezone.utc),
+                }},
+            )
+            return {
+                "state":final_state,"salla_order_id":int(order_id),
+                "reference_id":int(reference) if reference is not None else None,
+                "pricing_mode":pricing_mode,"replayed":False,
+                "amount_confirmed":False,"staff_review_required":True,
+                "bank_credit_confirmed":False,"needs_reconciliation":True,
+                "checkout_url":None,
             }
     return {
         "state": final_state, "salla_order_id": int(order_id),
