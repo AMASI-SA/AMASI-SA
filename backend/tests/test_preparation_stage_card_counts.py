@@ -96,3 +96,53 @@ async def test_received_excludes_ready_without_receipt_and_is_scoped(monkeypatch
     monkeypatch.setattr(cards, "_supplier_receipt_awaiting_handoff",
                         lambda row: row["piece_id"] == "received")
     assert await cards._received_ids(DB(), "owner", "e") == {"received"}
+
+
+@pytest.mark.asyncio
+async def test_actual_mongo_received_badge_equals_piece_grain_received_details():
+    """One tenant/employee returns exactly the same piece IDs as the native detail."""
+    import os
+    from uuid import uuid4
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from preparation_supplier_dispatch import _piece_products
+
+    uri = os.environ.get("TEST_PROGRESS_MONGO_URI")
+    if not uri:
+        pytest.skip("No isolated test Mongo configured")
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=2000)
+    db = client["stage_card_parity_" + uuid4().hex]
+    base = {"user_id": "merchant-1", "responsible_employee_id": "khaled",
+            "experiment_archived_at": None, "status": "processing",
+            "supplier_dispatch_status": "sent", "branch_handoff_at": None,
+            "order_number": "synthetic-order", "unit_index": 1}
+    variants = [
+        {"piece_id": "r1", "status": "received"},
+        {"piece_id": "r2", "supplier_dispatch_status": "partial_received",
+         "experiment_archived_at": ""},
+        {"piece_id": "sent"},
+        {"piece_id": "ready", "supplier_dispatch_status": "ready"},
+        {"piece_id": "handed", "status": "received",
+         "branch_handoff_at": "2026-11-27T10:00:00+03:00"},
+        {"piece_id": "cancelled", "status": "cancelled",
+         "supplier_dispatch_status": "received"},
+        {"piece_id": "archived", "status": "received",
+         "experiment_archived_at": "2026-11-26T10:00:00+03:00"},
+        {"piece_id": "foreign-employee", "responsible_employee_id": "other",
+         "status": "received"},
+        {"piece_id": "foreign-tenant", "user_id": "other", "status": "received"},
+    ]
+    try:
+        await db[cards.PIECES].insert_many([{**base, **v} for v in variants])
+        counted = await cards._received_ids(db, "merchant-1", "khaled")
+        assert counted == {"r1", "r2"}
+        details = await db[cards.PIECES].find({
+            "user_id": "merchant-1", "responsible_employee_id": "khaled",
+            "experiment_archived_at": {"$in": [None, ""]},
+            "status": {"$ne": "cancelled"},
+        }, {"_id": 0}).to_list(20)
+        actual = {row["piece_id"] for row in _piece_products(details)
+                  if row["supplier_received_quantity"] > 0}
+        assert actual == counted
+    finally:
+        await client.drop_database(db.name)
+        client.close()
