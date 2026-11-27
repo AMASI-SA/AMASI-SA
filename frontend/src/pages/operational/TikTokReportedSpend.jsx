@@ -1,5 +1,6 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const money = value => Number(value).toLocaleString('en-US', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -9,20 +10,16 @@ export default function TikTokReportedSpend({enabled, refreshVersion}) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const lane = useRef({});
 
   useEffect(() => {
     if (!enabled) return undefined;
-    let active = true;
-    setLoading(true);
-    setError('');
-    api.tiktokReportedSpend().then(value => {
-      if (active) setResult(value);
-    }).catch(failure => {
-      if (active) setError(messageFor(failure));
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
+    return visibleOperationalRead(config => api.tiktokReportedSpend(config), {
+      onStart: () => { setLoading(true); setError(''); },
+      onData: setResult,
+      onError: failure => setError(messageFor(failure)),
+      onEnd: () => setLoading(false),
+    }, lane.current);
   }, [enabled, refreshVersion]);
 
   if (!enabled) return null;
