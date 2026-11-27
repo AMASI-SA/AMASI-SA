@@ -137,6 +137,36 @@ def automatic_source(state, item):
             and item.get("party_type") in {"store_driver", "courier"} and identity.startswith("shipping:")):
         key = identity
         facts = engine.get("facts") or {}
+        # The first-observed Salla delivery has no invented original event
+        # timestamp or frozen delivery root. Its separately sealed status
+        # proof still qualifies this single base fee for the courier's
+        # existing "سجل التوصيلات" grouping.
+        if identity.endswith(":base_shipping") and item.get("party_type") == "courier":
+            oid = identity[len("shipping:"):-len(":base_shipping")]
+            observed = facts.get("observed_courier_base:" + oid)
+            component = facts.get(identity)
+            if isinstance(observed, dict) and isinstance(component, dict):
+                try:
+                    stamp = datetime.fromisoformat(
+                        observed["first_observed_at"].replace("Z", "+00:00"))
+                    if (observed.get("schema") == "operational_courier_observed_fee_v1"
+                            and observed.get("owner_id") == state.get("owner_id")
+                            and observed.get("order_id") == oid
+                            and observed.get("party_type") == "courier"
+                            and observed.get("party_id") == item.get("party_id")
+                            and observed.get("currency") == item.get("currency") == "SAR"
+                            and observed.get("original_delivery_time_verified") is False
+                            and observed.get("business_date_basis") == item.get("business_date_basis")
+                            == "first_observed_delivered_status"
+                            and item.get("delivered_at") is None
+                            and stamp.tzinfo is not None
+                            and stamp.astimezone(RIYADH).date() == strict_day(item["business_date"])
+                            and Decimal(observed["amount"]) == Decimal(component["cost"])
+                            == Decimal(item["confirmed"])
+                            and component.get("currency") == "SAR"):
+                        return "delivery", "shipping:" + oid
+                except (ValueError, KeyError, TypeError, InvalidOperation, OverflowError):
+                    pass
         while key.startswith("shipping:"):
             frozen = facts.get(key)
             if (isinstance(frozen, dict) and frozen.get("id") == item.get("party_id")
