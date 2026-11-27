@@ -93,6 +93,20 @@ def safe_remove(path: Path) -> None:
     else:
         path.unlink()
 
+def remove_verified_orphan_stage(path: Path, approved_source: Path) -> bool:
+    """Remove only an exactly byte-matching orphan from the earlier refused run."""
+    if not os.path.lexists(path):
+        return False
+    require_path(path, "file")
+    require_path(approved_source, "file")
+    if tree_hash(path) != tree_hash(approved_source):
+        stop("existing orphan stage does not match reviewed artifact: " + str(path))
+    safe_remove(path)
+    if os.path.lexists(path):
+        stop("unable to clear verified prior staging file")
+    return True
+
+
 def ensure_app_and_clone() -> None:
     if not APP.is_dir() or not (APP / ".git").is_dir():
         stop("/app must be a real Git checkout")
@@ -168,6 +182,14 @@ def main() -> None:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         ensure_app_and_clone()
         verify_isolated()
+        # The first refused attempt generated this one temporary basename but
+        # exited before adding it to its cleanup table. Remove only when exact
+        # contents match the already-reviewed isolated identity.
+        known_orphan = APP / "backend/.release_identity.json.v5-new-92c617c56b20"
+        if remove_verified_orphan_stage(
+            known_orphan, REHEARSAL / "backend/release_identity.json"
+        ):
+            print("EXACT_PRIOR_STAGING_ORPHAN_CLEANED")
         untracked = git_raw("ls-files", "--others", "--exclude-standard", "-z")
         untracked_count = sum(bool(p) for p in untracked.split(b"\0"))
         if untracked_count != 433:
@@ -206,13 +228,15 @@ def main() -> None:
                 new = current.parent / ("." + current.name + ".v5-new-" + marker)
                 if os.path.lexists(new):
                     stop("refusing to replace existing staged artifact: " + str(new))
+                # Record the destination BEFORE writing, so a copy/hash
+                # failure also gets cleaned up (including standalone files).
+                stage[rel] = new
                 if kind == "directory":
                     shutil.copytree(src, new, symlinks=False)
                 else:
                     shutil.copy2(src, new)
                 if tree_hash(new) != expected[rel]:
                     stop("staged artifact digest mismatch: " + rel)
-                stage[rel] = new
             if git("status", "--porcelain", "--untracked-files=no"):
                 stop("tracked source changed during artifact staging")
             # Short final handoff. Previously served files remain backed up.
