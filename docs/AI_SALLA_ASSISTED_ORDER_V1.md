@@ -1,5 +1,14 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Staff read-only bank review queue (source-only, OFF)
+
+Bank P06 now includes `bank_staff_worklist.py` plus a feature-gated Mezan endpoint `GET /api/orders-v2/assisted-salla/bank-review/worklist` with max 25 results/page and owner-scoped Mongo query. Another feature-gated `GET /bank-review/{intent_id}` provides deterministic same-order reconciliation for an authorized reviewer. These are **READ ONLY** and do not verify settlement, change Salla status, mark paid, post GL/Qoyod or start fulfillment.
+
+Permissions are not inferred from WhatsApp: `server.py` passes existing canonical `_effective_perms` to the assisted Salla router, authorizing staff only with the new narrow `bank_receipts.view` permission. Owner and existing admin defaults have this permission; other staff require an explicit owner grant through existing user permissions. The reviewer is scoped to `MEZAN_ASSISTED_SALLA_OWNER_ID`, never their own user ID; missing owner config, disabled feature flag, wrong owner or insufficient permissions fail closed. The response includes only Salla order/reference, claimed amount, source kind and Chatwoot conversation/message/attachment IDs for an authorized staff member to open the original protected Chatwoot record. There are **no raw IBAN, image bytes, transfer refs, private URLs, names or bank credits**. Test coverage: `backend/tests/test_salla_order_creation_bank_staff_worklist.py` (tenant isolation, pagination, redaction, exact case status and RBAC); exact-head CI still unverified.
+
+The store's exact `بإنتظار المراجعة` customized status was read-only verified as 780246489 on 2026-11-27. The staff worklist cannot be activated until Salla product/payment OAuth scopes, approved private media parser, Mongo TTL, controlled one-order E2E, human bank statement procedure and exact-head synthetic/full CI pass. **No actual Salla/WhatsApp/GL operation or deployment.**
+
+
 ## 2026-11-27 — Three-format WhatsApp bank evidence and exact status (DRAFT)
 
 Owner-approved customer transfer evidence: image, file (PDF/TXT; local/private processing only), or WhatsApp message text. CSA #104 strictly collects current scoped original source; Mezan #2140 `SignedBankReceiptStage` verifies HMAC, `source_kind`, message/contact IDs and original attachment ID (0 for plain text). Mezan validates the *claimed* amount/date/payee against an active merchant bank and the final Salla order. Staff review case persists redacted metadata; text is explicitly labeled `customer_text_claim_only` and never proves a transfer occurred.

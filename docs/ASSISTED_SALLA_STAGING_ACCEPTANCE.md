@@ -1,5 +1,16 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Staff authorization, worklist and reconciliation acceptance
+
+- [ ] Source-only staff queue `/bank-review/worklist` and per-intent readback must reject unauthenticated viewer/warehouse roles; grant only explicit `bank_receipts.view` (plus owner/admin defaults via existing role catalogue), not broad `orders.manage`.
+- [ ] Verify user effective permissions use Mezan's `_effective_perms`; a forged permissions field must not authorize. Bank review staff queries must resolve the configured merchant owner from trusted server settings, not staff user ID. An incorrect or unconfigured merchant owner fails closed.
+- [ ] Confirm paginated (limit <= 25, offset <= 1000) owner-scoped case list includes only `awaiting_staff_bank_verification`, `paid=false`, `bank_credit_confirmed=false`, `fulfillment_eligible=false`, and never leaks raw receipt, IBAN, transfer reference hash, buyer name or media URL.
+- [ ] Original receipt stays in protected Chatwoot. The list returns source IDs for authorized staff to locate the original; Chatwoot permissions and bank statement verification are independent.
+- [ ] Ensure exact Salla custom review name is confirmed on same synced Salla/Mezan order before staff accepts; reject generic shared `under_review` and `تم المراجعة`.
+- [ ] The queue only allows reading and cannot approve bank credit or trigger Salla status, account/GL, fulfillment or refund writes.
+- [ ] New synthetic test module `test_salla_order_creation_bank_staff_worklist.py` is included in `salla-assisted-order-synthetic.yml`; **latest exact-head result still unverified / queued**. Do not switch production flags ON from the unit tests alone.
+
+
 ## 2026-11-27 — Live Salla status metadata evidence and bank receipt readback guard
 
 - [x] Read-only Salla merchant status listing confirmed customized **بإنتظار المراجعة = 780246489** and **بإنتظار الدفع = 1555791576** (27 Nov 2026), with multiple other merchant statuses including «تم المراجعة» sharing generic `under_review` slug. These metadata were obtained via a separately connected Salla app; they **DO NOT certify Mezan's OAuth permissions**.
