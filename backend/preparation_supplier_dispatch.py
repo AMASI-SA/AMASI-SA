@@ -1887,6 +1887,14 @@ def make_preparation_supplier_dispatch_router(
         from preparation_progress_counts import progress_count
         return await progress_count(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
 
+    @router.get("/progress-card-counts")
+    async def current_progress_card_counts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_stage_card_counts import progress_stage_card_counts
+        return await progress_stage_card_counts(db, user_id=_merchant_user_id(worker),
+                                                employee_id=_actor_id(worker))
+
     @router.get("/progress-day-counts")
     async def current_progress_day_counts(
         after: str = Query("", pattern=r"^$|^\d{4}-\d{2}-\d{2}$|^__unknown__$"),
