@@ -464,17 +464,16 @@ async def run_tiktok_reporting_sync(
                         upsert=True,
                     )
                     saved += 1
-                    if day in historical_days and next_history_date == day:
-                        if source_proof.get("complete") is True and spend_sar is not None:
-                            next_history_date = day + timedelta(days=1)
-                        else:
-                            item = {
-                                "ad_account_id": account["ad_account_id"],
-                                "date": day.isoformat(),
-                                "code": "tiktok_backfill_source_evidence_incomplete",
-                            }
-                            account_errors.append(item)
-                            error_items.append(item)
+                    if source_proof.get("complete") is not True or spend_sar is None:
+                        item = {
+                            "ad_account_id": account["ad_account_id"],
+                            "date": day.isoformat(),
+                            "code": "tiktok_reporting_source_evidence_incomplete",
+                        }
+                        account_errors.append(item)
+                        error_items.append(item)
+                    elif day in historical_days and next_history_date == day:
+                        next_history_date = day + timedelta(days=1)
                 except TikTokReportingError as exc:
                     provider_calls += 1
                     if exc.code == "tiktok_needs_reauth":
