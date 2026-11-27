@@ -11,7 +11,34 @@ from salla_order_creation.service import (
     CreationDenied,create_confirmed_salla_order,order_digest,
     quote_pricing_mode,
 )
-from test_salla_order_creation_service import FakeDB,FakeCollection
+class FakeCollection:
+    def __init__(self, rows=()):
+        self.rows=[dict(r) for r in rows]
+
+    async def find_one(self,query):
+        for row in self.rows:
+            if all(row.get(k)==v for k,v in query.items()):
+                return dict(row)
+        return None
+
+    async def insert_one(self,doc):
+        if any(row.get("_id")==doc.get("_id") for row in self.rows):
+            raise ValueError("duplicate synthetic _id")
+        self.rows.append(dict(doc))
+
+    async def update_one(self,query,update):
+        for row in self.rows:
+            if all(row.get(k)==v for k,v in query.items()):
+                row.update(update.get("$set",{}))
+                return
+        raise ValueError("synthetic intent update missing")
+
+
+class FakeDB:
+    def __init__(self,quotes=(),confirmations=()):
+        self.salla_ai_order_quotes=FakeCollection(quotes)
+        self.salla_ai_order_confirmations=FakeCollection(confirmations)
+        self.salla_ai_order_intents=FakeCollection()
 
 
 def bank_order(methods=None):
