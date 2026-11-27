@@ -33,7 +33,11 @@ def build_tiktok_reported_account_rows(
         coverage = tiktok_reporting_coverage([account_id], start, end, own)
         coverage_ok = coverage["coverage_complete"]
         # Sum only when exactly one verified fact exists per day.
-        spend_sar = round(sum(float(fact["spend_sar"]) for fact in own), 2) if coverage_ok else None
+        spend_sar = round(sum(float(
+            fact.get("effective_spend_sar")
+            if fact.get("effective_spend_sar") is not None
+            else fact["spend_sar"]
+        ) for fact in own), 2) if coverage_ok else None
         matches = [
             binding for binding in bindings
             if binding.get("platform") == "tiktok"
