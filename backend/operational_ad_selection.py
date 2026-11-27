@@ -9,6 +9,19 @@ PROVIDERS = EDITABLE | {'snapchat_ads', 'meta_ads'}
 def choices(accounts, state):
     preference = state.get('ad_catalog_selection')
     selected = set(preference['account_ids']) if preference else None
+    # Auto-include newly authorized TikTok advertisers; explicit owner
+    # exclusions remain respected after the catalog is saved again.
+    known_tiktok = set((preference or {}).get('known_tiktok_account_ids') or [])
+    if preference and 'known_tiktok_account_ids' not in preference:
+        # Preserve exclusions saved by older Mezan versions: they never
+        # recorded an explicit known-ID list. Only the new automatic
+        # discovery/backfill marker can establish that an ID arrived later.
+        known_tiktok = {
+            account.get('mezan_integration_account_id')
+            for account in accounts
+            if account.get('provider') == 'tiktok_ads'
+            and not account.get('tiktok_backfill_next_date')
+        }
     result, seen = [], set()
     for account in accounts:
         provider = account.get('provider')
@@ -18,7 +31,11 @@ def choices(accounts, state):
         if not isinstance(identity, str) or not identity or identity in seen:
             fail('operational_ad_identity_ambiguous', 'هوية الحساب الإعلاني ناقصة أو مكررة')
         seen.add(identity)
-        enabled = identity in selected if provider in EDITABLE and selected is not None else account.get('mezan_selected') is True
+        if provider == 'tiktok_ads':
+            enabled = (identity in selected or identity not in known_tiktok) if selected is not None else True
+        else:
+            enabled = (identity in selected if provider in EDITABLE and selected is not None
+                       else account.get('mezan_selected') is True)
         result.append({'id': identity, 'provider': provider,
                        'name': account.get('display_name') or account.get('external_account_id') or 'حساب بلا اسم',
                        'external_account_id': account.get('external_account_id'),
@@ -50,7 +67,11 @@ async def save(db, owner, actor, payload):
         ids = payload['account_ids']
         if len(ids) != len(set(ids)) or not set(ids) <= allowed:
             fail('operational_ad_selection_invalid', 'الحساب المختار غير متاح أو تابع لمسار اختيار آخر')
-        new = {'version': old.get('version', 0) + 1, 'account_ids': sorted(ids)}
+        new = {'version': old.get('version', 0) + 1, 'account_ids': sorted(ids),
+               'known_tiktok_account_ids': sorted(
+                   r['id'] for r in choices(accounts, state)
+                   if r['provider'] == 'tiktok_ads'
+               )}
         state['ad_catalog_selection'] = new
         audit(state, actor, 'ad_catalog_selection', old, new,
               'اختيار العرض فقط؛ دون تفعيل محاسبة أو تغيير أرصدة', 'mezan2')

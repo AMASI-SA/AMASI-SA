@@ -19,6 +19,7 @@ jest.mock('./api', () => ({
     finish: jest.fn(),
     addEntity: jest.fn(),
     reports: jest.fn(),
+    tiktokReportedSpend: jest.fn(),
     refreshBalances: jest.fn(),
     costExposure: jest.fn(),
     obligations: jest.fn(),
@@ -75,6 +76,7 @@ beforeEach(() => {
   api.opening.mockResolvedValue({});
   api.finish.mockResolvedValue({});
   api.obligations.mockResolvedValue({items:[]});
+  api.tiktokReportedSpend.mockResolvedValue({items:[],coverage_complete:false,period:{from_date:'2026-11-01',to_date:'2026-11-27'}});
   api.reports.mockResolvedValue({
     parties: [],
     obligations: [],
