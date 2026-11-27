@@ -58,6 +58,7 @@ const SECTIONS = [
             { to: "/accounting/reconciliation", label: "🔍 تقرير المطابقة", icon: ArrowsLeftRight, testid: "nav-reconciliation" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/bank-transfer-review", label: "🏦 مراجعة التحويلات البنكية", icon: Receipt, testid: "nav-bank-transfer-review" },
+            { to: "/assisted-bank-receipts", label: "🧾 إيصالات تحويل واتساب", icon: Receipt, testid: "nav-assist-bank-receipts" },
             { to: "/ai/control-center", label: "🧠 مركز الذكاء والتحقق", icon: Lightning, testid: "nav-ai-control-center" },
             { to: "/settlement-engine", label: "🔬 محرّك التسويات (Dry Run)", icon: Receipt, testid: "nav-settlement-engine" },
             { to: "/bnpl-settlements", label: "تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-settlements" },
