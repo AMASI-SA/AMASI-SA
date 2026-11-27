@@ -77,7 +77,15 @@ def test_paypal_quoted_header_and_utf8_bom_are_accepted():
     writer.writerow(["11/27/2026", "12:00:00", "GMT", "Synthetic", "Payment",
                      "Completed", "USD", "100.00", "-3.00", "97.00",
                      "PAYPAL-QUOTE-1", "", "private@example.test"])
-    parsed = normalize_statement(b"\\xef\\xbb\\xbf" + output.getvalue().encode("utf-8"))
+    from codecs import BOM_UTF8
+    from hashlib import sha256
+    raw = BOM_UTF8 + output.getvalue().encode("utf-8")
+    parsed = normalize_statement(raw)
+    assert parsed["file_hash"] == sha256(raw).hexdigest()
+    assert all(row["event_type"] == "unsupported" for row in parsed["rows"])
+    # The printable escape sequence is not a UTF-8 BOM and must fail closed.
+    with pytest.raises(ValueError, match="statement_file_invalid"):
+        normalize_statement(br"\xef\xbb\xbf" + output.getvalue().encode("utf-8"))
     assert parsed["provider"] == "paypal"
     assert parsed["rows"][0]["event_reference"] == "PAYPAL-QUOTE-1"
     assert "private@example.test" not in str(parsed)
