@@ -42,7 +42,7 @@ class DB:
 def order(**change):
     obj=Obj(
         order_id="90001",order_number="302076044",
-        status="under_review",status_native="بانتظار المراجعة",
+        status="under_review",status_native="بإنتظار المراجعة",
         payment=Obj(method="bank",method_native="bank",
                     status="pending_payment",collection_status="unpaid",
                     paid_amount=0.0),
@@ -150,3 +150,15 @@ def test_text_only_bank_claim_readback_exposes_kind_not_customer_text():
     assert result["paid"] is False
     assert result["bank_credit_confirmed"] is False
     assert result["fulfillment_eligible"] is False
+
+
+
+def test_same_generic_under_review_slug_does_not_mistake_reviewed_for_waiting():
+    # Real Salla merchant statuses "تم المراجعة" and "بإنتظار المراجعة"
+    # share the same generic slug. Only the exact bank review name is safe.
+    already_reviewed=order(status="under_review",status_native="تم المراجعة")
+    state=check(existing=already_reviewed)
+    assert state["state"]=="needs_staff_reconciliation"
+    assert "salla_order_not_in_review_status" in state["flags"]
+    assert state["bank_credit_confirmed"] is False
+    assert state["fulfillment_eligible"] is False
