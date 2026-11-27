@@ -254,3 +254,57 @@ def test_tamara_declared_components_must_equal_native_total_fee():
     wb.active.cell(4, TAMARA.index('Tamara Variable Fees') + 1, 10)
     row = normalize_statement(content(wb))['rows'][0]
     assert 'statement_fee_component_mismatch' in row['blockers']
+
+
+def test_emkan_original_xlsx_intake_is_review_only_and_preserves_source_values():
+    """A valid-looking original Emkan sheet never synthesizes a sale/refund journal."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Merchant name:", "Synthetic merchant"])
+    ws.append(["Date:", "2026-11-27"])
+    ws.append(["Total settlement today:", 96.55])
+    headers = [
+        "Merchant name", "Merchant Code", "Order ID", "Order creation date",
+        "Original bill Amount", "REFUND STATUS", "Refunded amount",
+        "Net bill amount", "Commission rate", "Commission Amount",
+        "Refundable commission Rate", "Refundable commission Amount",
+        "Non-Refundable commission rate", "Non-Refundable commission Amount",
+        "Fixed Fee", "Total Fee", "VAT rate", "VAT amount",
+        "Total deduction for EMKAN", "Settelment:", "PO:",
+    ]
+    ws.append(headers)
+    values = {
+        "Merchant name": "Synthetic merchant", "Merchant Code": "demo",
+        "Order ID": "synthetic-provider-order", "Order creation date": "2026-11-25",
+        "Original bill Amount": 100, "REFUND STATUS": "NO REFUND",
+        "Refunded amount": 0, "Net bill amount": 100, "Commission rate": 3,
+        "Commission Amount": 3, "Refundable commission Rate": 0,
+        "Refundable commission Amount": 0, "Non-Refundable commission rate": 0,
+        "Non-Refundable commission Amount": 3, "Fixed Fee": 0,
+        "Total Fee": 3, "VAT rate": 0.15, "VAT amount": 0.45,
+        "Total deduction for EMKAN": 3.45, "Settelment:": 96.55,
+        "PO:": "synthetic-po",
+    }
+    ws.append([values.get(h) for h in headers])
+    parsed = normalize_statement(content(wb))
+    assert parsed["provider"] == "emkan"
+    assert parsed["currency"] == "SAR"
+    assert parsed["statement_date"] == "2026-11-27"
+    assert len(parsed["rows"]) == 1
+    row = parsed["rows"][0]
+    assert row["provider_order_id"] == "synthetic-provider-order"
+    assert row["event_reference"] == "synthetic-po"
+    assert row["event_type"] == "unsupported"
+    assert "statement_event_unsupported" in row["blockers"]
+    assert row["fee_net"] == "3.00" and row["fee_vat"] == "0.45"
+    assert row["transferred_amount"] == "96.55"
+    assert parsed["totals"]["capture_principal"] == "0.00"
+
+
+def test_emkan_ambiguous_combination_of_provider_sheets_is_rejected():
+    wb = workbook()
+    ws = wb.create_sheet("Emkan")
+    ws.append(["Order ID", "Net bill amount", "Total deduction for EMKAN"])
+    ws.append(["demo", 100, 3.45])
+    with pytest.raises(ValueError, match="statement_provider_ambiguous"):
+        normalize_statement(content(wb))
