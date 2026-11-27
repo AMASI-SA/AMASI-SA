@@ -1,4 +1,4 @@
-export const STATEMENT_PROVIDERS = { tabby: "تابي", tamara: "تمارا", salla: "سلة" };
+export const STATEMENT_PROVIDERS = { tabby: "تابي", tamara: "تمارا", salla: "سلة", emkan: "إمكان", paypal: "باي بال" };
 export const STATEMENT_KINDS = { capture: "دفعة عميل", refund: "رد مبلغ", payout_fee: "رسم تسوية", other: "عملية أخرى" };
 export const STATEMENT_STATUSES = {
     matched: "مطابق للسجل", missing: "غير مسجل", different: "يحتاج مطابقة", blocked: "يحتاج معالجة", already_confirmed: "معتمد سابقًا",
@@ -35,7 +35,7 @@ export const STATEMENT_REASONS = {
     statement_order_reference_invalid: "مرجع الطلب غير صالح للمطابقة.",
     statement_event_date_missing: "تاريخ العملية غير موضح.",
     statement_event_date_invalid: "تاريخ العملية غير صالح للمطابقة.",
-    statement_provider_unknown: "لم نتعرف على منصة الكشف. اختر ملف Excel الأصلي من تابي أو تمارا أو سلة.",
+    statement_provider_unknown: "لم نتعرف على منصة الكشف. اختر ملف Excel الأصلي من تابي أو تمارا أو سلة أو إمكان أو باي بال.",
     statement_provider_ambiguous: "يحتوي الملف على علامات أكثر من منصة. اختر كشفًا واحدًا واضح المصدر.",
     statement_rows_missing: "لا توجد عمليات قابلة للقراءة في هذا الكشف.",
     statement_row_limit: "يتجاوز الكشف الحد المسموح: 10,000 سطر. قسّم الكشف قبل رفعه.",
