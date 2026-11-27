@@ -36,6 +36,7 @@ async def read_synced_bank_review(
     db: Any, *,
     user_id: str, intent_id: str,
     load_order: ReadOrder,
+    expected_review_customized_id: int | None = None,
 ) -> dict:
     if not user_id or not intent_id:
         return _not_ready("authenticated_scope_missing")
@@ -89,11 +90,22 @@ async def read_synced_bank_review(
                 "paid","partial"
             ) or getattr(payment,"paid_amount",None) != 0):
         return _not_ready("payment_not_pending_bank_review")
-    # The canonical mapper preserves Salla's actual customized status name
-    # in status_native, while status is often the ambiguous generic slug.
-    # Fail closed if exact customized name was not synced yet.
-    status=_text(getattr(order,"status_native",None))
-    pending=status == _text(REVIEW_CUSTOM_NAME)
+    # The top-level Salla status.name may be canonical "بإنتظار المراجعة"
+    # for MANY custom statuses, including processed "تم المراجعة".
+    # Resolve the actual active target ID from Salla merchant status metadata
+    # and require the synced customized child ID + name and review slug.
+    # Missing source identity is UNVERIFIED, never an approved bank state.
+    status=_text(getattr(order,"status",None))
+    custom_id=getattr(order,"status_customized_id",None)
+    custom_name=_text(getattr(order,"status_customized_name",None))
+    pending=(
+        type(expected_review_customized_id) is int
+        and expected_review_customized_id > 0
+        and type(custom_id) is int
+        and custom_id == expected_review_customized_id
+        and custom_name == _text(REVIEW_CUSTOM_NAME)
+        and status == "under review"
+    )
     total=getattr(totals,"total",None)
     currency=str(getattr(totals,"currency","")).upper()
     assessment=assess_bank_order_total(
