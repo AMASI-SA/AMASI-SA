@@ -29,6 +29,12 @@ from .private_fields import require_private_fields_ttl, require_unchanged_privat
 from .private_vault_action import verify_private_vault_prepare
 from .private_order_builder import PrivateOrderAssemblyDenied, prepare_from_private_vault
 from .quote_cipher import EncryptedOrderUnavailable, decrypt_order_payload
+from .bank_review_action import verify_bank_receipt_review
+from .bank_receipt_review import ReceiptReviewDenied
+from .bank_review_queue import BankReviewStateError, enqueue_bank_receipt_review
+from .bank_order_readback import BankOrderNotVerified, read_synced_bank_order_amount
+from .bank_review_status import BankStatusDenied, ensure_bank_order_under_review
+
 from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .http_limits import BodyTooLarge, read_bounded_action_body
@@ -60,6 +66,102 @@ def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    @router.post("/signed-bank-receipt-review")
+    async def signed_bank_receipt_review(request: Request) -> dict:
+        """Append a pending bank transfer review, optionally flag Salla review.
+
+        Customer receipt legibility is NOT proof of bank settlement. No
+        payment-status, invoice, Qoyod or GL write occurs on this route.
+        Mezan totals come from Salla's synced order, not the submitted image
+        or any AI-supplied amount.
+        """
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_RECEIPT_ENABLED","0")!="1":
+            raise HTTPException(status_code=503,detail={"code":"bank_receipt_review_disabled"})
+        owner_id=str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        secret=str(os.environ.get("MEZAN_ASSISTED_SALLA_BANK_RECEIPT_HMAC_SECRET") or "").encode()
+        account=str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT") or "")
+        inbox=str(os.environ.get("MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX") or "")
+        if (not owner_id or len(secret)<32 or
+                not account.isdigit() or not inbox.isdigit()):
+            raise HTTPException(status_code=503,detail={"code":"bank_review_scope_not_configured"})
+        try:
+            raw=await read_bounded_action_body(request)
+        except BodyTooLarge as exc:
+            raise HTTPException(status_code=413,detail={"code":exc.args[0]}) from exc
+        try:
+            action=verify_bank_receipt_review(
+                raw,
+                request.headers.get("x-mezan-action-timestamp",""),
+                request.headers.get("x-mezan-action-delivery",""),
+                request.headers.get("x-mezan-action-signature",""),
+                secret,
+            )
+        except SignatureDenied as exc:
+            raise HTTPException(status_code=401,detail={"code":str(exc)}) from exc
+        if action.account_id!=int(account) or action.inbox_id!=int(inbox):
+            raise HTTPException(status_code=403,detail={"code":"outside_approved_inbox"})
+
+        original=await db.salla_ai_order_intents.find_one({
+            "_id":intent_storage_id(owner_id,action.intent_id),
+            "user_id":owner_id,
+            "inbox_id":str(action.inbox_id),
+            "conversation_id":str(action.conversation_id),
+        })
+        if not original or original.get("pricing_mode")!="salla_bank_review":
+            raise HTTPException(status_code=409,detail={"code":"unpaid_bank_order_required"})
+        async def load_order_by_ref(user_id: str, ref: str):
+            try:
+                return await get_order(
+                    MongoOrderRepository(db),user_id=user_id,order_number=ref,
+                )
+            except OrderNotFoundError as exc:
+                raise LookupError("mezan_bank_order_not_synced") from exc
+        try:
+            amount=await read_synced_bank_order_amount(
+                owner_id=owner_id,salla_order_id=original["salla_order_id"],
+                reference_id=original.get("reference_id"),
+                load_order=load_order_by_ref,
+            )
+            review=await enqueue_bank_receipt_review(
+                db,owner_id=owner_id,intent_id=action.intent_id,
+                account_id=action.account_id,
+                inbox_id=action.inbox_id,
+                conversation_id=action.conversation_id,
+                contact_id=action.observation.contact_id,
+                observation=action.observation,
+                order_total_sar=amount,
+            )
+        except (BankOrderNotVerified,BankReviewStateError,ReceiptReviewDenied,
+                ValueError,TypeError):
+            raise HTTPException(
+                status_code=409,detail={"code":"bank_receipt_needs_staff_review"}
+            ) from None
+
+        # Status transition is a separately controlled, idempotent Salla
+        # order-lifecycle operation. It never sets payment.status='paid'.
+        status="status_update_disabled"
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_STATUS_ENABLED","0")=="1":
+            try:
+                transitioned=await ensure_bank_order_under_review(
+                    db,owner_id=owner_id,intent_id=action.intent_id,
+                    review_id=review["review_id"],get_salla=call_salla,
+                    set_salla_status=call_salla,enabled=True,
+                )
+                status=transitioned["state"]
+            except BankStatusDenied:
+                status="status_transition_requires_staff_check"
+
+        # Never echo receipt fields, bank details, URL or private attachments.
+        return {
+            "state":"awaiting_human_bank_confirmation",
+            "review_id":review["review_id"],
+            "receipt_precheck":review.get("appearance","needs_clarification"),
+            "issues":review.get("issues",[]),
+            "salla_status":status,
+            "payment_confirmed":False,
+            "ready_for_fulfillment":False,
+        }
 
     @router.post("/signed-private-field")
     async def signed_private_field(request: Request) -> dict:
