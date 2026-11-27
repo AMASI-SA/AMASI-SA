@@ -32,6 +32,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
     [
         "/dashboard-v2",
         "/orders-v2/280001234",
+        "/whatsapp-bank-review",
         "/fulfillment-v2",
         "/inventory-receiving-v2",
         "/products-v2",
@@ -55,7 +56,7 @@ test("orders and fulfillment are independent top-level sections", () => {
     const orders = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "orders");
     const fulfillment = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "fulfillment");
 
-    expect(orders.items.map((item) => item.to)).toEqual(["/orders-v2"]);
+    expect(orders.items.map((item) => item.to)).toEqual(["/orders-v2", "/whatsapp-bank-review"]);
     expect(fulfillment.items.map((item) => item.to)).toEqual(["/fulfillment-v2"]);
     expect(orders.items.some((item) => item.to.startsWith("/fulfillment-v2"))).toBe(false);
     expect(orders.items.some((item) => item.to === "/inventory-receiving-v2")).toBe(false);
@@ -156,4 +157,26 @@ test("new navigation does not route to legacy Mezan pages", () => {
     expect(targets).not.toContain("/reports");
     expect(targets).not.toContain("/transactions");
     expect(targets).not.toContain("/settings");
+});
+
+
+test("Mezan2 WhatsApp bank review link is visible only to authorized staff", () => {
+    const location = { pathname: "/orders-v2", search: "" };
+    const unauthorized = renderToStaticMarkup(
+        <MezanV2NavigationShell
+            location={location} onOpenAll={() => {}} bankReviewAllowed={false}
+        />,
+    );
+    expect(unauthorized).not.toContain("مراجعة حوالات واتساب");
+    const authorized = renderToStaticMarkup(
+        <MezanV2NavigationShell
+            location={location} onOpenAll={() => {}} bankReviewAllowed={true}
+        />,
+    );
+    // Orders dropdown is initially closed; clickability is controlled
+    // by the filtered data, not by hiding a clickable DOM row.
+    const orderLinks = MEZAN_V2_NAV_SECTIONS.find((s) => s.id === "orders").items;
+    expect(orderLinks[1].requiredPermission).toBe("bank_receipts.view");
+    expect(authorized).toContain('data-testid="mezan-v2-primary-orders"');
+    expect(isMezanV2Route("/whatsapp-bank-review")).toBe(true);
 });
