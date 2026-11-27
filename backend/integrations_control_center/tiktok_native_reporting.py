@@ -7,6 +7,7 @@ legacy TikTok collections and never writes campaigns, accounting, or Qoyod.
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
@@ -307,12 +308,28 @@ async def _fetch_day(
             )
     metrics = (rows[0] or {}).get("metrics") if rows else {}
     metrics = metrics if isinstance(metrics, dict) else {}
+    try:
+        spend_native = float(metrics.get("spend") or 0)
+        impressions_native = float(metrics.get("impressions") or 0)
+        clicks_native = float(metrics.get("clicks") or 0)
+        conversions_native = float(metrics.get("conversion") or 0)
+        values = (spend_native, impressions_native, clicks_native, conversions_native)
+        if any(not math.isfinite(v) or v < 0 for v in values):
+            raise ValueError("nonfinite_or_negative")
+        impressions = int(impressions_native)
+        clicks = int(clicks_native)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TikTokReportingError(
+            "tiktok_reporting_invalid_metrics",
+            "TikTok returned invalid or non-finite advertiser metrics.",
+            status_code=502,
+        ) from exc
     return {
         "close_evidence": tiktok_evidence(data, account_id),
-        "spend_native": float(metrics.get("spend") or 0),
-        "impressions": int(float(metrics.get("impressions") or 0)),
-        "clicks": int(float(metrics.get("clicks") or 0)),
-        "conversions": float(metrics.get("conversion") or 0),
+        "spend_native": spend_native,
+        "impressions": impressions,
+        "clicks": clicks,
+        "conversions": conversions_native,
         "request_id": data.get("_request_id"),
         "empty": not bool(rows),
     }
