@@ -92,6 +92,26 @@ def quote_pricing_mode(quote: dict | None) -> str | None:
         # The final amount must be read back from the same Salla order in
         # Mezan before any customer checkout link is released.
         return "salla_post_create"
+
+    # A customer-provided receipt is NOT proof of funds received.
+    # The bank mode only permits a bank-method UNPAID Salla order and a
+    # separate customer-service bank-credit review queue.
+    if (quote.get("source") == "mezan_verified_bank_receipt_review_v1"
+            and quote.get("state") == "authorized_for_pending_creation"
+            and quote.get("post_create_salla_total") is True
+            and quote.get("pricing_verified") is False
+            and quote.get("shipping_price_verified") is False
+            and quote.get("online_only") is False
+            and quote.get("total_sar") is None
+            and quote.get("receipt_visual_preflight") is True
+            and quote.get("bank_credit_verified") is False
+            and isinstance(quote.get("bank_review_ref"), str)
+            and quote["bank_review_ref"].startswith("bank-review.")
+            and all(quote.get(k) is True for k in (
+                "products_verified","carrier_eligibility_verified",
+                "payment_methods_verified",
+            ))):
+        return "bank_receipt_review"
     return None
 
 
@@ -174,14 +194,31 @@ async def create_confirmed_salla_order(
         inbox_id=inbox_id, conversation_id=conversation_id, now=now,
     ):
         raise CreationDenied("fresh_server_verified_quote_required", 409)
-    # Post-create Salla pricing is allowed ONLY for electronically payable
-    # unpaid orders. COD/bank require a separately verified financial flow.
+    # Never mark a bank receipt paid. Bank claims use a separate human
+    # credit-review contract, not the automatic card checkout flow.
     pricing_mode = quote_pricing_mode(quote)
     if (pricing_mode == "salla_post_create"
             and not set(order.accepted_methods).issubset(
                 {"mada", "credit_card"}
             )):
         raise CreationDenied("post_create_pricing_requires_online_payment", 409)
+    if pricing_mode == "bank_receipt_review":
+        if order.accepted_methods != ["bank"]:
+            raise CreationDenied("bank_review_requires_bank_only", 409)
+        from .bank_claims import BankReviewDenied, get_claim_for_order
+        try:
+            receipt = await get_claim_for_order(
+                db, user_id=user_id, intent_id=intent_id,
+                review_ref=quote.get("bank_review_ref"),
+                inbox_id=inbox_id, conversation_id=conversation_id,
+                contact_id=quote.get("source_contact_id"),
+            )
+        except (BankReviewDenied, TypeError, ValueError) as exc:
+            raise CreationDenied("private_bank_receipt_preflight_required", 409) from None
+        if (receipt.get("state") != "visual_preflight_accepted" or
+                receipt.get("review_ref") != quote.get("bank_review_ref") or
+                receipt.get("store_bank_id") != quote.get("store_bank_id")):
+            raise CreationDenied("bank_review_receipt_out_of_scope", 409)
 
     confirmation = await db.salla_ai_order_confirmations.find_one(
         {"user_id": user_id, "intent_id": intent_id}
@@ -199,6 +236,7 @@ async def create_confirmed_salla_order(
         "actor_id": actor_id, "state": "sending", "payload_digest": digest,
         "quote_version": quote["version"],
         "pricing_mode": pricing_mode,
+        "bank_review_ref": quote.get("bank_review_ref") if pricing_mode == "bank_receipt_review" else None,
         "confirmation_message_id": str(confirmation["message_id"]),
         "created_at": now, "updated_at": now,
     }

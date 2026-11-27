@@ -186,6 +186,14 @@ async def resolve_synced_checkout(
             quote.get("version") != quote_version):
         return _not_ready("original_quote_not_verified", salla_order_id=order_id,
                           reference_id=ref_id)
+    if pricing_mode == "bank_receipt_review":
+        # This customer claims a bank transfer has already been made.
+        # Never send a Salla checkout link or invite a second payment.
+        # A separate protected service-staff queue verifies bank credit.
+        return _not_ready(
+            "bank_transfer_requires_staff_review_no_checkout",
+            salla_order_id=order_id,reference_id=ref_id,
+        )
     approved_total = None
     if pricing_mode == "preverified":
         approved_total = _money(quote.get("total_sar"))

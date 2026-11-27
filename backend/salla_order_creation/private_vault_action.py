@@ -33,6 +33,9 @@ class SignedPrivateVaultPrepare(BaseModel):
     courier_id: int = Field(gt=0)
     selected_rate_id: int = Field(gt=0)
     branch_id: int | None = Field(default=None, gt=0)
+    bank_review_ref: str | None = Field(
+        default=None, pattern=r"^bank-review\.[0-9a-f]{32}$"
+    )
     accepted_methods: list[PaymentMethod] = Field(min_length=1, max_length=2)
     products: list[Product] = Field(min_length=1, max_length=50)
 
@@ -45,6 +48,12 @@ def verify_private_vault_prepare(
         raw, stamp, delivery, signature, secret, now=now,
     )
     try:
-        return SignedPrivateVaultPrepare.model_validate(parsed)
+        action = SignedPrivateVaultPrepare.model_validate(parsed)
     except ValidationError as exc:
         raise SignatureDenied("invalid_private_vault_prepare") from exc
+    if action.accepted_methods == ["bank"]:
+        if action.bank_review_ref is None:
+            raise SignatureDenied("bank_transfer_visual_review_ref_required")
+    elif action.bank_review_ref is not None:
+        raise SignatureDenied("bank_ref_not_allowed_for_online_checkout")
+    return action
