@@ -463,3 +463,39 @@ def test_legacy_ad_catalog_owner_exclusion_survives_auto_discovery_upgrade():
     legacy_state = {"ad_catalog_selection": {"version": 2, "account_ids": []}}
     selected = {r["id"]: r["selected"] for r in choices([old, discovered], legacy_state)}
     assert selected == {"old": False, "new": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["NaN", "Infinity", "-1", "not-a-number"])
+async def test_tiktok_invalid_spend_never_becomes_a_financial_source(invalid):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": {"list": [{
+                "dimensions": {"advertiser_id": "100"},
+                "metrics": {"spend": invalid}
+            }]}}
+
+    class Client:
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    with pytest.raises(reporting.TikTokReportingError) as exc:
+        await reporting._fetch_day(
+            Client(), "token", {"ad_account_id": "100"},
+            datetime(2026, 11, 27, tzinfo=timezone.utc).date())
+    assert exc.value.code == "tiktok_reporting_invalid_metrics"
+
+
+@pytest.mark.asyncio
+async def test_tiktok_report_timeout_is_isolated_to_one_advertiser():
+    class Client:
+        async def get(self, *args, **kwargs):
+            raise reporting.httpx.ReadTimeout("provider_timeout")
+
+    with pytest.raises(reporting.TikTokReportingError) as exc:
+        await reporting._fetch_day(
+            Client(), "token", {"ad_account_id": "100"},
+            datetime(2026, 11, 27, tzinfo=timezone.utc).date())
+    assert exc.value.code == "tiktok_reporting_request_unavailable"
