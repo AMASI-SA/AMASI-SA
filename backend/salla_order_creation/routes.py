@@ -35,6 +35,7 @@ from .bank_review_queue import BankReviewStateError, enqueue_bank_receipt_review
 from .bank_order_readback import BankOrderNotVerified, read_synced_bank_order_amount
 from .bank_review_status import BankStatusDenied, ensure_bank_order_under_review
 from .bank_review_staff import StaffBankReceiptDecision, StaffBankReviewDenied, record_staff_receipt_triage
+from .bank_order_initial_status import put_new_bank_order_under_review
 
 from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
@@ -775,7 +776,7 @@ def make_assisted_salla_order_router(
             return {"state": "replayed_delivery", "order_id": None}
 
         try:
-            return await create_confirmed_salla_order(
+            result = await create_confirmed_salla_order(
                 db,
                 user_id=owner_id,
                 actor_id="signed-customer-service",
@@ -790,5 +791,32 @@ def make_assisted_salla_order_router(
             raise HTTPException(
                 status_code=exc.status_code, detail={"code": exc.code}
             ) from exc
+        # Bank transfer orders must enter Salla's order UNDER REVIEW state
+        # immediately after confirmed creation, not wait for a receipt.
+        # This is an order status ONLY, never payment=paid or GL. If the
+        # status transition fails, keep the already-created Salla order ID
+        # and report a staff-review blocker; never retry POST /orders.
+        if (result.get("pricing_mode") == "salla_bank_review"
+                and result.get("state") in ("created","created_amount_unverified")
+                and type(result.get("salla_order_id")) is int
+                and result["salla_order_id"] > 0):
+            review_state = "bank_status_transition_disabled"
+            if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_STATUS_ENABLED","0") == "1":
+                try:
+                    status_result = await put_new_bank_order_under_review(
+                        db, owner_id=owner_id, intent_id=action.intent_id,
+                        get_salla=call_salla, set_salla_status=call_salla,
+                        enabled=True,
+                    )
+                    review_state = status_result["state"]
+                except BankStatusDenied:
+                    review_state = "bank_status_requires_staff_check"
+            result = {
+                **result,
+                "bank_review_required": True,
+                "salla_review_status": review_state,
+                "payment_confirmed": False,
+            }
+        return result
 
     return router
