@@ -92,6 +92,28 @@ def quote_pricing_mode(quote: dict | None) -> str | None:
         # The final amount must be read back from the same Salla order in
         # Mezan before any customer checkout link is released.
         return "salla_post_create"
+
+    if (quote.get("source") == "mezan_verified_unpaid_bank_review_intent_v1"
+            and quote.get("state") == "authorized_for_pending_bank_review"
+            and quote.get("bank_only") is True
+            and quote.get("online_only") is False
+            and quote.get("post_create_salla_total") is True
+            and quote.get("pricing_verified") is False
+            and quote.get("shipping_price_verified") is False
+            and quote.get("bank_credit_confirmed") is False
+            and quote.get("staff_review_required") is True
+            and quote.get("total_sar") is None
+            and type(quote.get("bank_id")) is int and quote["bank_id"] > 0
+            and isinstance(quote.get("receipt_ref"), str)
+            and quote["receipt_ref"].startswith("receipt.")
+            and all(quote.get(k) is True for k in (
+                "products_verified", "carrier_eligibility_verified",
+                "payment_methods_verified", "bank_method_verified",
+                "receipt_appearance_verified",
+            ))):
+        # Visual receipt screening may authorize a REVIEW QUEUE only.
+        # It NEVER confirms the bank has credited the store.
+        return "salla_bank_review"
     return None
 
 
