@@ -263,24 +263,31 @@ async def _fetch_day(
     day: date,
 ) -> dict[str, Any]:
     account_id = account["ad_account_id"]
-    response = await client.get(
-        TIKTOK_REPORT_URL,
-        headers={"Access-Token": access_token},
-        params={
-            "advertiser_id": account_id,
-            "report_type": "BASIC",
-            "data_level": "AUCTION_ADVERTISER",
-            "dimensions": json.dumps(["advertiser_id"], separators=(",", ":")),
-            "metrics": json.dumps(
-                ["spend", "impressions", "clicks", "conversion"],
-                separators=(",", ":"),
-            ),
-            "start_date": day.isoformat(),
-            "end_date": day.isoformat(),
-            "page": 1,
-            "page_size": 10,
-        },
-    )
+    try:
+        response = await client.get(
+            TIKTOK_REPORT_URL,
+            headers={"Access-Token": access_token},
+            params={
+                "advertiser_id": account_id,
+                "report_type": "BASIC",
+                "data_level": "AUCTION_ADVERTISER",
+                "dimensions": json.dumps(["advertiser_id"], separators=(",", ":")),
+                "metrics": json.dumps(
+                    ["spend", "impressions", "clicks", "conversion"],
+                    separators=(",", ":"),
+                ),
+                "start_date": day.isoformat(),
+                "end_date": day.isoformat(),
+                "page": 1,
+                "page_size": 10,
+            },
+        )
+    except httpx.HTTPError as exc:
+        raise TikTokReportingError(
+            "tiktok_reporting_request_unavailable",
+            "TikTok reporting request could not be completed.",
+            status_code=502,
+        ) from exc
     data = _provider_data(response, "tiktok_integrated_report")
     rows = data.get("list") or []
     if not isinstance(rows, list) or len(rows) > 1:
