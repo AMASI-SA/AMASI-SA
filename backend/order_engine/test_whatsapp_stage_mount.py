@@ -71,7 +71,7 @@ class MountTest(unittest.TestCase):
     def test_enabled_fails_on_missing_secrets(self):
         with patch.dict(os.environ, {"AMASI_WHATSAPP_ORDER_STAGE_ENABLED":"1"},
                         clear=True):
-            with self.assertRaisesRegex(RuntimeError,"missing_whatsapp_stage_configuration"):
+            with self.assertRaisesRegex(RuntimeError,"missing_whatsapp_readonly_configuration"):
                 mount_if_enabled(APIRouter(),object())
 
     def test_source_freshness_is_independent_of_local_engine_updated_at(self):
