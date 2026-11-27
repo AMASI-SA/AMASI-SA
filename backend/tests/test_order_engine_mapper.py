@@ -393,3 +393,33 @@ def test_existing_checkout_url_precedence_preserved(
     salla_order_payload["urls"] = {"checkout": "https://amasi-sa.com/pay-fallback"}
     order = map_salla_order(salla_order_payload)
     assert order.payment.checkout_url == "https://amasi-sa.com/pay-existing"
+
+
+
+def test_bank_review_keeps_exact_merchant_customized_status_child(salla_order_payload):
+    # The generic Salla parent name is indistinguishable from "بإنتظار
+    # المراجعة" even if the ACTUAL custom child is "تم المراجعة".
+    salla_order_payload["status"]={
+        "slug":"under_review",
+        "name":"بإنتظار المراجعة",
+        "customized":{"id":1539366206,"name":"تم المراجعة"},
+    }
+    mapped=map_salla_order(salla_order_payload)
+    assert mapped.status=="under_review"
+    assert mapped.status_native=="بإنتظار المراجعة"
+    assert mapped.status_customized_id==1539366206
+    assert mapped.status_customized_name=="تم المراجعة"
+    assert mapped.status_customized_id!=780246489
+
+
+def test_order_mapper_never_invents_missing_customized_status_id(salla_order_payload):
+    for field in (None, "بإنتظار المراجعة", {"name":"بإنتظار المراجعة"}):
+        salla_order_payload["status"]={
+            "slug":"under_review",
+            "name":"بإنتظار المراجعة",
+            "customized":field,
+        }
+        mapped=map_salla_order(salla_order_payload)
+        assert mapped.status_customized_id is None
+        # A canonical status name is NOT proof of a merchant-customized ID.
+        assert mapped.status_native=="بإنتظار المراجعة"
