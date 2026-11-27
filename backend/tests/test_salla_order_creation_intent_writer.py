@@ -120,6 +120,7 @@ def create(db=None,o=None,now=NOW,enabled=True,**kwargs):
             target,user_id="owner",intent_id="intent-1234",
             inbox_id="2",conversation_id="3",
             order=o or order(), selected_rate_id=800,
+            payment_flow=kwargs.get("payment_flow","online"),
             source_message_id=kwargs.get("source_message_id"),
             source_contact_id=kwargs.get("source_contact_id"),
             enabled=enabled, product_reader=kwargs.get("product_reader",read_product),
@@ -279,3 +280,61 @@ def test_signed_native_origin_requires_both_positive_ids():
     ):
         with pytest.raises(PrepareDenied,match="invalid_signed_customer_origin"):
             create(source_message_id=source_msg,source_contact_id=source_contact)
+
+
+
+def test_bank_only_order_preparation_does_not_mark_paid_or_invent_total():
+    bank=order(methods=["bank"])
+    db,response=create(
+        o=bank,payment_flow="bank_review",
+        methods_reader=lambda *args: _bank_methods(),
+    )
+    assert response["pricing_mode"]=="salla_bank_review"
+    assert response["bank_review_required"] is True
+    assert response["verified_total_sar"] is None
+    assert response["checkout_url"] is None
+    persisted=db.salla_ai_order_quotes.rows[0]
+    assert persisted["source"]=="mezan_verified_bank_review_intent_v1"
+    assert persisted["state"]=="authorized_for_bank_review_creation"
+    assert persisted["bank_review_required"] is True
+    assert persisted["payment_claim_confirmed"] is False
+    assert persisted["total_sar"] is None
+    assert quote_pricing_mode(persisted)=="salla_bank_review"
+
+
+async def _bank_methods():
+    return methods(allowed=["bank"])
+
+
+def test_bank_quote_does_not_accept_multiple_checkout_methods():
+    for allowed in (["bank","mada"],["mada"],["cod"]):
+        for selected in (["bank","mada"],["mada"],["cod"]):
+            db=DB()
+            try:
+                create(
+                    db=db,o=order(methods=selected),
+                    payment_flow="bank_review",
+                    methods_reader=lambda *args:_bank_methods(),
+                )
+            except PrepareDenied:
+                assert db.salla_ai_order_quotes.rows==[]
+            else:
+                assert selected==["bank"]
+
+
+def test_online_quote_does_not_swallow_bank_methods():
+    with pytest.raises(PrepareDenied,match="online_only"):
+        create(o=order(methods=["bank"]),payment_flow="online")
+
+
+def test_bank_quote_duplicate_intent_may_not_become_online_quote():
+    db=DB()
+    create(db=db,o=order(methods=["bank"]),payment_flow="bank_review",
+           methods_reader=lambda *args:_bank_methods())
+    with pytest.raises(PrepareDenied,match="different_cart"):
+        create(db=db,o=order(methods=["bank"]),payment_flow="online")
+
+
+def test_unknown_bank_payment_mode_denied():
+    with pytest.raises(PrepareDenied,match="invalid_assisted_payment_flow"):
+        create(payment_flow="bank_paid_by_ai")
