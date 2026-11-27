@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any, Iterable
 
 from .tiktok_oauth_security import (
@@ -153,6 +154,7 @@ async def persist_tiktok_projection(
                     ),
                     "has_data": False,
                     "last_sync_at": None,
+                    "tiktok_backfill_next_date": (now.date() - timedelta(days=29)).isoformat(),
                     "source_mode": TIKTOK_SOURCE_MODE,
                     "created_at": now_iso,
                 },
