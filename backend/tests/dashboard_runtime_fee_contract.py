@@ -172,13 +172,25 @@ def extend_frozen_fee_contract(response, *, fixture_case):
     # order as well as its values in the frozen byte-for-byte gate.
     extended_totals = {}
     inserted = False
+    wallet_inserted = False
     for key, value in totals.items():
         extended_totals[key] = value
+        if key == "regular_shipping_cost":
+            # The immutable 05b159dc historical fixture has no split-wallet
+            # payment principal. The real grouped reader sums no buckets as
+            # integer 0 in its empty-period fixture; every other frozen fee
+            # cohort resolves its existing non-split method to float 0.0.
+            # This is derived solely from the pinned fixture identity, NOT
+            # from candidate runtime output or any arbitrary tolerance.
+            assert "internal_wallet_paid_sar" not in totals, "Frozen wallet extension already present"
+            extended_totals["internal_wallet_paid_sar"] = (0 if case == "empty_period" else 0.0)
+            wallet_inserted = True
         if key == "cod_unapproved":
             extended_totals["payment_fees_complete"] = not reasons
             extended_totals["payment_fee_review_reasons"] = reasons
             inserted = True
     assert inserted, "Frozen fee response missing its legacy totals boundary"
+    assert wallet_inserted, "Frozen fee response missing its regular shipping boundary"
     totals.clear()
     totals.update(extended_totals)
     if reasons:
