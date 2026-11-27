@@ -15,6 +15,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from .repository import MongoOrderRepository
 from .whatsapp_stage_route import make_whatsapp_stage_router
+from .whatsapp_stage_attested_route import make_whatsapp_attested_stage_router
 from .whatsapp_catalog_route import make_whatsapp_catalog_router
 from .whatsapp_sender_reader import ChatwootVerifiedSenderReader
 
@@ -37,7 +38,16 @@ class MongoNonceClaim:
         expiry=datetime.now(timezone.utc)+timedelta(seconds=ttl_seconds)
         try:
             self._collection.insert_one({"_id":digest,"expires_at":expiry})
-            return True
+            if attested_on:
+        api_router.include_router(make_whatsapp_attested_stage_router(
+            repository=MongoOrderRepository(db),
+            fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
+            active_keys=active_keys,
+            claim_nonce=nonce,
+            rate_limit=limit,
+            source_freshness=_fresh_salla_source,
+        ))
+    return True
         except DuplicateKeyError:
             return False
         except PyMongoError:
@@ -90,11 +100,18 @@ def mount_if_enabled(api_router, db):
     """
     stage_mode=os.environ.get("AMASI_WHATSAPP_ORDER_STAGE_ENABLED","0")
     catalog_mode=os.environ.get("AMASI_WHATSAPP_CATALOG_ENABLED","0")
-    if stage_mode=="0" and catalog_mode=="0":
+    attested_mode=os.environ.get("AMASI_WHATSAPP_ORDER_STAGE_ATTESTED_ENABLED","0")
+    if stage_mode=="0" and catalog_mode=="0" and attested_mode=="0":
         return False
-    if stage_mode not in ("0","1") or catalog_mode not in ("0","1"):
+    if any(value not in ("0","1") for value in (
+            stage_mode,catalog_mode,attested_mode)):
         raise RuntimeError("invalid_whatsapp_readonly_flag")
     stage_on=stage_mode=="1"
+    attested_on=attested_mode=="1"
+    # Never run the broken reverse-Chatwoot and new one-way verification
+    # together: each path must be explicitly and separately reviewed.
+    if stage_on and attested_on:
+        raise RuntimeError("conflicting_whatsapp_stage_modes")
     catalog_on=catalog_mode=="1" or stage_on
     names=[
         "AMASI_WHATSAPP_STAGE_OWNER_ID",
