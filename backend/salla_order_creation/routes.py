@@ -33,6 +33,7 @@ from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
 from .bank_receipt_action import verify_bank_receipt_action
 from .bank_receipt_stage import stage_bank_receipt, BankReceiptStageDenied
+from .bank_review_readback import read_synced_bank_review
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
@@ -340,6 +341,43 @@ def make_assisted_salla_order_router(
             "proof_writers_integrated": False,
             "note": "Scope is a stored token claim, not live API authorization proof.",
         }
+
+    @router.get("/bank-review/{intent_id}")
+    async def get_bank_review_readback(
+        intent_id: str, user: dict = Depends(current_user),
+    ) -> dict:
+        """Read-only bank review facts for authorized Mezan owner pilot.
+
+        Does NOT approve/mark paid; the customer-service reviewer must check
+        real bank credit independently before any financial or fulfillment
+        action. Broader staff ACL/UI requires separate owner-approved scope.
+        """
+        role=str((user or {}).get("role") or "").strip().lower()
+        if not user or (role!="owner" and user.get("is_owner") is not True):
+            raise HTTPException(status_code=403,detail={"code":"owner_only"})
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_READ_ENABLED","0") != "1":
+            raise HTTPException(status_code=503,detail={"code":"bank_review_read_disabled"})
+
+        async def load_current_order(owner_id: str, reference: str):
+            try:
+                return await get_order(
+                    MongoOrderRepository(db),user_id=owner_id,
+                    order_number=reference,
+                )
+            except OrderNotFoundError as exc:
+                raise LookupError("mezan_bank_order_not_synced") from exc
+
+        try:
+            return await read_synced_bank_review(
+                db,user_id=str(user["id"]),
+                intent_id=intent_id,load_order=load_current_order,
+            )
+        except Exception:
+            # Do not print bank identifiers or private Chatwoot content.
+            raise HTTPException(
+                status_code=503,
+                detail={"code":"bank_review_readback_unavailable"},
+            ) from None
 
     @router.get("/intents/{intent_id}")
     async def get_intent_status(
