@@ -74,7 +74,7 @@ async def progress_day_batches(
     # details cross this boundary; fully received/completed dates disappear.
     candidates = await db[PIECES].find(
         {"user_id": user_id, "responsible_employee_id": employee_id,
-            "experiment_archived_at": None,
+            "experiment_archived_at": {"$in": [None, ""]},
             "status": {"$in": ["assigned", "in_progress", "ready_for_receipt"]},
             "$or": [
                 {"supplier_dispatch_status": {"$in": ["sent", "ready", "partial_received"]}},
@@ -140,7 +140,7 @@ async def progress_workspace(
     registry = (await _file_day_registries(db, user_id=user_id, day=day)
                 if date_basis == "file_created_at" else {})
     query = {"user_id": user_id, "responsible_employee_id": employee_id,
-             "experiment_archived_at": None, "status": {"$ne": "cancelled"}}
+             "experiment_archived_at": {"$in": [None, ""]}, "status": {"$ne": "cancelled"}}
     if date_basis == "file_created_at":
         query["batch_id"] = {"$in": list(registry)}
     metadata = await db[PIECES].find(query, {"_id": 0, **projection}).to_list(None)
@@ -184,7 +184,7 @@ async def progress_workspace(
     # product options or images. Include cross-date members of the same file.
     extras = sorted(dispatched_ids - set(ids))
     outside = await db[PIECES].find({"user_id": user_id, "responsible_employee_id": employee_id,
-        "experiment_archived_at": None, "piece_id": {"$in": extras}}, {"_id": 0, **projection}).to_list(None) if extras else []
+        "experiment_archived_at": {"$in": [None, ""]}, "piece_id": {"$in": extras}}, {"_id": 0, **projection}).to_list(None) if extras else []
     extra_numbers = sorted({_text(row.get("order_number")) for row in outside} - {""})
     extra_live = await _nonterminal_numbers(db, user_id, extra_numbers) if extra_numbers else set()
     outside = [row for row in outside if _text(row.get("order_number")) in extra_live]
