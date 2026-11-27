@@ -21,6 +21,9 @@ from .bank_receipt_review import (
     ReceiptVisibleFields, ReceiptAppearanceDenied, inspect_visible_bank_receipt,
 )
 from .bank_source import read_active_salla_payment_bank
+from .bank_receipt_retention import (
+    require_bank_receipt_retention, RECEIPT_EVIDENCE_AGE, RECEIPT_REF_AGE,
+)
 from .service import intent_storage_id
 
 
@@ -66,6 +69,10 @@ async def stage_bank_receipt(
     if moment.tzinfo is None:
         raise BankReceiptStageDenied("trusted_receipt_clock_required")
     moment = moment.astimezone(timezone.utc)
+    # Fail closed before any bank lookup or customer-source write when the
+    # approved Mongo TTL indexes are missing. Purge timestamps alone do not
+    # delete temporary receipt evidence.
+    await require_bank_receipt_retention(db)
 
     # Amount shown in a screenshot is a claim, NOT money received.
     # This bank read is scoped to the merchant's installed Salla payments.read.
@@ -104,13 +111,16 @@ async def stage_bank_receipt(
         "source": "chatwoot_verified_image_bank_receipt_v1",
         "credit_received": False, "staff_review_required": True,
         "created_at": moment, "expires_at": moment + timedelta(hours=2),
-        "purge_after": moment + timedelta(days=7),
+        "purge_after": moment + RECEIPT_EVIDENCE_AGE,
     }
 
     # HMAC transfer reference reuse fence avoids attaching the same receipt
     # to multiple order intents, without storing its full reference.
-    unique = {"_id": reference_hash, "user_id": user_id,
-              "intent_id": intent_id, "bank_id": selected_bank_id}
+    unique = {
+        "_id": reference_hash, "user_id": user_id,
+        "intent_id": intent_id, "bank_id": selected_bank_id,
+        "purge_after": moment + RECEIPT_REF_AGE,
+    }
     try:
         await db.salla_ai_bank_receipt_refs.insert_one(unique)
     except Exception:
