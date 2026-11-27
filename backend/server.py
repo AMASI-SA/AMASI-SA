@@ -3700,6 +3700,9 @@ from employee_finance_notification_routes import make_employee_finance_notificat
 api.include_router(make_employee_finance_notification_router(db, current_user))
 from operational_instruction_comments import make_instruction_comments_router
 api.include_router(make_instruction_comments_router(db, current_user))
+# Explicit opt-in, signed read-only Mezan→WhatsApp bridge; default OFF.
+from order_engine.whatsapp_stage_mount import mount_if_enabled as mount_whatsapp_stage_if_enabled
+mount_whatsapp_stage_if_enabled(api, db)
 app.include_router(api)
 
 # CORS — production origins are explicit and never fall back to wildcard.

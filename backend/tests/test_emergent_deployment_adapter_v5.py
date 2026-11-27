@@ -116,6 +116,50 @@ class EmergentDeploymentAdapterV5Tests(unittest.TestCase):
             with patch.object(adapter, "REPO_ROOT", root):
                 self.assertEqual(adapter.resolve_candidate_source_base(base, source), base)
 
+    def test_resolve_base_allows_only_exact_content_addressed_oracle_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, base, _ = self._git_manifest_history(root)
+            self._git(root, "checkout", "-qb", "oracle-only", base)
+            reviewed_paths = (
+                "backend/tests/dashboard_runtime_fee_contract.py",
+                "backend/tests/test_dashboard_runtime_fee_contract.py",
+            )
+            for relative in reviewed_paths:
+                file = root / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("oracle-only\n", encoding="utf-8")
+            self._git(root, "add", "-A")
+            self._git(root, "commit", "-qm", "reviewed oracle source")
+            oracle = self._git(root, "rev-parse", "HEAD")
+            self._git(root, "checkout", "-qb", "production", base)
+            self._git(root, "merge", "--no-ff", "-m", "merge approved oracle", oracle)
+            staged = self._git(root, "rev-parse", "HEAD")
+            tree = self._git(root, "rev-parse", "HEAD^{tree}")
+            (root / "frontend" / "src.js").write_text("whatsapp-source\n", encoding="utf-8")
+            self._git(root, "commit", "-qam", "candidate source")
+            source = self._git(root, "rev-parse", "HEAD")
+
+            record = (base, oracle, tree, reviewed_paths)
+            with patch.object(adapter, "REPO_ROOT", root):
+                with patch.dict(adapter._APPROVED_TEST_ONLY_ORACLE_STAGING,
+                                {staged: record}, clear=True):
+                    self.assertEqual(
+                        adapter.resolve_candidate_source_base(staged, source), base
+                    )
+                    adapter._assert_candidate_source_transition(
+                        source_git_sha=source, source_base_git_sha=base
+                    )
+                for invalid in (
+                    (base, oracle, "0" * 40, reviewed_paths),
+                    (base, oracle, tree, ("backend/server.py",)),
+                    (base, "f" * 40, tree, reviewed_paths),
+                ):
+                    with patch.dict(adapter._APPROVED_TEST_ONLY_ORACLE_STAGING,
+                                    {staged: invalid}, clear=True):
+                        with self.assertRaises(adapter.DeploymentAdapterError):
+                            adapter.resolve_candidate_source_base(staged, source)
+
     def test_resolve_base_rejects_unreviewed_application_change(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
