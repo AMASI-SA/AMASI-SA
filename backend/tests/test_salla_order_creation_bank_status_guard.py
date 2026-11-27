@@ -153,14 +153,16 @@ def test_same_review_custom_id_with_wrong_slug_rejected():
 
 def test_ambiguous_duplicate_exact_names_deny_before_update():
     values=statuses()
-    values.append(dict(values[0],id=111))
+    original_review=next(row for row in values if row["id"]==REVIEW_ID)
+    values.append(dict(original_review,id=111))
     with pytest.raises(BankStatusDenied,match="unique_active"):
         exact_active_review_status(values)
 
 
 def test_untrusted_review_status_with_wrong_canonical_name_denied():
     values=statuses()
-    values[0]["original"]={"id":5,"name":"تم التنفيذ"}
+    review=next(row for row in values if row["id"]==REVIEW_ID)
+    review["original"]={"id":5,"name":"تم التنفيذ"}
     with pytest.raises(BankStatusDenied,match="unique_active"):
         exact_active_review_status(values)
 
