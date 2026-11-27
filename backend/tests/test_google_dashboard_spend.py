@@ -115,6 +115,10 @@ async def test_native_google_agrees_across_surfaces_with_provisional_snapchat(
         await db[collection].insert_one({
             "user_id": OWNER, "provider": provider + "_ads", "ad_account_id": account,
             "date": DAY, "spend_native": amount, "spend_sar": amount, "currency_native": "SAR",
+            **({"account_timezone": "Asia/Riyadh", "source_close_proof": {
+                "complete": True, "complete_response": True, "explicit_spend_present": True,
+                "account_id": account, "business_date": DAY, "zero_confirmed": amount == 0,
+            }} if provider == "tiktok" else {}),
         })
     hour = local_hour_start_utc(date.fromisoformat(DAY), 1, "Asia/Riyadh").isoformat(timespec="seconds")
     await db.mezan_ads_platform_hourly_v2.insert_many([
