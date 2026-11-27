@@ -34,6 +34,8 @@ from .reference_reconciliation import ReferenceUnverified, recover_salla_referen
 from .bank_receipt_action import verify_bank_receipt_action
 from .bank_receipt_stage import stage_bank_receipt, BankReceiptStageDenied
 from .bank_review_readback import read_synced_bank_review
+from .bank_status_guard import BankStatusDenied, ensure_bank_review_custom_status
+from .service import intent_storage_id
 from .http_limits import BodyTooLarge, read_bounded_action_body
 from .payload import PendingOrder
 from .service import CreationDenied, create_confirmed_salla_order, intent_storage_id, order_digest
@@ -341,6 +343,41 @@ def make_assisted_salla_order_router(
             "proof_writers_integrated": False,
             "note": "Scope is a stored token claim, not live API authorization proof.",
         }
+
+    @router.post("/bank-review/{intent_id}/ensure-under-review")
+    async def ensure_bank_status_owner_pilot(
+        intent_id: str, user: dict = Depends(current_user),
+    ) -> dict:
+        """Explicit owner-only, default-OFF Salla custom status update pilot.
+
+        Never update payment.status, Qoyod, GL or fulfillment here. Multiple
+        custom statuses share under_review slug; select the exact active
+        «بإنتظار المراجعة» target from Salla before at most one status POST.
+        """
+        role=str((user or {}).get("role") or "").strip().lower()
+        if not user or (role!="owner" and user.get("is_owner") is not True):
+            raise HTTPException(status_code=403,detail={"code":"owner_only"})
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_SET_REVIEW_STATUS_ENABLED","0")!="1":
+            raise HTTPException(status_code=503,detail={"code":"bank_status_update_disabled"})
+        owner_id=str(user["id"])
+        try:
+            key=intent_storage_id(owner_id,intent_id)
+        except Exception:
+            raise HTTPException(status_code=422,detail={"code":"invalid_bank_intent"}) from None
+        record=await db.salla_ai_order_intents.find_one({
+            "_id":key,"user_id":owner_id,"intent_id":intent_id,
+            "pricing_mode":"salla_bank_review",
+        })
+        if not isinstance(record,dict) or type(record.get("salla_order_id")) is not int:
+            raise HTTPException(status_code=404,detail={"code":"verified_bank_order_missing"})
+        try:
+            return await ensure_bank_review_custom_status(
+                db,user_id=owner_id,intent_id=intent_id,
+                salla_order_id=record["salla_order_id"],
+                request=call_salla,enabled=True,
+            )
+        except BankStatusDenied as exc:
+            raise HTTPException(status_code=409,detail={"code":str(exc)}) from exc
 
     @router.get("/bank-review/{intent_id}")
     async def get_bank_review_readback(
