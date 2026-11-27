@@ -1,5 +1,13 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Multi-turn protected-field and source-revision UAT gates
+
+- [ ] Verify actual Mezan field ACK has only `state=saved`, safe `fields_present`, revision and stable opaque `vault_ref`; never names/phones/text/location/payment URL.
+- [ ] Confirm CSA PII-free SQLite progress ledger follows one Chatwoot source contact across multiple real incoming messages, supports verified recipient→address advancement, and does not persist actual customer values or transmit them to OpenAI. Complete stage only when all required fields have Mezan saved receipts.
+- [ ] Confirm same message retry is idempotent; different contact, stale revision or staff takeover cannot advance stage.
+- [ ] After quote preparation, customer edits any private field: Mezan MUST detect changed encrypted vault revision and refuse Salla POST, requiring fresh quote and customer confirmation. Verify encrypted Salla quote cannot be opened with wrong owner/intent or old Fernet key.
+- [ ] This is DRAFT until new exact HEAD CI and owner-approved single staging Salla order/checkout link succeeds. Last older 297 synthetic PASS is not certification of these new source protections.
+
 ## 2026-11-27 — Added private-data acceptance gates
 
 - [ ] Install `salla_assisted_private_fields_ttl_v1` on `salla_ai_private_order_fields.purge_after` and `salla_assisted_quote_purge_ttl_v1` on `salla_ai_order_quotes.purge_after` with expireAfterSeconds=0 in an explicitly authorized migration. Confirm both readbacks before any real data writes. Do NOT migrate other collections/operational balances.
