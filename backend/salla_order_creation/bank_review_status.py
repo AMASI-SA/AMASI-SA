@@ -114,7 +114,7 @@ async def ensure_bank_order_under_review(
     try:
         response=await set_salla_status(
             db,owner_id,"POST",f"/orders/{order_id}/status",
-            {"slug":"under_review","send_status_sms":False},
+            json={"slug":"under_review","send_status_sms":False},
         )
         if (not isinstance(response,dict) or response.get("success") is False):
             raise ValueError("untrusted status POST response")
