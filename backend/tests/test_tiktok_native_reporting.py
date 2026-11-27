@@ -126,6 +126,7 @@ class FakeResponse:
             "message": "OK",
             "request_id": "tt-request-1",
             "data": {
+                "page_info": {"page": 1, "total_page": 1, "total_number": 1},
                 "list": [
                     {
                         "dimensions": {"advertiser_id": "700000000001"},
@@ -178,6 +179,14 @@ def configured(monkeypatch):
     )
     monkeypatch.setenv("TIKTOK_NATIVE_REPORTING_SYNC_ENABLED", "true")
     monkeypatch.setenv("TIKTOK_USD_TO_SAR_RATE", "3.75")
+
+    async def authorized_fixture(db, owner, token, observed_at):
+        return {"status": "complete", "authorized_accounts": 1,
+                "account_ids": ["700000000001"]}
+
+    # Existing reporting tests isolate the reporting API; dynamic advertiser
+    # discovery is independently tested in test_tiktok_multi_advertiser.py.
+    monkeypatch.setattr(reporting, "refresh_tiktok_authorized_accounts", authorized_fixture)
 
 
 @pytest.mark.asyncio
