@@ -123,7 +123,7 @@ async def test_grant_refuses_to_reactivate_other_frozen_financial_permissions():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('providers', [['paypal'], ['tabby', 'tabby'], [], ['tabby', 'tamara', 'salla', 'emkan', 'tabby']])
+@pytest.mark.parametrize('providers', [['unknown'], ['tabby', 'tabby'], [], ['tabby', 'tamara', 'salla', 'emkan', 'tabby']])
 async def test_invalid_provider_grants_are_rejected(providers):
     db, client = await setup()
     async with client:
