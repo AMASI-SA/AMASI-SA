@@ -125,3 +125,17 @@ def test_unverified_receipt_cannot_enter_staff_case():
     bad["credit_received"]=True
     with pytest.raises(BankReviewDenied):
         stage(receipt=bad)
+
+
+
+def test_text_claim_staff_case_is_unpaid_and_references_original_message():
+    raw=receipt()
+    raw["source_kind"]="text"
+    raw["source_attachment_id"]=0
+    db,result=stage(receipt=raw)
+    row=db.salla_ai_bank_staff_reviews.rows[0]
+    assert row["source_kind"]=="text"
+    assert row["source_message_id"]==501
+    assert row["source_attachment_id"]==0
+    assert result["bank_credit_confirmed"] is False
+    assert row["fulfillment_eligible"] is False
