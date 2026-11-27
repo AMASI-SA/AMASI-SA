@@ -213,6 +213,14 @@ async def test_dashboard_reports_missing_advertiser_days_without_inventing_zero(
     assert incomplete["coverage_complete"] is False
     assert incomplete["missing_account_ids"] == ["200"]
     assert incomplete["missing_account_days"] == 1
+    # An account with one valid day but another missing day is incomplete.
+    span = tiktok_reporting_coverage(
+        ["100", "200"], "2026-11-26", "2026-11-27",
+        [{**row, "date": "2026-11-26"} for row in rows]
+        + [rows[0]],
+    )
+    assert span["missing_account_ids"] == ["200"]
+    assert span["missing_account_days"] == 1
     duplicate = tiktok_reporting_coverage(["100", "200"],
                                                 "2026-11-27", "2026-11-27", rows + rows[:1])
     assert duplicate["coverage_complete"] is False
