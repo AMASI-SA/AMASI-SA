@@ -14,6 +14,7 @@ be manually reconciled, not retried blindly.
 from __future__ import annotations
 
 import hashlib
+from decimal import Decimal, InvalidOperation
 from typing import Any, Awaitable, Callable
 
 from .readers import SourceUnavailable
