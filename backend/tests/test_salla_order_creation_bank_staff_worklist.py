@@ -174,12 +174,13 @@ def test_invalid_page_cannot_touch_database(params):
 ])
 def test_invalid_case_cannot_be_displayed_as_bank_review(changed):
     db=DB([item(**changed)])
-    # Cases that do not meet query simply disappear; malformed included
-    # cases fail closed rather than exposing arbitrary Mongo fields.
-    out=read(db)
-    assert out["items"]==[] or out["read_only"]
-    for row in out["items"]:
-        assert row["paid"] is False
+    # Paid cases are excluded by the Mongo filter before projection.
+    # Malformed still-unpaid records are denied, never displayed as safe.
+    if changed.get("paid") is True:
+        assert read(db)["items"] == []
+    else:
+        with pytest.raises(BankWorklistDenied):
+            read(db)
 
 
 def test_authorization_uses_canonical_server_permission_callback_only():
