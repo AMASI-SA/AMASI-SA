@@ -157,6 +157,7 @@ def make_assisted_salla_order_router(
                 products=[p.model_dump(exclude_none=True) for p in action.products],
                 accepted_methods=list(action.accepted_methods),
                 branch_id=action.branch_id,
+                payment_flow=action.payment_flow,
                 enabled=True,
             )
         except (RetentionNotReady,PrivateOrderFieldDenied,PrivateOrderAssemblyDenied,
