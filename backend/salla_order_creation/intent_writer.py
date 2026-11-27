@@ -106,7 +106,10 @@ async def prepare_salla_unpaid_order_intent(
     if is_bank_review:
         if type(source_contact_id) is not int or source_contact_id < 1:
             raise PrepareDenied("bank_review_requires_signed_customer_contact")
-        bank_receipt = await db.salla_ai_bank_receipt_evidence.find_one({
+        evidence_rows = getattr(db, "salla_ai_bank_receipt_evidence", None)
+        if evidence_rows is None:
+            raise PrepareDenied("independent_bank_receipt_appearance_required")
+        bank_receipt = await evidence_rows.find_one({
             "user_id": user_id, "intent_id": intent_id,
             "inbox_id": inbox_id, "conversation_id": conversation_id,
             "source_contact_id": source_contact_id,
