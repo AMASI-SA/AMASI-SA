@@ -54,7 +54,7 @@ def _iban(value: str | None) -> str:
     if not isinstance(value, str):
         return ""
     iban = re.sub(r"\s+", "", value).upper()
-    if not re.fullmatch(r"SA[0-9]{2}[0-9A-Z]{18}", iban):
+    if not re.fullmatch(r"SA[0-9]{2}[0-9A-Z]{20}", iban):
         return ""
     # ISO 13616 / Saudi IBAN check digit validation.
     shifted = iban[4:] + iban[:4]
