@@ -73,3 +73,22 @@ def test_staff_and_stale_revision_rejected(isolated):
         with pytest.raises(HTTPException):
             asyncio.run(service.save(None, 'owner', actor, dict(request_id='selection-3', version=version, account_ids=[])))
     assert state == before
+
+
+def test_new_tiktok_discovery_does_not_override_native_or_saved_owner_exclusion():
+    records = [
+        account('old-unselected', 'tiktok_ads'),
+        account('old-selected', 'tiktok_ads', mezan_selected=True),
+        account('old-string', 'tiktok_ads', mezan_selected='true'),
+        account('new', 'tiktok_ads', tiktok_backfill_next_date='2026-11-01'),
+        account('new-completed', 'tiktok_ads', tiktok_backfill_next_date='2026-11-27',
+                tiktok_backfill_complete_at='2026-11-27T09:00:00Z'),
+    ]
+    def selected(state):
+        return {r['id'] for r in service.choices(records, state) if r['selected']}
+    assert selected({}) == {'old-selected', 'new', 'new-completed'}
+    assert selected({'ad_catalog_selection': {'account_ids': ['old-selected'],
+        'known_tiktok_account_ids': [r['mezan_integration_account_id'] for r in records]}}) == {'old-selected'}
+    assert selected({'ad_catalog_selection': {'account_ids': ['old-selected']}}) == {
+        'old-selected', 'new', 'new-completed'
+    }

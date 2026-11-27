@@ -7,6 +7,7 @@ legacy TikTok collections and never writes campaigns, accounting, or Qoyod.
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
@@ -14,7 +15,10 @@ from typing import Any, Callable
 import httpx
 from pydantic import BaseModel, Field, model_validator
 
+from dashboard_tiktok_coverage import tiktok_reporting_coverage
+
 from .ad_daily_close_proof import close_proof, tiktok_evidence
+from .tiktok_account_refresh import refresh_tiktok_authorized_accounts
 
 from .tiktok_oauth_security import (
     TIKTOK_CREDENTIALS_COLLECTION,
@@ -31,7 +35,9 @@ TIKTOK_REPORTING_SOURCE_MODE = "tiktok_marketing_reporting_v2"
 TIKTOK_REPORTING_ENABLED_ENV = "TIKTOK_NATIVE_REPORTING_SYNC_ENABLED"
 TIKTOK_USD_TO_SAR_RATE_ENV = "TIKTOK_USD_TO_SAR_RATE"
 MAX_REPORTING_DAYS = 31
-MAX_REPORTING_ACCOUNTS = 20
+MAX_REPORTING_ACCOUNTS = 200
+# Explicit request ceiling avoids an unbounded accounts × days API fan-out.
+MAX_REPORTING_CALLS_PER_SYNC = 120
 
 
 class TikTokReportingError(RuntimeError):
@@ -205,6 +211,11 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
             "currency": 1,
             "timezone": 1,
             "last_sync_at": 1,
+            "last_reporting_attempt_at": 1,
+            "tiktok_backfill_next_date": 1,
+            "tiktok_backfill_complete_at": 1,
+            "tiktok_evidence_repair_next_date": 1,
+            "tiktok_evidence_repair_complete_at": 1,
         },
     )
     if hasattr(cursor, "sort"):
@@ -217,11 +228,19 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
         else [row async for row in cursor]
     )
     output = []
+    seen_ids: set[str] = set()
     for row in rows:
         account_id = str(
             row.get("ad_account_id") or row.get("external_account_id") or ""
         ).strip()
         if account_id:
+            if account_id in seen_ids:
+                raise TikTokReportingError(
+                    "tiktok_reporting_duplicate_account_identity",
+                    "TikTok account identity is duplicated; reporting cannot safely aggregate it.",
+                    status_code=409,
+                )
+            seen_ids.add(account_id)
             output.append({**row, "ad_account_id": account_id})
     if not output:
         raise TikTokReportingError(
@@ -235,7 +254,11 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
             f"At most {MAX_REPORTING_ACCOUNTS} TikTok accounts may sync per run.",
             status_code=409,
         )
-    return output
+    # Fair even when one advertiser repeatedly fails: last attempt, not the
+    # last successful sync, determines which accounts are processed next.
+    return sorted(output, key=lambda row: (
+        str(row.get("last_reporting_attempt_at") or ""), row["ad_account_id"]
+    ))
 
 
 async def _fetch_day(
@@ -245,37 +268,110 @@ async def _fetch_day(
     day: date,
 ) -> dict[str, Any]:
     account_id = account["ad_account_id"]
-    response = await client.get(
-        TIKTOK_REPORT_URL,
-        headers={"Access-Token": access_token},
-        params={
-            "advertiser_id": account_id,
-            "report_type": "BASIC",
-            "data_level": "AUCTION_ADVERTISER",
-            "dimensions": json.dumps(["advertiser_id"], separators=(",", ":")),
-            "metrics": json.dumps(
-                ["spend", "impressions", "clicks", "conversion"],
-                separators=(",", ":"),
-            ),
-            "start_date": day.isoformat(),
-            "end_date": day.isoformat(),
-            "page": 1,
-            "page_size": 10,
-        },
-    )
+    try:
+        response = await client.get(
+            TIKTOK_REPORT_URL,
+            headers={"Access-Token": access_token},
+            params={
+                "advertiser_id": account_id,
+                "report_type": "BASIC",
+                "data_level": "AUCTION_ADVERTISER",
+                "dimensions": json.dumps(["advertiser_id"], separators=(",", ":")),
+                "metrics": json.dumps(
+                    ["spend", "impressions", "clicks", "conversion"],
+                    separators=(",", ":"),
+                ),
+                "start_date": day.isoformat(),
+                "end_date": day.isoformat(),
+                "page": 1,
+                "page_size": 10,
+            },
+        )
+    except httpx.HTTPError as exc:
+        raise TikTokReportingError(
+            "tiktok_reporting_request_unavailable",
+            "TikTok reporting request could not be completed.",
+            status_code=502,
+        ) from exc
     data = _provider_data(response, "tiktok_integrated_report")
     rows = data.get("list") or []
+    if not isinstance(rows, list) or len(rows) > 1:
+        raise TikTokReportingError(
+            "tiktok_reporting_unexpected_advertiser_rows",
+            "TikTok returned an unexpected number of advertiser rows.",
+            status_code=502,
+        )
+    if rows:
+        item = rows[0]
+        dimensions = item.get("dimensions") if isinstance(item, dict) else None
+        if not isinstance(dimensions, dict) or str(dimensions.get("advertiser_id") or "") != account_id:
+            raise TikTokReportingError(
+                "tiktok_reporting_advertiser_mismatch",
+                "TikTok report advertiser did not match the requested account.",
+                status_code=502,
+            )
     metrics = (rows[0] or {}).get("metrics") if rows else {}
     metrics = metrics if isinstance(metrics, dict) else {}
+    try:
+        spend_native = float(metrics.get("spend") or 0)
+        impressions_native = float(metrics.get("impressions") or 0)
+        clicks_native = float(metrics.get("clicks") or 0)
+        conversions_native = float(metrics.get("conversion") or 0)
+        values = (spend_native, impressions_native, clicks_native, conversions_native)
+        if any(not math.isfinite(v) or v < 0 for v in values):
+            raise ValueError("nonfinite_or_negative")
+        impressions = int(impressions_native)
+        clicks = int(clicks_native)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TikTokReportingError(
+            "tiktok_reporting_invalid_metrics",
+            "TikTok returned invalid or non-finite advertiser metrics.",
+            status_code=502,
+        ) from exc
     return {
         "close_evidence": tiktok_evidence(data, account_id),
-        "spend_native": float(metrics.get("spend") or 0),
-        "impressions": int(float(metrics.get("impressions") or 0)),
-        "clicks": int(float(metrics.get("clicks") or 0)),
-        "conversions": float(metrics.get("conversion") or 0),
+        "spend_native": spend_native,
+        "impressions": impressions,
+        "clicks": clicks,
+        "conversions": conversions_native,
         "request_id": data.get("_request_id"),
         "empty": not bool(rows),
     }
+
+
+async def _legacy_evidence_repair_start(
+    db: Any, user_id: str, account_id: str, start: date, today: date,
+) -> date | None:
+    """Locate historical gaps in a bounded, observed account history.
+
+    Never use the new-account discovery marker for an existing advertiser.
+    Only consider dates within the rolling 30-day window before this sync;
+    a historic native fact establishes the start of known coverage, not zero.
+    """
+    lower = today - timedelta(days=29)
+    upper = min(start, today + timedelta(days=1))
+    if upper <= lower:
+        return None
+    cursor = db[TIKTOK_REPORTING_COLLECTION].find({
+        "user_id": user_id, "provider": TIKTOK_PROVIDER_ID,
+        "ad_account_id": account_id,
+        "date": {"$gte": lower.isoformat(), "$lt": upper.isoformat()},
+    }, {"_id": 0})
+    rows = await cursor.sort("date", 1).limit(31).to_list(length=31)
+    dated = [
+        row for row in rows
+        if lower.isoformat() <= str(row.get("date") or "") < upper.isoformat()
+    ]
+    if not dated:
+        return None
+    first = date.fromisoformat(min(row["date"] for row in dated))
+    for offset in range((upper - first).days):
+        day = (first + timedelta(days=offset)).isoformat()
+        if not tiktok_reporting_coverage(
+            [account_id], day, day, dated
+        )["coverage_complete"]:
+            return date.fromisoformat(day)
+    return None
 
 
 async def run_tiktok_reporting_sync(
@@ -300,11 +396,30 @@ async def run_tiktok_reporting_sync(
 
     await ensure_tiktok_reporting_indexes(db)
     access_token = await _credential(db, user_id)
-    accounts = await _accounts(db, user_id)
     days = _dates(payload, now().astimezone(timezone.utc).date())
     observed_at = _iso(now())
+    try:
+        discovery = await refresh_tiktok_authorized_accounts(
+            db, user_id, access_token, observed_at
+        )
+    except Exception:
+        # Never erase previously discovered identities or their daily rows
+        # because TikTok account enumeration was temporarily unavailable.
+        discovery = {
+            "status": "degraded",
+            "reason": "tiktok_authorized_account_discovery_unavailable",
+        }
+    all_accounts = await _accounts(db, user_id)
+    # Reserve two optional history days per account without ever exceeding the
+    # provider request budget. Previous valid daily facts are only upserted.
+    batch_size = max(1, MAX_REPORTING_CALLS_PER_SYNC // (len(days) + 2))
+    accounts = all_accounts[:batch_size]
+    accounts_deferred = len(all_accounts) - len(accounts)
     account_summaries = []
-    error_items = []
+    error_items = (
+        [{"code": discovery["reason"], "kind": "discovery"}]
+        if discovery["status"] != "complete" else []
+    )
     provider_calls = 0
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -313,14 +428,61 @@ async def run_tiktok_reporting_sync(
             account_errors = []
             currency = str(account.get("currency") or "").strip().upper() or None
             fx_rate, fx_source = _fx_to_sar(currency)
-            for day in days:
+            history_start = None
+            legacy_repair = not bool(account.get("tiktok_backfill_next_date"))
+            cursor_key = ("tiktok_evidence_repair_next_date" if legacy_repair
+                          else "tiktok_backfill_next_date")
+            complete_key = ("tiktok_evidence_repair_complete_at" if legacy_repair
+                            else "tiktok_backfill_complete_at")
+            if legacy_repair and not account.get(cursor_key) and not account.get(complete_key):
+                history_start = await _legacy_evidence_repair_start(
+                    db, user_id, account["ad_account_id"], min(days),
+                    now().astimezone(timezone.utc).date(),
+                )
+            if account.get(cursor_key) and not account.get(complete_key):
                 try:
+                    history_start = date.fromisoformat(str(account[cursor_key]))
+                except ValueError:
+                    account_errors.append({
+                        "ad_account_id": account["ad_account_id"],
+                        "code": "tiktok_backfill_cursor_invalid",
+                    })
+                    error_items.append(account_errors[-1])
+            historical_days = []
+            if history_start and history_start < min(days):
+                historical_days = [
+                    history_start + timedelta(days=i) for i in range(2)
+                    if history_start + timedelta(days=i) < min(days)
+                ]
+            next_history_date = history_start
+            for day in [*historical_days, *days]:
+                try:
+                    if legacy_repair and day in historical_days:
+                        existing = await db[TIKTOK_REPORTING_COLLECTION].find_one({
+                            "user_id": user_id, "provider": TIKTOK_PROVIDER_ID,
+                            "ad_account_id": account["ad_account_id"], "date": day.isoformat(),
+                        }, {"_id": 0})
+                        if existing and tiktok_reporting_coverage(
+                            [account["ad_account_id"]], day.isoformat(),
+                            day.isoformat(), [existing],
+                        )["coverage_complete"]:
+                            if next_history_date == day:
+                                next_history_date = day + timedelta(days=1)
+                            continue
                     row = await _fetch_day(client, access_token, account, day)
                     provider_calls += 1
                     spend_sar = (
                         round(row["spend_native"] * fx_rate, 2)
                         if fx_rate is not None
                         else None
+                    )
+                    source_proof = close_proof(
+                        account_id=account["ad_account_id"],
+                        business_date=day.isoformat(),
+                        timezone=account.get("timezone"), currency=currency,
+                        source_mode=TIKTOK_REPORTING_SOURCE_MODE,
+                        observed_at=observed_at,
+                        **row["close_evidence"],
                     )
                     await db[TIKTOK_REPORTING_COLLECTION].update_one(
                         {
@@ -348,11 +510,7 @@ async def run_tiktok_reporting_sync(
                                 "conversion_metric": "conversion",
                                 "empty_provider_row": row["empty"],
                                 "request_id": row["request_id"],
-                                "source_close_proof": close_proof(
-                                    account_id=account["ad_account_id"], business_date=day.isoformat(),
-                                    timezone=account.get("timezone"), currency=currency,
-                                    source_mode=TIKTOK_REPORTING_SOURCE_MODE, observed_at=observed_at,
-                                    **row["close_evidence"]),
+                                "source_close_proof": source_proof,
                                 "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,
@@ -364,6 +522,16 @@ async def run_tiktok_reporting_sync(
                         upsert=True,
                     )
                     saved += 1
+                    if source_proof.get("complete") is not True or spend_sar is None:
+                        item = {
+                            "ad_account_id": account["ad_account_id"],
+                            "date": day.isoformat(),
+                            "code": "tiktok_reporting_source_evidence_incomplete",
+                        }
+                        account_errors.append(item)
+                        error_items.append(item)
+                    elif day in historical_days and next_history_date == day:
+                        next_history_date = day + timedelta(days=1)
                 except TikTokReportingError as exc:
                     provider_calls += 1
                     if exc.code == "tiktok_needs_reauth":
@@ -377,6 +545,20 @@ async def run_tiktok_reporting_sync(
                     error_items.append(item)
 
             complete = not account_errors
+            account_patch = {
+                "performance_rows_saved": saved,
+                "has_data": saved > 0,
+                "last_sync_at": observed_at if complete else account.get("last_sync_at"),
+                "last_reporting_attempt_at": observed_at,
+                "data_delay_minutes": 0 if complete else None,
+                "health_score": 100 if complete else 70,
+                "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
+                "last_observed_at": observed_at,
+            }
+            if history_start and next_history_date is not None:
+                account_patch[cursor_key] = next_history_date.isoformat()
+                if next_history_date >= min(days):
+                    account_patch[complete_key] = observed_at
             await db.mezan_integration_accounts_v2.update_one(
                 {
                     "user_id": user_id,
@@ -384,15 +566,7 @@ async def run_tiktok_reporting_sync(
                     "external_account_id": account["ad_account_id"],
                 },
                 {
-                    "$set": {
-                        "performance_rows_saved": saved,
-                        "has_data": saved > 0,
-                        "last_sync_at": observed_at if complete else account.get("last_sync_at"),
-                        "data_delay_minutes": 0 if complete else None,
-                        "health_score": 100 if complete else 70,
-                        "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
-                        "last_observed_at": observed_at,
-                    }
+                    "$set": account_patch
                 },
             )
             account_summaries.append(
@@ -404,11 +578,22 @@ async def run_tiktok_reporting_sync(
                     "rows_saved": saved,
                     "errors": len(account_errors),
                     "complete": complete,
+                    "backfill_pending": bool(
+                        history_start and next_history_date < min(days)
+                    ),
                 }
             )
 
     rows_saved = sum(item["rows_saved"] for item in account_summaries)
     accounts_complete = sum(bool(item["complete"]) for item in account_summaries)
+    backfill_pending_accounts = (
+        sum(bool(item.get("backfill_pending")) for item in account_summaries)
+        + sum(bool(
+            (item.get("tiktok_backfill_next_date") and not item.get("tiktok_backfill_complete_at"))
+            or (item.get("tiktok_evidence_repair_next_date")
+                and not item.get("tiktok_evidence_repair_complete_at"))
+        ) for item in all_accounts[len(accounts):])
+    )
     if rows_saved == 0:
         raise TikTokReportingError(
             "tiktok_reporting_no_rows",
@@ -424,10 +609,15 @@ async def run_tiktok_reporting_sync(
         )
 
     sync_status = (
-        "complete" if accounts_complete == len(account_summaries) else "partial"
+        "complete"
+        if accounts_complete == len(account_summaries)
+        and accounts_deferred == 0
+        and backfill_pending_accounts == 0
+        and discovery["status"] == "complete"
+        else "partial"
     )
     hierarchy = None
-    if payload.include_hierarchy:
+    if payload.include_hierarchy and not accounts_deferred:
         from .tiktok_native_hierarchy import sync_tiktok_hierarchy
         hierarchy = await sync_tiktok_hierarchy(db, user_id, days, observed_at=observed_at)
         if hierarchy["status"] != "complete":
@@ -471,6 +661,10 @@ async def run_tiktok_reporting_sync(
         "date_to": days[-1].isoformat(),
         "accounts_attempted": len(account_summaries),
         "accounts_complete": accounts_complete,
+        "accounts_total": len(all_accounts),
+        "accounts_deferred": accounts_deferred,
+        "backfill_pending_accounts": backfill_pending_accounts,
+        "discovery": discovery,
         "rows_saved": rows_saved,
         "errors_count": len(error_items),
         "items": account_summaries,
