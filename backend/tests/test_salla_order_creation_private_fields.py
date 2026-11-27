@@ -11,6 +11,7 @@ from salla_order_creation.private_fields import (
     PrivateOrderFieldDenied, FIELDS, _safe_value,
     require_private_fields_ttl, install_private_fields_ttl,
     save_private_order_field, load_private_order_fields,
+    require_unchanged_private_vault,
 )
 
 NOW = datetime.fromtimestamp(1800000000, tz=timezone.utc)
@@ -296,3 +297,61 @@ def test_out_of_range_encrypted_geo_coordinates_denied(cipher):
     db=DB()
     with pytest.raises(PrivateOrderFieldDenied):
         save(db,cipher,field="geo_lat",value="100.01")
+
+
+
+def test_private_snapshot_revision_and_ref_roundtrip(cipher):
+    db=DB()
+    save(db,cipher,field="recipient_name",value="عميل تجريبي")
+    meta=asyncio.run(load_private_order_fields(
+        db,owner_id="owner",account_id=1,inbox_id=2,
+        conversation_id=3,intent_id="intent-0001",contact_id=77,
+        cipher=cipher,now=NOW,with_revision=True,
+    ))
+    assert meta["revision"]==1
+    assert meta["vault_ref"].startswith("vault.")
+    assert meta["fields"]["recipient_name"]=="عميل تجريبي"
+    assert "عميل تجريبي" not in str({
+        "revision":meta["revision"],
+        "vault_ref":meta["vault_ref"],
+    })
+    asyncio.run(require_unchanged_private_vault(
+        db,owner_id="owner",account_id=1,inbox_id=2,
+        conversation_id=3,intent_id="intent-0001",contact_id=77,
+        expected_revision=1,expected_vault_ref=meta["vault_ref"],now=NOW,
+    ))
+
+
+def test_private_field_edit_invalidates_prior_verified_snapshot(cipher):
+    db=DB()
+    save(db,cipher,field="recipient_name",value="عميل تجريبي")
+    meta=asyncio.run(load_private_order_fields(
+        db,owner_id="owner",account_id=1,inbox_id=2,
+        conversation_id=3,intent_id="intent-0001",contact_id=77,
+        cipher=cipher,now=NOW,with_revision=True,
+    ))
+    save(db,cipher,field="recipient_phone",value="0500000000",message_id=102)
+    with pytest.raises(PrivateOrderFieldDenied,match="private_vault_changed_after_quote"):
+        asyncio.run(require_unchanged_private_vault(
+            db,owner_id="owner",account_id=1,inbox_id=2,
+            conversation_id=3,intent_id="intent-0001",contact_id=77,
+            expected_revision=meta["revision"],
+            expected_vault_ref=meta["vault_ref"],now=NOW,
+        ))
+
+
+def test_wrong_or_expired_vault_reference_never_authorizes_create(cipher):
+    db=DB()
+    save(db,cipher)
+    for ref,contact,clock in (
+        ("vault."+"b"*32,77,NOW),
+        ("vault."+"a"*32,99,NOW),
+        ("vault."+"a"*32,77,NOW+timedelta(days=8)),
+    ):
+        with pytest.raises(PrivateOrderFieldDenied):
+            asyncio.run(require_unchanged_private_vault(
+                db,owner_id="owner",account_id=1,inbox_id=2,
+                conversation_id=3,intent_id="intent-0001",
+                contact_id=contact,expected_revision=1,
+                expected_vault_ref=ref,now=clock,
+            ))
