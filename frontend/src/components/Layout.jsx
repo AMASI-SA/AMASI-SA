@@ -17,6 +17,7 @@ import {
     Warehouse,
 } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
+import { useAuth } from "../context/AuthContext";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
@@ -140,6 +141,7 @@ function WarehouseSidebarLink({ location, onNavigate }) {
 }
 
 export default function Layout({ children }) {
+    const { user } = useAuth();
     const [legacyMenuOpen, setLegacyMenuOpen] = useState(false);
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
@@ -148,6 +150,7 @@ export default function Layout({ children }) {
     const isV2 = [
         "/dashboard-v2",
         "/orders-v2",
+        "/whatsapp-bank-review",
         "/fulfillment-v2",
         "/inventory-receiving-v2",
         "/products-v2",
@@ -276,6 +279,7 @@ export default function Layout({ children }) {
                             onOpenAll={() => setLegacyMenuOpen(true)}
                             searchForm={<GlobalOrderSearch compact />}
                             notificationControl={<NotificationBell />}
+                            bankReviewAllowed={user?.is_owner || (Array.isArray(user?.permissions) && user.permissions.includes("bank_receipts.view"))}
                         />
                     </div>
                 </div>
