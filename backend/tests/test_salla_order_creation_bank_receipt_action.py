@@ -88,3 +88,25 @@ def test_tampered_visible_amount_invalidates_hmac():
             sign_action(raw,STAMP,DELIVERY,SECRET),
             SECRET,now=1800000000,
         )
+
+
+
+@pytest.mark.parametrize("kind,attachment",[
+    ("image",9001), ("file",9001), ("text",0),
+])
+def test_signed_receipt_accepts_original_source_kind_not_payment(kind,attachment):
+    value=signed(payload(
+        source_kind=kind,source_attachment_id=attachment,
+    ))
+    assert value.source_kind==kind
+    assert value.source_attachment_id==attachment
+    assert value.visible.bank_transfer_shown is True
+
+
+@pytest.mark.parametrize("kind,attachment",[
+    ("image",0), ("file",0), ("text",9001),
+    ("video",9001), ("text",True),
+])
+def test_receipt_kind_cannot_be_forged_or_cross_attached(kind,attachment):
+    with pytest.raises(SignatureDenied):
+        signed(payload(source_kind=kind,source_attachment_id=attachment))
