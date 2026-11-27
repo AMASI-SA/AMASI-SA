@@ -81,7 +81,10 @@ async def diagnose(db, email):
 async def run(email):
     try:
         from dotenv import load_dotenv
-        load_dotenv(Path(__file__).resolve().parents[1] / "backend" / ".env", override=False)
+        default_env = Path(__file__).resolve().parents[1] / "backend" / ".env"
+        if not default_env.is_file():
+            default_env = Path.cwd() / "backend" / ".env"
+        load_dotenv(default_env, override=False)
     except ImportError:
         pass
     uri, db_name = os.getenv("MONGO_URL"), os.getenv("DB_NAME")
