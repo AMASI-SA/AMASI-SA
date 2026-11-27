@@ -451,3 +451,15 @@ async def test_tiktok_new_account_backfills_history_in_bounded_verified_batches(
     assert len(rows) == 5
     assert all(row["source_close_proof"]["complete"] for row in rows)
     assert not {"general_ledger", "ad_account_ledger", "qoyod_invoices"}.intersection(db.writes)
+
+
+def test_legacy_ad_catalog_owner_exclusion_survives_auto_discovery_upgrade():
+    old = {"provider": "tiktok_ads", "mezan_integration_account_id": "old",
+           "external_account_id": "100", "connection_status": "connected"}
+    discovered = {"provider": "tiktok_ads", "mezan_integration_account_id": "new",
+                  "external_account_id": "200", "connection_status": "connected",
+                  "tiktok_backfill_next_date": "2026-10-29"}
+    # Old saved preferences had no known_tiktok_account_ids field.
+    legacy_state = {"ad_catalog_selection": {"version": 2, "account_ids": []}}
+    selected = {r["id"]: r["selected"] for r in choices([old, discovered], legacy_state)}
+    assert selected == {"old": False, "new": True}
