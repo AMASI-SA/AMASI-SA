@@ -311,3 +311,39 @@ async def load_private_order_fields(
             "vault_ref":"vault."+key[:32],
         }
     return fields
+
+
+async def require_unchanged_private_vault(
+    db: Any, *,
+    owner_id: str, account_id: int, inbox_id: int, conversation_id: int,
+    intent_id: str, contact_id: int, expected_revision: int,
+    expected_vault_ref: str, now: datetime | None = None,
+) -> None:
+    """Read-only integrity guard immediately before any Salla POST.
+
+    If a later customer message modified any private field after quote
+    preparation, a previously approved quote must not create an old order.
+    """
+    if type(expected_revision) is not int or expected_revision < 1:
+        raise PrivateOrderFieldDenied("invalid_private_vault_revision")
+    key = _scope_id(owner_id, account_id, inbox_id, conversation_id, intent_id)
+    if (type(expected_vault_ref) is not str or
+            expected_vault_ref != "vault." + key[:32] or
+            type(contact_id) is not int or contact_id < 1):
+        raise PrivateOrderFieldDenied("private_vault_reference_mismatch")
+    row = await db.salla_ai_private_order_fields.find_one({
+        "_id": key, "owner_id": owner_id, "account_id": account_id,
+        "inbox_id": inbox_id, "conversation_id": conversation_id,
+        "contact_id": contact_id,
+    })
+    if (not isinstance(row, dict) or
+            row.get("revision") != expected_revision):
+        raise PrivateOrderFieldDenied("private_vault_changed_after_quote")
+    expiry = row.get("purge_after")
+    if not isinstance(expiry, datetime):
+        raise PrivateOrderFieldDenied("private_vault_expiration_missing")
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None or expiry <= moment.astimezone(timezone.utc):
+        raise PrivateOrderFieldDenied("private_vault_expired_before_order")
