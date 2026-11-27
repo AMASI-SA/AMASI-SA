@@ -40,6 +40,8 @@ def build_tiktok_reported_account_rows(
             and binding.get("integration_account_id") == account.get("mezan_integration_account_id")
             and binding.get("platform_account_id") == account_id
             and binding.get("confirmed_by") and binding.get("confirmed_at")
+            and binding.get("funding_mode") in {"prepaid", "postpaid", "hybrid"}
+            and binding.get("status") not in {"inactive", "deleted", "archived"}
         ]
         binding_state = (
             "approved" if len(matches) == 1
