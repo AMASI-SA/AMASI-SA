@@ -1,5 +1,15 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — New exact-head CI/OAuth acceptance checklist
+
+- [x] Previous Mezan synthetic suite failure 46057491664 diagnosed from actual job logs as test harness import of absent FastAPI via `order_engine/__init__.py`; not interpreted as application logic regression.
+- [x] Added separate test-only pure mapper runner to execute existing canonical mapper pytest against actual `mapper.py/models.py` without booting FastAPI or importing real Mezan server; new isolated workflow includes it.
+- [ ] **Current exact-head** isolated mapper + assisted-order suites and UI read-only source guard must all PASS in GitHub Actions. Historical Mezan MCP Gateway run 46057491486 PASS was at an earlier SHA; repeat verification on release head.
+- [ ] With owner credentials already managed by Mezan, call `GET /api/orders-v2/assisted-salla/capabilities` read-only and examine ONLY the boolean capability fields (no OAuth tokens). `payment_bank_read_scope`, `catalog_read_scope`, `shipping_read_scope` and `orders_create_scope` represent STORED Mezan OAuth token claims, NOT actual live API permissions.
+- [ ] Owner approves Partners Portal `products.read` and `payments.read` (and any required carrier permissions) before reconnect/re-authorization; inspect independent Mezan authenticated Salla endpoints without disclosing bank IBAN or bearer tokens in CI/issues. Confirm active receiving bank IBAN with trusted private readback.
+- [ ] No live Salla order/status/paid/fulfillment, WhatsApp sends, GL/Qoyod or production merge/deploy before complete positive E2E.
+
+
 ## 2026-11-27 — Salla 2026 payment-status shape and independent provider scopes
 
 - [ ] New GET Order Details responses can differ from the deprecated expanded schema (Salla documentation last changed 2026-10-08; https://docs.salla.dev/5394147e0). The documented expanded structure includes `payment_actions.remaining_action.paid_amount: {amount, currency}` and `payment_methods[]` with paid portions. The status-changing bank action now accepts **explicit finite zero** from top-level `paid_amount` or the documented nested SAR money object, while rejecting missing, malformed, non-SAR, conflicting or nonzero amounts, paid/refunded status and partial `payment_methods`. Test the **actual Mezan app's current** light-format response in protected staging before enabling this code; examples alone do not prove live field presence.
