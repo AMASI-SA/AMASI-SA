@@ -55,6 +55,7 @@ async def prepare_salla_unpaid_order_intent(
     source_contact_id: int | None = None,
     private_vault_revision: int | None = None,
     private_vault_ref: str | None = None,
+    bank_review_ref: str | None = None,
     enabled: bool = False,
     product_reader: Callable[..., Awaitable[dict]] = read_exact_product,
     rate_reader: Callable[..., Awaitable[list[dict]]] = read_shipping_rate_candidates,
@@ -89,7 +90,14 @@ async def prepare_salla_unpaid_order_intent(
             raise PrepareDenied("invalid_private_vault_quote_binding", 422)
     # Validate stable ID before doing ANY remote reads or Mongo writes.
     intent_storage_id(user_id, intent_id)
-    if (not order.accepted_methods or
+    bank_mode = bank_review_ref is not None
+    if bank_mode:
+        if (type(bank_review_ref) is not str or
+                not bank_review_ref.startswith("bank-review.") or
+                order.accepted_methods != ["bank"] or
+                type(source_contact_id) is not int or source_contact_id <= 0):
+            raise PrepareDenied("verified_bank_receipt_claim_required")
+    elif (not order.accepted_methods or
             not set(order.accepted_methods).issubset(ONLINE_ONLY)):
         raise PrepareDenied("post_create_pricing_online_only")
 
@@ -151,6 +159,20 @@ async def prepare_salla_unpaid_order_intent(
         # No provider payload/PII is returned to the chat client.
         raise PrepareDenied("salla_cart_inputs_unverified") from exc
 
+    receipt = None
+    if bank_mode:
+        from .bank_claims import BankReviewDenied, get_claim_for_order
+        try:
+            receipt = await get_claim_for_order(
+                db, user_id=user_id, intent_id=intent_id,
+                review_ref=bank_review_ref, inbox_id=inbox_id,
+                conversation_id=conversation_id, contact_id=source_contact_id,
+            )
+            if receipt.get("state") != "visual_preflight_accepted":
+                raise BankReviewDenied("receipt_already_used_for_order")
+        except (BankReviewDenied, TypeError, ValueError):
+            raise PrepareDenied("bank_receipt_visual_preflight_not_verified") from None
+
     digest = order_digest(order)
     try:
         encrypted_payload = encrypt_order_payload(
@@ -161,6 +183,10 @@ async def prepare_salla_unpaid_order_intent(
     storage_id = hashlib.sha256(
         f"assisted-unpaid-quote:{user_id}:{intent_id}".encode("utf-8")
     ).hexdigest()
+    source_mode = (
+        "mezan_verified_bank_receipt_review_v1"
+        if bank_mode else "mezan_verified_unpaid_order_intent_v1"
+    )
     record = {
         "_id": storage_id,
         "user_id": user_id, "intent_id": intent_id,
@@ -176,10 +202,14 @@ async def prepare_salla_unpaid_order_intent(
         # so the persisted payload survives PendingOrder.model_validate() later.
         # Only the Salla POST formatter decides which optional fields to omit.
         "encrypted_order_payload": encrypted_payload,
-        "source": "mezan_verified_unpaid_order_intent_v1",
+        "source": source_mode,
         "state": "authorized_for_pending_creation",
         "post_create_salla_total": True,
-        "online_only": True,
+        "online_only": not bank_mode,
+        "bank_review_ref": bank_review_ref if bank_mode else None,
+        "store_bank_id": receipt.get("store_bank_id") if bank_mode else None,
+        "receipt_visual_preflight": bool(bank_mode),
+        "bank_credit_verified": False if bank_mode else None,
         "total_sar": None,
         "pricing_verified": False,
         "shipping_price_verified": False,
@@ -191,7 +221,8 @@ async def prepare_salla_unpaid_order_intent(
         "purge_after": timestamp + QUOTE_RETENTION,
         "created_at": timestamp,
     }
-    if quote_pricing_mode(record) != "salla_post_create":
+    pricing_mode = "bank_receipt_review" if bank_mode else "salla_post_create"
+    if quote_pricing_mode(record) != pricing_mode:
         raise PrepareDenied("quote_policy_not_verified")
     try:
         await db.salla_ai_order_quotes.insert_one(record)
@@ -208,7 +239,8 @@ async def prepare_salla_unpaid_order_intent(
                 previous.get("source_contact_id") != source_contact_id or
                 previous.get("private_vault_revision") != private_vault_revision or
                 previous.get("private_vault_ref") != private_vault_ref or
-                quote_pricing_mode(previous) != "salla_post_create"):
+                previous.get("bank_review_ref") != bank_review_ref or
+                quote_pricing_mode(previous) != pricing_mode):
             raise PrepareDenied("quote_intent_reused_with_different_cart")
         old_expiry = previous.get("expires_at")
         if not isinstance(old_expiry, datetime):
@@ -224,7 +256,7 @@ async def prepare_salla_unpaid_order_intent(
         "quote_ref": record["quote_ref"],
         "quote_version": record["version"],
         "quote_digest": digest,
-        "pricing_mode": "salla_post_create",
+        "pricing_mode": pricing_mode,
         "verified_total_sar": None,
         "checkout_url": None,
     }
