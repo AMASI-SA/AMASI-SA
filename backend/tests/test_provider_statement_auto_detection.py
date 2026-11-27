@@ -9,7 +9,8 @@ import openpyxl
 from operational_balance_store import STATES, digest, read
 from operational_provider_statement_reconciliation import STATEMENTS
 from test_provider_statement_employee_access import setup, grant, MOBILE, STAFF
-from test_operational_balance_statement_intake import content, workbook, START
+from test_operational_balance_statement_intake import content, workbook
+from test_operational_balance_statement_reconciliation import START
 
 
 async def auto_upload(client, raw, filename, *, request_id="auto-provider-synthetic"):
