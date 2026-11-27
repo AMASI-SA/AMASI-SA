@@ -2841,9 +2841,25 @@ def make_dashboard_v2_router(
             ),
             300,
         )
-        return build_tiktok_reported_account_rows(
-            account_rows, facts, bindings, start, end
+        # Wallet-first funding lives in the independent operational state,
+        # not always in mz2_ad_account_bindings_v2. Use the exact same source
+        # projection as the real operational balance engine; this is read-only.
+        from operational_balance_store import read as read_operational_state
+        from operational_ad_funding import bindings as project_funding_bindings
+        state = await read_operational_state(db, user_id)
+        try:
+            funding_bindings, conflicts = project_funding_bindings(
+                state, user_id, bindings
+            )
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(
+                status_code=409, detail="tiktok_operational_funding_setup_incomplete"
+            ) from None
+        result = build_tiktok_reported_account_rows(
+            account_rows, facts, funding_bindings, start, end
         )
+        result["financial_binding_conflicts"] = len(conflicts)
+        return result
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")
     async def snapchat_accounts_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
