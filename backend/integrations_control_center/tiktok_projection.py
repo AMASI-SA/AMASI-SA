@@ -120,10 +120,12 @@ async def persist_tiktok_projection(
 
     # Re-authorization must not delete spend history, owner selections, or
     # operational financial bindings. Their integration IDs are stable.
+    account_ids_written: set[str] = set()
     for advertiser in advertisers[:200]:
         advertiser_id = str(advertiser.get("external_account_id") or "").strip()
-        if not advertiser_id:
+        if not advertiser_id or advertiser_id in account_ids_written:
             continue
+        account_ids_written.add(advertiser_id)
         patch = {
             "connection_status": "connected",
             "connection_provenance": "api_connection",
@@ -208,7 +210,7 @@ async def persist_tiktok_projection(
             "finished_at": now_iso,
             "source_mode": TIKTOK_SOURCE_MODE,
             "summary": {
-                "account_count": len(account_docs),
+                "account_count": len(account_ids_written),
                 "scope_count": len(scopes),
                 "make_data_used": False,
                 "legacy_collection_read": False,
