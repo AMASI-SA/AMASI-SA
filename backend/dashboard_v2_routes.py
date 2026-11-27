@@ -41,6 +41,8 @@ from dashboard_v2_ad_costs import (
 )
 from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_cooperative
 from dashboard_ads_account_results import build_dashboard_ads_account_results
+from dashboard_tiktok_coverage import verified_tiktok_reporting_rows
+from operational_tiktok_reporting import build_tiktok_reported_account_rows
 from dashboard_ads_costs import DashboardAdsCostCollector
 from dashboard_payment_fees import (
     BASIS as PAYMENT_FEE_BASIS, FEE_SOURCE_PROJECTION, attach_fee_source_evidence,
@@ -1412,7 +1414,7 @@ async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[st
             query,
             {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "display_name": 1},
         ),
-        100,
+        200,
     )
     return [
         str(row.get("ad_account_id") or row.get("external_account_id"))
@@ -1427,9 +1429,11 @@ async def _provider_rows(
     provider: str,
     start: str,
     end: str,
+    *, account_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     collections = {"snapchat": SNAP_FACTS, "meta": META_FACTS, "tiktok": TIKTOK_FACTS}
-    account_ids = await _selected_account_ids(db, user_id, provider)
+    if account_ids is None:
+        account_ids = await _selected_account_ids(db, user_id, provider)
     if not account_ids:
         return []
     query: dict[str, Any] = {
@@ -1584,11 +1588,15 @@ async def build_mezan_v2_ads(
         date_to=end_date,
         timezone_name="Asia/Riyadh",
     )
+    tiktok_accounts = await _selected_account_ids(db, user_id, "tiktok")
     raw_platform_rows = {
-        provider: await _provider_rows(db, user_id, provider, start, end)
-        for provider in ("meta", "tiktok")
+        "meta": await _provider_rows(db, user_id, "meta", start, end),
+        "tiktok": await _provider_rows(db, user_id, "tiktok", start, end, account_ids=tiktok_accounts),
+        "snapchat": [],
     }
-    raw_platform_rows["snapchat"] = []
+    tiktok_coverage, raw_platform_rows["tiktok"] = verified_tiktok_reporting_rows(
+        tiktok_accounts, start, end, raw_platform_rows["tiktok"]
+    )
     account_costs = await apply_mezan_v2_ad_account_costs(
         db,
         user_id,
@@ -1699,6 +1707,8 @@ async def build_mezan_v2_ads(
         if provider != "snapchat"
     }
     provider_metrics["google"] = {"spend": google["total_sar"], **google_quality}
+    if tiktok_coverage["accounts_expected"]:
+        provider_metrics["tiktok"].update(tiktok_coverage)
     if amount_available:
         provider_metrics["snapchat"] = _aggregate_provider_rows(
             platform_rows["snapchat"], start, end
@@ -1738,8 +1748,14 @@ async def build_mezan_v2_ads(
         for provider, value in breakdown.items()
         if provider not in {"snapchat", "google_transitional"} and value is not None
     ), 2)
-    overall_available = amount_available and google_quality["amount_available"]
-    overall_complete = amount_complete and google_quality["amount_complete"]
+    overall_available = (
+        amount_available and google_quality["amount_available"]
+        and tiktok_coverage["coverage_complete"]
+    )
+    overall_complete = (
+        amount_complete and google_quality["amount_complete"]
+        and tiktok_coverage["coverage_complete"]
+    )
     overall_provisional = (
         overall_available and not overall_complete
         and (provisional_amount or google_quality["provisional"])
@@ -1769,6 +1785,7 @@ async def build_mezan_v2_ads(
             "known_subtotal_sar": known_subtotal,
             "snapchat": snap_quality,
             "google": google_quality,
+            **({"tiktok": tiktok_coverage} if tiktok_coverage["accounts_expected"] else {}),
         },
         "bank_commissions": bank_commissions,
         "source_contract": {
@@ -2779,6 +2796,78 @@ def make_dashboard_v2_router(
             "totals": summarize(rows),
             "source": "unified_orders.quantity + received_supplier_invoice_cost_and_current_unreceived_cost_with_preserved_bundle_and_correction_authority",
         }
+
+    @router.get("/dashboard-v2/tiktok-accounts-reporting-summary")
+    async def tiktok_accounts_reporting_summary(
+        from_date: str | None = Query(default=None),
+        to_date: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        # Source-only information in Operational Balances. The approved
+        # financial posting engine remains the sole accounting authority.
+        current = owner(user)
+        user_id = str(current["id"])
+        today = _today_riyadh()
+        start = from_date or today.replace(day=1).isoformat()
+        end = to_date or today.isoformat()
+        try:
+            first, last = date.fromisoformat(start), date.fromisoformat(end)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail="invalid_date_range") from exc
+        if first > last or (last - first).days > 30:
+            raise HTTPException(status_code=422, detail="invalid_date_range")
+        account_rows = await _to_list(
+            db.mezan_integration_accounts_v2.find(
+                {
+                    "user_id": user_id,
+                    "provider": TIKTOK_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                },
+                {
+                    "_id": 0, "ad_account_id": 1, "external_account_id": 1,
+                    "mezan_integration_account_id": 1, "display_name": 1,
+                    "currency": 1, "timezone": 1, "last_sync_at": 1,
+                },
+            ),
+            201,
+        )
+        if len(account_rows) > 200:
+            raise HTTPException(status_code=409, detail="tiktok_reporting_account_limit_exceeded")
+        facts = await _provider_rows(db, user_id, "tiktok", start, end)
+        # Use the same per-account FX settings as the executive dashboard.
+        costed = await apply_mezan_v2_ad_account_costs(
+            db, user_id, {"snapchat": [], "meta": [], "tiktok": facts}
+        )
+        dashboard_basis_facts = costed["platform_rows"]["tiktok"]
+        bindings = await _to_list(
+            db.mz2_ad_account_bindings_v2.find(
+                {"user_id": user_id, "platform": "tiktok"},
+                {"_id": 0, "platform": 1, "integration_account_id": 1,
+                 "platform_account_id": 1, "confirmed_by": 1, "confirmed_at": 1,
+                 "funding_mode": 1, "status": 1},
+            ),
+            300,
+        )
+        # Wallet-first funding lives in the independent operational state,
+        # not always in mz2_ad_account_bindings_v2. Use the exact same source
+        # projection as the real operational balance engine; this is read-only.
+        from operational_balance_store import read as read_operational_state
+        from operational_ad_funding import bindings as project_funding_bindings
+        state = await read_operational_state(db, user_id)
+        try:
+            funding_bindings, conflicts = project_funding_bindings(
+                state, user_id, bindings
+            )
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(
+                status_code=409, detail="tiktok_operational_funding_setup_incomplete"
+            ) from None
+        result = build_tiktok_reported_account_rows(
+            account_rows, dashboard_basis_facts, funding_bindings, start, end
+        )
+        result["financial_binding_conflicts"] = len(conflicts)
+        return result
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")
     async def snapchat_accounts_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
