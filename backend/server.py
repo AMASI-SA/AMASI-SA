@@ -70,6 +70,7 @@ from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
 from order_engine.routes import make_order_engine_router
 from salla_order_creation.routes import make_assisted_salla_order_router
+from salla_order_creation.bank_routes import make_assisted_bank_review_router
 from order_item_engine.routes import make_order_item_engine_router
 from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
@@ -3937,6 +3938,8 @@ api.include_router(make_order_engine_router(db, current_user))
 # Assisted Salla creation is OFF by default and requires independently stored
 # authoritative quote + confirmed inbound customer message before any POST.
 api.include_router(make_assisted_salla_order_router(db, current_user))
+# Assisted bank receipt order creation / staff review remains OFF until UAT.
+api.include_router(make_assisted_bank_review_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )
