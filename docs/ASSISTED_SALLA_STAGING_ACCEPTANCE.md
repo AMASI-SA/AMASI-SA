@@ -1,5 +1,14 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Live Salla status metadata evidence and bank receipt readback guard
+
+- [x] Read-only Salla merchant status listing confirmed customized **بإنتظار المراجعة = 780246489** and **بإنتظار الدفع = 1555791576** (27 Nov 2026), with multiple other merchant statuses including «تم المراجعة» sharing generic `under_review` slug. These metadata were obtained via a separately connected Salla app; they **DO NOT certify Mezan's OAuth permissions**.
+- [x] Source-only Mezan `bank_status_guard.py` selects the exact custom review name, not the shared slug, and `bank_review_readback.py` now requires that exact synced custom name rather than accepting `under_review`. Synthetic regression checks cover wrong same-slug state; not yet confirmed by exact-head CI.
+- [x] Source-only signed preliminary receipt type `image|file|text` with customer-text `source_attachment_id=0`, other media requiring positive original Chatwoot attachment ID. Structured claims never set paid or release fulfillment.
+- [ ] **Still BLOCKED**: exact-head GitHub Actions synthetic PASS; Mezan's own current Salla products.read/payments.read/bank permission token readback (#2149); tenant/host secrets/TTL; approved private media parser; authorized staging one-order post/create/readback; independently checked staff bank-credit decision. No production merge/activation or actual customer receipt/order.
+
+
+
 ## 2026-11-27 — Multi-turn protected-field and source-revision UAT gates
 
 - [ ] Verify actual Mezan field ACK has only `state=saved`, safe `fields_present`, revision and stable opaque `vault_ref`; never names/phones/text/location/payment URL.

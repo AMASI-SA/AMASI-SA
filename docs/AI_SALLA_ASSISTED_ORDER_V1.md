@@ -1,5 +1,14 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Three-format WhatsApp bank evidence and exact status (DRAFT)
+
+Owner-approved customer transfer evidence: image, file (PDF/TXT; local/private processing only), or WhatsApp message text. CSA #104 strictly collects current scoped original source; Mezan #2140 `SignedBankReceiptStage` verifies HMAC, `source_kind`, message/contact IDs and original attachment ID (0 for plain text). Mezan validates the *claimed* amount/date/payee against an active merchant bank and the final Salla order. Staff review case persists redacted metadata; text is explicitly labeled `customer_text_claim_only` and never proves a transfer occurred.
+
+Read-only inspection of actual Salla merchant custom statuses on 2026-11-27 found exact «بإنتظار المراجعة» ID 780246489 and «بإنتظار الدفع» ID 1555791576; multiple other custom statuses such as «تم المراجعة» use the same `under_review` slug. The bank-only Salla status update must resolve this exact active custom status ID and the synced Mezan readback must confirm the exact custom name. Salla connector permissions are **not** Mezan OAuth permissions. Source regressions added; latest Actions queued, NO PASS claim.
+
+Private local PDF text-layer extraction can be added as an *explicitly approved* CSA adapter; scanned/image-only PDFs remain human review. No automated bank credit verification, paid/GL/Qoyod postings or fulfillment release. No actual Salla POST/WhatsApp message, preview UAT, production merge or activation. Blockers: #2149 scope, CSA #122 runner, current CI, owner-approved one-order integration, bank statement attestation and staging rollback.
+
+
 ## 2026-11-27 — Protected customer order draft continuity and vault revision (new code DRAFT)
 
 New Mezan encrypted PII field receipts now include `vault_ref` as an opaque SHA256-scoped stable reference, with only safe field names/revision; NEVER raw phone/name/address/engraving. CSA's opt-in private field progress stores these refs and source message IDs to advance a confirmed recipient→address draft across WhatsApp messages without model PII. Customer corrections before quote remain possible in Mezan vault; corrections AFTER quote are blocked and must start a separately confirmed new draft.
