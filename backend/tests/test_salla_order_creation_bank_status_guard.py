@@ -7,15 +7,19 @@ import pytest
 
 from salla_order_creation.bank_status_guard import (
     BankStatusDenied, exact_active_review_status,
-    ensure_bank_review_custom_status,
+    exact_active_pending_payment_status, ensure_bank_review_custom_status,
 )
 
 REVIEW_ID=780246489
+PENDING_ID=1555791576
 OTHER_ID=1539366206
 
 
 def statuses():
     return [
+        {"id":PENDING_ID,"name":"بإنتظار الدفع",
+         "slug":"payment_pending","is_active":True,
+         "original":{"id":1473353380,"name":"بإنتظار الدفع"}},
         {"id":REVIEW_ID,"name":"بإنتظار المراجعة",
          "slug":"under_review","is_active":True,
          "original":{"id":566146469,"name":"بإنتظار المراجعة"}},
@@ -25,7 +29,7 @@ def statuses():
     ]
 
 
-def order(customized=OTHER_ID,slug="under_review"):
+def order(customized=PENDING_ID,slug="payment_pending"):
     return {"id":90001,"payment_method":"bank","paid_amount":0,
             "status":{"slug":slug,
                       "customized":{"id":customized}}}
@@ -95,6 +99,7 @@ def run(db=None,*,source=None,enabled=True):
 
 def test_exact_custom_status_not_generic_under_review_slug():
     assert exact_active_review_status(statuses())==REVIEW_ID
+    assert exact_active_pending_payment_status(statuses())==PENDING_ID
     assert REVIEW_ID!=OTHER_ID
 
 
@@ -114,17 +119,35 @@ def test_one_once_only_update_status_with_send_sms_disabled():
 
 
 def test_already_correct_custom_status_never_reposts():
-    db,result,calls=run(source=order(customized=REVIEW_ID))
+    db,result,calls=run(source=order(customized=REVIEW_ID,slug="under_review"))
     assert result["state"]=="confirmed_under_review"
     assert result["status_post_performed"] is False
     assert all(m!="POST" for m,p,k in calls)
     assert db.salla_ai_bank_status_intents.items==[]
 
 
-def test_same_under_review_slug_different_custom_status_must_update():
-    _,result,calls=run(source=order(customized=OTHER_ID))
-    assert result["review_status_id"]==REVIEW_ID
-    assert any(method=="POST" for method,_,_ in calls)
+def test_same_under_review_slug_different_custom_status_must_never_regress():
+    db=DB()
+    with pytest.raises(BankStatusDenied,match="custom_state_conflict"):
+        run(db=db,source=order(customized=OTHER_ID,slug="under_review"))
+    # Already-reviewed order must NOT be moved backward, even if the shared
+    # provider slug looks like the target review state.
+    assert db.salla_ai_bank_status_intents.items==[]
+
+
+def test_wrong_custom_payment_pending_status_never_enters_review():
+    db=DB()
+    with pytest.raises(BankStatusDenied,match="exact_bank_pending_payment_status"):
+        run(db=db,source=order(customized=123456,slug="payment_pending"))
+    assert db.salla_ai_bank_status_intents.items==[]
+
+
+def test_same_review_custom_id_with_wrong_slug_rejected():
+    db=DB()
+    with pytest.raises(BankStatusDenied,match="exact_bank_pending_payment_status"):
+        run(db=db,source=order(customized=REVIEW_ID,slug="payment_pending"))
+    assert db.salla_ai_bank_status_intents.items==[]
+
 
 
 def test_ambiguous_duplicate_exact_names_deny_before_update():
@@ -172,6 +195,9 @@ def test_wrong_merchant_or_missing_case_denies_before_network():
 @pytest.mark.parametrize("change",[
     {"payment_method":"mada"},
     {"paid_amount":165},
+    {"paid_amount":None},
+    {"paid_amount":True},
+    {"paid_amount":"NaN"},
     {"status":{"slug":"completed","customized":{"id":OTHER_ID}}},
     {"id":90099},
 ])
@@ -229,3 +255,4 @@ def test_real_merchant_status_snapshot_without_is_active_selects_only_payment_re
     ]
     assert exact_active_review_status(current) == 780246489
     assert exact_active_review_status(current) != 1539366206
+    assert exact_active_pending_payment_status(current) == 1555791576
