@@ -36,8 +36,12 @@ def verify_bank_receipt_action(
     raw: bytes, stamp: str, delivery: str, signature: str, secret: bytes,
     *, now: int | None = None,
 ) -> SignedBankReceiptStage:
-    parsed = verify_signed_json(raw, stamp, delivery, signature, secret, now=now)
+    # First verify HMAC, anti-replay clock and duplicate JSON-key rejection.
+    verify_signed_json(raw, stamp, delivery, signature, secret, now=now)
+    # Strict Pydantic JSON mode accepts ISO-8601 timestamps as JSON strings
+    # while enforcing the typed timestamp field; Python-object strict mode
+    # rejects every genuine serialized datetime.
     try:
-        return SignedBankReceiptStage.model_validate(parsed)
+        return SignedBankReceiptStage.model_validate_json(raw)
     except ValidationError as exc:
         raise SignatureDenied("invalid_bank_receipt_screening_action") from exc
