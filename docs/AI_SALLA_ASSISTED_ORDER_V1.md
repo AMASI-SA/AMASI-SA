@@ -1,5 +1,14 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Protected customer order draft continuity and vault revision (new code DRAFT)
+
+New Mezan encrypted PII field receipts now include `vault_ref` as an opaque SHA256-scoped stable reference, with only safe field names/revision; NEVER raw phone/name/address/engraving. CSA's opt-in private field progress stores these refs and source message IDs to advance a confirmed recipient→address draft across WhatsApp messages without model PII. Customer corrections before quote remain possible in Mezan vault; corrections AFTER quote are blocked and must start a separately confirmed new draft.
+
+`load_private_order_fields(...,with_revision=True)` now provides source revision and vault_ref to private server-only quote builder. `intent_writer.py` writes immutable `private_vault_revision/private_vault_ref` alongside encrypted Salla PendingOrder quote payload and source contact ID. Immediately before the signed Salla create POST, `routes.py` calls `require_unchanged_private_vault` (read-only), which checks exact merchant/account/inbox/conversation/intent/contact, revision and unexpired TTL. An edited/expired/mismatched vault stops the POST with a safe 409. No new Salla checkout generation or accounting mutation.
+
+Tests added/updated in `backend/tests/test_salla_order_creation_private_fields.py`, `test_salla_order_creation_private_order_builder.py`, and CSA `ai/test_private_order_progress.py`/`ai/test_private_order_progress_runtime.py`. New code test outcome currently **UNVERIFIED**: Mezan last older 297-PASS run 45911507595 does NOT cover these commits; CSA Actions runner #122 queued/fails even no-code smoke. This remains a nonproduction preview PR. Do not deploy until owner approves Salla OAuth products/payment read scopes (#2149), independent Fernet/HMAC keys, both dedicated Mongo TTL migrations, a privacy-safe native capture policy, real customer checkout-host validation and one synthetic Salla pending-order E2E. No real orders/messages performed.
+
+
 ## 2026-11-27 — Encrypted private customer fields and PII-free catalog/quote bridge (DRAFT)
 
 **Privacy decision:** Keep buyer name/mobile/email, recipient name/mobile, delivery address, map coordinates and personalized engraving text within Mezan only; do NOT pass them to an OpenAI model. The native WhatsApp worker still runs its existing privacy/human-takeover guard by default.
