@@ -21,6 +21,7 @@ from order_engine.service import get_order, OrderNotFoundError
 
 from .confirmation import ConfirmationDenied, persist_signed_confirmation, verify_confirmation
 from .checkout_readback import resolve_synced_checkout, verify_checkout_read
+from .bank_transfer import bank_order_digest
 from .intent_writer import PrepareDenied, prepare_salla_unpaid_order_intent
 from .prepare_action import verify_prepare_unpaid_order
 from .private_field_action import verify_private_field
@@ -570,7 +571,13 @@ def make_assisted_salla_order_router(
                     quote.get("encrypted_order_payload"),
                     owner_id=owner_id, intent_id=action.intent_id,
                 )
-            if order_digest(order) != action.quote_digest:
+            if quote.get("source") == "mezan_bank_receipt_pending_review_v1":
+                expected_digest = bank_order_digest(
+                    order, store_bank_id=quote["store_bank_id"],
+                )
+            else:
+                expected_digest = order_digest(order)
+            if expected_digest != action.quote_digest:
                 raise ValueError("quote mismatch")
         except (EncryptedOrderUnavailable, ValueError, TypeError):
             raise HTTPException(status_code=409, detail={"code": "verified_payload_missing"}) from None
