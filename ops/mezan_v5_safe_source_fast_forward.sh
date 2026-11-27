@@ -26,8 +26,8 @@ print("LEASE_CLEAR")
 PY
 
 git fetch --no-tags origin "$BRANCH"
-test "$(git rev-parse FETCH_HEAD)" = "$EXPECTED_NEW" || fail "remote production moved"
-git merge-base --is-ancestor HEAD FETCH_HEAD || fail "non-fast-forward ancestry"
+test "$(git rev-parse --verify "FETCH_HEAD^{commit}")" = "$EXPECTED_NEW" || fail "remote production moved"
+git merge-base --is-ancestor "$EXPECTED_OLD" "$EXPECTED_NEW" || fail "non-fast-forward ancestry"
 
 export EXPECTED_OLD EXPECTED_NEW BRANCH
 python3 - <<'PY'
@@ -47,7 +47,7 @@ if tracked_before.strip():
     fail("tracked worktree changed before update")
 untracked_before=names("ls-files","--others","--exclude-standard","-z")
 untracked_digest=hashlib.sha256(b"\0".join(untracked_before)).hexdigest()
-new_paths=names("diff","--name-only","-z","--diff-filter=ACRT","HEAD","FETCH_HEAD")
+new_paths=names("diff","--name-only","-z","--diff-filter=ACRT",expected_old,expected_new,"--")
 for raw in new_paths:
     candidate=raw.decode("utf-8","surrogateescape")
     # An incoming tracked destination must not replace any existing untracked,
@@ -78,7 +78,7 @@ print("SAFE_PRECHECK_OK",json.dumps({
  "untracked_path_digest":untracked_digest[:12],
  "generated_files_preserved":len(before)
 }))
-subprocess.run(["git","merge","--ff-only","FETCH_HEAD"],check=True)
+subprocess.run(["git","merge","--ff-only",expected_new],check=True)
 if run("rev-parse","HEAD").decode().strip()!=expected_new:
     fail("post-merge HEAD mismatch")
 if run("status","--porcelain","--untracked-files=no").strip():
