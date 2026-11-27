@@ -53,6 +53,8 @@ async def test_native_autodetect_denies_employee_without_detected_provider_grant
         before = await read(db, "owner")
         result = await auto_upload(client, content(workbook("tamara")), "settlement.xlsx")
         assert result.status_code == 403, result.text
+        assert result.json()["detail"]["code"] == "provider_statement_provider_not_permitted"
+        assert result.json()["detail"]["not_applied"] is True
         assert await db[STATEMENTS].count_documents({}) == 0
         assert await db.accounting_source_files.count_documents({}) == 0
         assert await read(db, "owner") == before
