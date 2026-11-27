@@ -36,6 +36,23 @@ class SavedStatementUse(BaseModel):
     expected_file_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
 
 
+async def _read_provider_statement_file(file: UploadFile, *, max_bytes: int) -> bytes:
+    """Allow official PayPal CSV only after a bounded read; keep XLSX ZIP guard."""
+    name = str(file.filename or "").strip().lower()
+    if not name.endswith(".csv"):
+        return await read_safe_xlsx_upload(file, max_bytes=max_bytes)
+    content = await file.read(max_bytes + 1)
+    if not content or len(content) > max_bytes:
+        raise HTTPException(413 if content else 400, detail={
+            "code": "provider_statement_size_invalid" if content else "provider_statement_file_empty",
+            "message": "ملف الكشف فارغ أو يتجاوز الحد المسموح"})
+    if (b"\x00" in content or not content.lstrip(b"\xef\xbb\xbf").startswith(b"Date,")
+            or b"Transaction ID" not in content[:8192]):
+        raise HTTPException(400, detail={"code": "paypal_activity_csv_required",
+            "message": "يرجى رفع ملف PayPal Activity Download CSV الأصلي."})
+    return content
+
+
 def attach_provider_statement_routes(router, db, current_user, scope, guarded):
     @router.get('/provider-statements/mobile')
     async def mobile_history(request: Request, response: Response, page: int = Query(default=1, ge=1),
@@ -69,8 +86,10 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
                             user=Depends(guarded('provider_statements'))):
         from mobile_provider_statements import upload_result
         actor, owner, _ = await scope(db, user, 'provider_statements')
+        if file.filename and file.filename.lower().endswith('.csv') and provider != 'paypal':
+            raise HTTPException(422, detail={'code': 'provider_statement_provider_mismatch', 'not_applied': True})
         try:
-            content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
+            content = await _read_provider_statement_file(file, max_bytes=MAX_FILE_BYTES)
         except HTTPException as exc:
             # This boundary has not entered the canonical writer. The client
             # may safely discard this unusable cached file and choose another.
@@ -120,7 +139,7 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
         user=Depends(guarded('provider_statements')),
     ):
         actor, owner, _ = await scope(db, user, 'provider_statements')
-        content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
+        content = await _read_provider_statement_file(file, max_bytes=MAX_FILE_BYTES)
         return await upload(db, owner, actor['id'], content=content,
             filename=file.filename or 'statement.xlsx', request_id=request_id,
             expected_session_scope=expected_session_scope, expected_started_at=expected_started_at)
