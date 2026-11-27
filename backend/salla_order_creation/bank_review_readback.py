@@ -103,6 +103,8 @@ async def read_synced_bank_review(
         "reference_id":reference,
         "receipt_message_id":case["source_message_id"],
         "receipt_attachment_id":case["source_attachment_id"],
+        "receipt_source_kind":case.get("source_kind", "image"),
+        "customer_text_claim_only":case.get("source_kind") == "text",
         "review_owner":"customer_service",
         "checkout_url":None,
     }
