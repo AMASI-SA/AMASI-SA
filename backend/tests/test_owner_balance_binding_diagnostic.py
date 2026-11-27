@@ -42,3 +42,21 @@ def test_direct_binding_requires_active_row():
     assert module.classify([{"id": "self", "status": "inactive"}],
                            [], [], [], True) != (
         "DIRECT_V2_ACCOUNT_LINK_PRESENT_CHECK_SESSION_PERMISSION")
+
+
+def test_missing_motor_reports_safe_result_instead_of_crashing(monkeypatch):
+    import asyncio
+    import builtins
+
+    monkeypatch.setenv("MONGO_URL", "mongodb://127.0.0.1:27017")
+    monkeypatch.setenv("DB_NAME", "synthetic")
+    original = builtins.__import__
+
+    def without_motor(name, *args, **kwargs):
+        if name == "motor.motor_asyncio":
+            raise ModuleNotFoundError("No module named 'motor'", name="motor")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_motor)
+    result = asyncio.run(module.run("synthetic@example.test"))
+    assert result == {"read_only": True, "result": "MONGO_DRIVER_UNAVAILABLE"}
