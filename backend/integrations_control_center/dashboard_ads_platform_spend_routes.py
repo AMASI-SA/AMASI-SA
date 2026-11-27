@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
+from dashboard_tiktok_coverage import verified_tiktok_reporting_rows
 from dashboard_v2_ad_costs import apply_mezan_v2_ad_account_costs
 from unified_marketing.dashboard_shadow import (
     build_dashboard_unified_shadow,
@@ -150,11 +151,11 @@ async def _selected_account_ids(
         query,
         {"_id": 0, "external_account_id": 1, "ad_account_id": 1},
     )
-    ids = {
+    ids = [
         str(row.get("ad_account_id") or row.get("external_account_id") or "").strip()
-        for row in await _to_list(cursor, 100 if provider == TIKTOK_PROVIDER_ID else 250)
-    }
-    return sorted(account_id for account_id in ids if account_id)
+        for row in await _to_list(cursor, 200 if provider == TIKTOK_PROVIDER_ID else 250)
+    ]
+    return sorted(account_id for account_id in (ids if provider == TIKTOK_PROVIDER_ID else set(ids)) if account_id)
 
 
 async def _native_tiktok_spend(
@@ -177,8 +178,11 @@ async def _native_tiktok_spend(
         "date": {"$gte": dates[0], "$lte": dates[-1]},
     }, {"_id": 0}), MAX_DAILY_ROWS + 1)
     truncated = len(rows) > MAX_DAILY_ROWS
+    coverage, verified_rows = verified_tiktok_reporting_rows(
+        account_ids, dates[0], dates[-1], rows[:MAX_DAILY_ROWS],
+    )
     costed = await apply_mezan_v2_ad_account_costs(
-        db, user_id, {"tiktok": rows[:MAX_DAILY_ROWS]},
+        db, user_id, {"tiktok": verified_rows},
     )
     known_by_day: dict[str, float] = defaultdict(float)
     known_range_total = 0.0
@@ -203,7 +207,7 @@ async def _native_tiktok_spend(
         and all((account_id, day) in observed and (account_id, day) not in invalid
                 for account_id in account_ids)
     }
-    available = len(complete_days) == len(dates)
+    available = coverage["coverage_complete"] and len(complete_days) == len(dates)
     # Round the selected range only once, as build_mezan_v2_ads does. Summing
     # rounded daily display amounts can differ by a cent and hide profit again.
     known_total = round(known_range_total, 2)
