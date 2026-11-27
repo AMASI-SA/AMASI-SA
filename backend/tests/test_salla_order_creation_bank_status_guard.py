@@ -81,7 +81,7 @@ def run(db=None,*,source=None,enabled=True):
         if method=="GET" and path=="/orders/90001":
             seen[0]+=1
             if seen[0]>1 and len([c for c in calls if c[0]=="POST"])==1:
-                return {"success":True,"data":order(customized=REVIEW_ID)}
+                return {"success":True,"data":order(customized=REVIEW_ID,slug="under_review")}
             return {"success":True,"data":original}
         if method=="POST" and path=="/orders/90001/status":
             assert kwargs["json"]=={
@@ -330,3 +330,40 @@ def test_prewrite_timeout_is_quarantined_without_status_post_or_blind_retry():
     assert second["state"]=="status_update_previously_attempted"
     assert second["status_post_performed"] is False
     assert all(m!="POST" for m,_ in operations)
+
+
+
+@pytest.mark.parametrize("changed", [
+    {"paid_amount":165},
+    {"paid_amount":None},
+    {"paid_amount":"NaN"},
+    {"status":{"slug":"completed","customized":{"id":REVIEW_ID}}},
+    {"payment_method":"mada"},
+])
+def test_post_update_readback_never_reports_confirmed_when_bank_or_status_changes(changed):
+    db=DB()
+    operations=[]
+    count=0
+    async def request(db_arg,owner,method,path,**kwargs):
+        nonlocal count
+        operations.append((method,path))
+        if method=="GET" and path=="/orders/statuses":
+            return {"success":True,"data":statuses()}
+        if method=="GET" and path=="/orders/90001":
+            count+=1
+            if count <= 2:
+                return {"success":True,"data":order()}
+            return {"success":True,"data":{
+                **order(customized=REVIEW_ID,slug="under_review"),**changed,
+            }}
+        if method=="POST" and path=="/orders/90001/status":
+            return {"success":True,"data":{"code":201}}
+        raise AssertionError("unexpected test API")
+    result=asyncio.run(ensure_bank_review_custom_status(
+        db,user_id="owner",intent_id="intent-0001",
+        salla_order_id=90001,request=request,enabled=True,
+    ))
+    assert result["state"] == "status_update_needs_reconciliation"
+    assert result["status_post_performed"] is True
+    assert result["bank_credit_confirmed"] is False
+    assert [m for m,_ in operations].count("POST")==1
