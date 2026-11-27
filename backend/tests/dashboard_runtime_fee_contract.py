@@ -149,6 +149,13 @@ def extend_frozen_fee_contract(response, *, fixture_case):
         "incomplete_buckets": unknown,
         "electronic_complete": electronic_complete,
         "electronic_before_filter_complete": not blank_method,
+        # Immutable frozen fixtures have no independently proven cash-basis
+        # collection or settlement rows. Keep cash-source completeness separate
+        # from missing payment-method policy / unknown-FX fee completeness.
+        # These explicit flags are now emitted by the runtime and must remain
+        # byte-for-byte present in the independent response oracle.
+        "electronic_cash_basis_complete": True,
+        "electronic_cash_before_filter_complete": True,
         "legacy_analysis_fees_included": False,
     }
     # JSON order is part of the existing byte-for-byte response gate.

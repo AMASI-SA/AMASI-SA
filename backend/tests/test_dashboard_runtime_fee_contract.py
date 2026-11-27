@@ -60,7 +60,10 @@ def test_complete_sar_money_counts_and_ad_fees_are_exactly_preserved():
     assert authority == {
         "basis": FEE_BASIS, "complete": True, "known_payment_fees_sar": 2.3,
         "reason_codes": [], "incomplete_buckets": [], "electronic_complete": True,
-        "electronic_before_filter_complete": True, "legacy_analysis_fees_included": False,
+        "electronic_before_filter_complete": True,
+        "electronic_cash_basis_complete": True,
+        "electronic_cash_before_filter_complete": True,
+        "legacy_analysis_fees_included": False,
     }
     assert response["totals"].pop("payment_fees_complete") is True
     assert response["totals"].pop("payment_fee_review_reasons") == []
@@ -144,6 +147,9 @@ def test_blank_method_masks_only_affected_totals_and_does_not_change_ad_fee():
     extend_frozen_fee_contract(response, fixture_case=fixture_key("no_matching_filter"))
     assert response["payment_fee_authority"]["known_payment_fees_sar"] == 0.0
     assert response["payment_fee_authority"]["electronic_complete"] is False
+    # Cash-basis source completeness is independent of unresolved fee terms.
+    assert response["payment_fee_authority"]["electronic_cash_basis_complete"] is True
+    assert response["payment_fee_authority"]["electronic_cash_before_filter_complete"] is True
     assert response["payment_fee_authority"]["reason_codes"] == ["payment_method_unconfigured"]
     assert response["totals"]["total_sales"] == 100.0
     assert response["totals"]["other_payment_fees"] is None
