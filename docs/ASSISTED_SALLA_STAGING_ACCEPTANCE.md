@@ -1,5 +1,14 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Additional non-regression gate for exact merchant bank state
+
+- [ ] Confirm actual Salla statuses from **Mezan's own** OAuth connection, not the separately connected Salla plugin. The currently observed merchant customized IDs are pending «بإنتظار الدفع» **1555791576** and review «بإنتظار المراجعة» **780246489**; if merchant statuses change, re-discover and fail closed until verified.
+- [ ] A generic `under_review` parent slug or top-level canonical `status.name` can conceal child «تم المراجعة» (custom ID 1539366206). Readback must match `status.customized.id` + `status.customized.name` (strict real Salla raw mapping), not `status_native` alone.
+- [ ] Initial write: exact source custom «بإنتظار الدفع», unpaid bank method, matching owner/intent/order/staff-review record, unique target in live statuses. Already target status may return read-only with **zero POST**; any other child ID/slug, paid/unknown amount, missing field, tenant mismatch or missing case denies without POST.
+- [ ] Re-read order immediately before the only possible status POST: if staff/webhook advanced it, abort and quarantine for manual reconciliation; no blind retry. After POST, re-read exact ID/slug/unpaid and never claim confirmed review if payment or status changed in flight.
+- [ ] Execute new mapper/status/readback synthetic regression tests at **current branch HEAD** and controlled one-order staging E2E, verifying no duplicate Salla order, no backward transitions, zero unapproved bank credit and no accounting/fulfillment writes. Current CI remains queued/unverified.
+
+
 ## 2026-11-27 — Review UI acceptance (DRAFT)
 
 - [ ] Build and render `/whatsapp-bank-review` in Mezan V2 under authenticated owner, granted admin and explicitly permitted customer-service accounts; verify navigation hidden for users without `bank_receipts.view`.

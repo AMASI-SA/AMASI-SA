@@ -1,5 +1,16 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Exact custom Salla status and non-regressing bank review (source-only)
+
+A safety review found that some merchant statuses, including «تم المراجعة», share the generic `under_review` slug and can also retain the top-level Salla canonical name «بإنتظار المراجعة». Relying on either the slug or `OrderDTO.status_native` alone could therefore falsely classify a completed review as pending or move it **backwards**.
+
+**Fix in Mezan draft #2140:** `order_engine/mapper.py` and the optional `OrderDTO.status_customized_id/status_customized_name` now preserve the actual `status.customized` child from Salla raw data. `bank_review_readback.py` accepts a pending-review status only when all of the following agree: (1) exact merchant child ID obtained via Mezan's own read-only `GET /orders/statuses` API, (2) the child name is «بإنتظار المراجعة», (3) the generic parent slug remains `under_review`, (4) payment remains explicitly unpaid and order ID/reference/amount match. Missing IDs fail closed.
+
+The one-time guarded bank status setter `bank_status_guard.py` now only moves orders in the **exact customized «بإنتظار الدفع»** state to the exact customized «بإنتظار المراجعة» state. Any already-different `under_review` child (including «تم المراجعة») blocks as a conflict, never gets downgraded. The guard requires a readable explicit zero `paid_amount`, re-reads the same Salla order immediately before POST to catch advanced/paid races, and verifies exact custom ID/slug/unpaid amount after the single attempted POST. All uncertain outcomes are fenced for staff reconciliation without retrying status writes. This narrows but cannot mathematically eliminate a third-party race between final GET and provider POST; staff review remains mandatory.
+
+Added and extended synthetic tests in `test_order_engine_mapper.py`, `test_salla_order_creation_bank_review_readback.py`, and `test_salla_order_creation_bank_status_guard.py`; the isolated Salla-assisted Actions workflow now includes the mapper tests. **No exact-head CI PASS confirmed**, no preview/UAT, no Salla/WhatsApp/GL mutation or production merge. The OAuth scope, sensitive data retention and one-order staging blockers remain.
+
+
 ## 2026-11-27 — Source-only read-only staff review UI (Mezan 2)
 
 Added `frontend/src/pages/WhatsAppBankReview.jsx` at `/whatsapp-bank-review`, separate from the existing `BankTransferReview.jsx` (which contains GL-writing bank confirmation actions). The new page calls **GET ONLY**: `/orders-v2/assisted-salla/bank-review/worklist` and owner-scoped per-intent readback. It displays Salla order ID/reference, claimed SAR amount, original Chatwoot conversation/message/attachment identifiers, kind (image/file/text), reconciliation state and warning flags; it contains no payment confirmation, Salla status update, refund, GL/Qoyod/fulfillment action or direct private media URL. The reader must use an independent authorized Chatwoot session to inspect original evidence.
