@@ -291,7 +291,9 @@ async def test_reporting_saves_two_accounts_once_and_replay_is_idempotent(monkey
             self.account = account
 
         def json(self):
-            return {"code": 0, "data": {"list": [{
+            return {"code": 0, "data": {
+                "page_info": {"page": 1, "total_page": 1, "total_number": 1},
+                "list": [{
                 "dimensions": {"advertiser_id": self.account},
                 "metrics": {"spend": "10" if self.account == "100" else "20",
                             "impressions": "100", "clicks": "10", "conversion": "1"}
