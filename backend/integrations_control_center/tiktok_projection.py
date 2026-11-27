@@ -117,45 +117,48 @@ async def persist_tiktok_projection(
             upsert=True,
         )
 
-    await db.mezan_integration_accounts_v2.delete_many(
-        {"user_id": user_id, "provider": TIKTOK_PROVIDER_ID}
-    )
-    account_docs = []
+    # Re-authorization must not delete spend history, owner selections, or
+    # operational financial bindings. Their integration IDs are stable.
     for advertiser in advertisers[:200]:
         advertiser_id = str(advertiser.get("external_account_id") or "").strip()
         if not advertiser_id:
             continue
-        account_docs.append(
+        patch = {
+            "connection_status": "connected",
+            "connection_provenance": "api_connection",
+            "permissions": permission_rows,
+            "permissions_observed": True,
+            "capability_evidence": list(TIKTOK_CAPABILITY_EVIDENCE),
+            "last_observed_at": now_iso,
+        }
+        for key in ("display_name", "currency", "timezone", "account_status"):
+            value = advertiser.get(key)
+            if isinstance(value, str) and value.strip():
+                patch[key] = value.strip()
+        await db.mezan_integration_accounts_v2.update_one(
             {
                 "user_id": user_id,
                 "provider": TIKTOK_PROVIDER_ID,
-                "mezan_integration_account_id": str(
-                    uuid.uuid5(
-                        uuid.NAMESPACE_URL,
-                        f"mezan-tiktok:{user_id}:{advertiser_id}",
-                    )
-                ),
                 "external_account_id": advertiser_id,
-                "ad_account_id": advertiser_id,
-                "display_name": advertiser.get("display_name") or advertiser_id,
-                "currency": advertiser.get("currency"),
-                "timezone": advertiser.get("timezone"),
-                "connection_status": "connected",
-                "connection_provenance": "api_connection",
-                "permissions": permission_rows,
-                "permissions_observed": True,
-                "capability_evidence": list(TIKTOK_CAPABILITY_EVIDENCE),
-                "has_data": True,
-                "last_sync_at": now_iso,
-                "data_delay_minutes": 0,
-                "health_score": 100,
-                "source_mode": TIKTOK_SOURCE_MODE,
-                "last_observed_at": now_iso,
-                "created_at": now_iso,
-            }
+            },
+            {
+                "$set": patch,
+                "$setOnInsert": {
+                    "user_id": user_id,
+                    "provider": TIKTOK_PROVIDER_ID,
+                    "external_account_id": advertiser_id,
+                    "ad_account_id": advertiser_id,
+                    "mezan_integration_account_id": str(
+                        uuid.uuid5(uuid.NAMESPACE_URL, f"mezan-tiktok:{user_id}:{advertiser_id}")
+                    ),
+                    "has_data": False,
+                    "last_sync_at": None,
+                    "source_mode": TIKTOK_SOURCE_MODE,
+                    "created_at": now_iso,
+                },
+            },
+            upsert=True,
         )
-    if account_docs:
-        await db.mezan_integration_accounts_v2.insert_many(account_docs)
 
     health_score = 100 if has_accounts else 75 if connected else None
     health_status = "healthy" if has_accounts else "degraded" if connected else "not_available"
