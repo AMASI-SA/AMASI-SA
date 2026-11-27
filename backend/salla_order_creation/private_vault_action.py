@@ -33,6 +33,7 @@ class SignedPrivateVaultPrepare(BaseModel):
     courier_id: int = Field(gt=0)
     selected_rate_id: int = Field(gt=0)
     branch_id: int | None = Field(default=None, gt=0)
+    payment_flow: Literal["online", "bank_review"] = "online"
     accepted_methods: list[PaymentMethod] = Field(min_length=1, max_length=2)
     products: list[Product] = Field(min_length=1, max_length=50)
 
