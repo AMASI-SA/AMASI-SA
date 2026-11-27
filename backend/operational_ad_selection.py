@@ -12,6 +12,16 @@ def choices(accounts, state):
     # Auto-include newly authorized TikTok advertisers; explicit owner
     # exclusions remain respected after the catalog is saved again.
     known_tiktok = set((preference or {}).get('known_tiktok_account_ids') or [])
+    if preference and 'known_tiktok_account_ids' not in preference:
+        # Preserve exclusions saved by older Mezan versions: they never
+        # recorded an explicit known-ID list. Only the new automatic
+        # discovery/backfill marker can establish that an ID arrived later.
+        known_tiktok = {
+            account.get('mezan_integration_account_id')
+            for account in accounts
+            if account.get('provider') == 'tiktok_ads'
+            and not account.get('tiktok_backfill_next_date')
+        }
     result, seen = [], set()
     for account in accounts:
         provider = account.get('provider')
