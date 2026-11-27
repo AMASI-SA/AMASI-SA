@@ -310,7 +310,7 @@ def normalize_statement(content: bytes) -> dict:
     # normalized as evidence only, never a synthetic customer capture.
     if not content.startswith(b'PK'):
         try:
-            header = next(csv.reader(StringIO(content[:8192].decode('utf-8-sig').splitlines()), strict=True))
+            header = next(csv.reader(StringIO(content[:8192].decode('utf-8-sig')), strict=True))
         except (UnicodeError, ValueError, StopIteration, csv.Error):
             header = []
         if {'Date', 'Type', 'Status', 'Currency', 'Gross', 'Fee', 'Net', 'Transaction ID'} <= set(header):
