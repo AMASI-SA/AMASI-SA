@@ -1,0 +1,28 @@
+name: WhatsApp verified order-stage boundary checks
+on:
+  pull_request:
+    paths:
+      - 'backend/order_engine/whatsapp_stage_*.py'
+      - 'backend/order_engine/test_whatsapp_stage_*.py'
+      - '.github/workflows/whatsapp-order-stage-boundary.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencies
+        run: python -m pip install 'fastapi>=0.100,<1' 'httpx>=0.24,<1' 'pydantic>=2,<3' 'pytest>=8,<10' 'pymongo>=4,<5' 'motor>=3,<4' 'cryptography>=42,<50' 'python-jose>=3,<4' 'PyJWT>=2,<4' 'requests>=2,<3' 'python-multipart>=0.0.9' 'reportlab>=4,<5' 'pillow>=10,<13'
+      - name: Synthetic order-stage tests only
+        run: |
+          PYTHONPATH=.:backend python -m pytest -q \
+            backend/order_engine/test_whatsapp_stage_service_auth.py \
+            backend/order_engine/test_whatsapp_stage_projection.py \
+            backend/order_engine/test_whatsapp_stage_route.py \
+            backend/order_engine/test_whatsapp_sender_reader.py \
+            backend/order_engine/test_whatsapp_stage_mount.py \
+            backend/order_engine/test_whatsapp_catalog_route.py
