@@ -199,10 +199,18 @@ async def test_dashboard_reports_missing_advertiser_days_without_inventing_zero(
     rows = [
         {"ad_account_id": "100", "date": "2026-11-27",
          "spend_native": 10.0, "spend_sar": 37.5,
-         "currency_native": "USD", "account_timezone": "Asia/Riyadh"},
+         "currency_native": "USD", "account_timezone": "Asia/Riyadh",
+         "source_close_proof": {
+             "complete": True, "complete_response": True,
+             "explicit_spend_present": True, "account_id": "100",
+             "business_date": "2026-11-27"}},
         {"ad_account_id": "200", "date": "2026-11-27",
          "spend_native": 20.0, "spend_sar": 20.0,
-         "currency_native": "SAR", "account_timezone": "Asia/Riyadh"},
+         "currency_native": "SAR", "account_timezone": "Asia/Riyadh",
+         "source_close_proof": {
+             "complete": True, "complete_response": True,
+             "explicit_spend_present": True, "account_id": "200",
+             "business_date": "2026-11-27"}},
     ]
     complete = tiktok_reporting_coverage(["100", "200"],
                                                "2026-11-27", "2026-11-27", rows)
@@ -216,8 +224,10 @@ async def test_dashboard_reports_missing_advertiser_days_without_inventing_zero(
     # An account with one valid day but another missing day is incomplete.
     span = tiktok_reporting_coverage(
         ["100", "200"], "2026-11-26", "2026-11-27",
-        [{**row, "date": "2026-11-26"} for row in rows]
-        + [rows[0]],
+        [{**row, "date": "2026-11-26",
+          "source_close_proof": {
+              **row["source_close_proof"], "business_date": "2026-11-26"}}
+         for row in rows] + [rows[0]],
     )
     assert span["missing_account_ids"] == ["200"]
     assert span["missing_account_days"] == 1
