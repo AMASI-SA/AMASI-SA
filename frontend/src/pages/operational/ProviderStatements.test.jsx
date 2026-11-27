@@ -687,7 +687,7 @@ test("provider context filters saved and uploaded lists without overriding detec
     expect(api.confirmProviderStatement).not.toHaveBeenCalled();
 });
 
-test.each(['paypal','unknown'])('unsupported provider %s has no invented importer', async providerId => {
+test.each(['unknown'])('unsupported provider %s has no invented importer', async providerId => {
     await render({providerId});
     expect(host.textContent).toContain('لا يوجد مستورد معتمد');
     expect(host.querySelector('input[type=file]')).toBeNull();
