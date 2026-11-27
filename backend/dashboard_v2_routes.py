@@ -1705,7 +1705,8 @@ async def build_mezan_v2_ads(
         if provider != "snapchat"
     }
     provider_metrics["google"] = {"spend": google["total_sar"], **google_quality}
-    provider_metrics["tiktok"].update(tiktok_coverage)
+    if tiktok_coverage["accounts_expected"]:
+        provider_metrics["tiktok"].update(tiktok_coverage)
     if amount_available:
         provider_metrics["snapchat"] = _aggregate_provider_rows(
             platform_rows["snapchat"], start, end
@@ -1782,7 +1783,7 @@ async def build_mezan_v2_ads(
             "known_subtotal_sar": known_subtotal,
             "snapchat": snap_quality,
             "google": google_quality,
-            "tiktok": tiktok_coverage,
+            **({"tiktok": tiktok_coverage} if tiktok_coverage["accounts_expected"] else {}),
         },
         "bank_commissions": bank_commissions,
         "source_contract": {
