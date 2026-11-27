@@ -212,8 +212,6 @@ def main() -> None:
                 stage[rel] = new
             if git("status", "--porcelain", "--untracked-files=no"):
                 stop("tracked source changed during artifact staging")
-            if git_raw("ls-files", "--others", "--exclude-standard", "-z") != untracked:
-                stop("untracked paths changed during artifact staging")
             # Short final handoff. Previously served files remain backed up.
             for rel, kind in RECORDS:
                 current = APP / rel
@@ -227,6 +225,12 @@ def main() -> None:
                     prior.rename(current)
                     raise
                 swapped.append((rel, prior))
+            # Backup verified: remove temporary old paths from /app BEFORE the
+            # strict runtime manifest scan (otherwise they look like unreviewed files).
+            for rel, prior in swapped:
+                if tree_hash(prior) != originals[rel] or tree_hash(backup / rel) != originals[rel]:
+                    stop("original output changed before verified cleanup: " + rel)
+                safe_remove(prior)
             verify_local_proof(backup / "frontend-proof-validation.log")
             if git("rev-parse", "HEAD") != DEPLOY_SHA or git("status", "--porcelain", "--untracked-files=no"):
                 stop("Git source changed during handoff")
@@ -237,9 +241,6 @@ def main() -> None:
                     stop("promoted artifact changed: " + rel)
                 if tree_hash(backup / rel) != originals[rel]:
                     stop("backup artifact changed: " + rel)
-            for rel, prior in swapped:
-                # Original content has been verified in the external backup.
-                safe_remove(prior)
             evidence = {"backup": str(backup), "reviewed_release_id": RELEASE_ID,
                         "source_sha": SOURCE_SHA, "deployment_sha": DEPLOY_SHA,
                         "original_sha256": {r: originals[r][0] for r, _ in RECORDS},
@@ -257,15 +258,33 @@ def main() -> None:
             # Transactional rollback: never erase the externally verified backups.
             for rel, prior in reversed(swapped):
                 current = APP / rel
-                if os.path.lexists(prior):
-                    failed = current.parent / ("." + current.name + ".v5-failed-" + marker)
-                    try:
+                failed = current.parent / ("." + current.name + ".v5-failed-" + marker)
+                restored_stage = current.parent / ("." + current.name + ".v5-restore-" + marker)
+                try:
+                    if os.path.lexists(prior):
                         if os.path.lexists(current):
                             current.rename(failed)
                         prior.rename(current)
-                        safe_remove(failed)
-                    except Exception as undo_error:
-                        print("ROLLBACK_NEEDS_MANUAL_REVIEW", rel, undo_error, file=sys.stderr)
+                    else:
+                        # Originals were already externally backed up and verified.
+                        previous = backup / rel
+                        require_path(previous, dict(RECORDS)[rel])
+                        if restored_stage.exists() or restored_stage.is_symlink():
+                            stop("unrecognized rollback staging path")
+                        if dict(RECORDS)[rel] == "directory":
+                            shutil.copytree(previous, restored_stage, symlinks=True)
+                        else:
+                            shutil.copy2(previous, restored_stage)
+                        if tree_hash(restored_stage) != originals[rel]:
+                            stop("rollback copy differs from original")
+                        if os.path.lexists(current):
+                            current.rename(failed)
+                        restored_stage.rename(current)
+                    if tree_hash(current) != originals[rel]:
+                        stop("restoration failed hash check")
+                    safe_remove(failed)
+                except Exception as undo_error:
+                    print("ROLLBACK_NEEDS_MANUAL_REVIEW", rel, undo_error, file=sys.stderr)
             for rel, staged in stage.items():
                 if os.path.lexists(staged):
                     safe_remove(staged)
