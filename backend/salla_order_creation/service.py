@@ -266,6 +266,19 @@ async def create_confirmed_salla_order(
         if prior.get("user_id") != user_id or prior.get("payload_digest") != digest:
             raise CreationDenied("intent_reused_with_different_order", 409)
         if prior.get("pricing_mode") == "bank_pending_review":
+            if (type(prior.get("salla_order_id")) is not int or
+                    prior.get("state") not in (
+                        "created", "created_amount_unverified"
+                    )):
+                return {
+                    "state": prior.get("state", "unknown"),
+                    "salla_order_id": None,
+                    "pricing_mode": "bank_pending_review",
+                    "human_review_required": True,
+                    "bank_credit_confirmed": False,
+                    "needs_reconciliation": True,
+                    "replayed": True,
+                }
             review = await db.salla_ai_bank_receipt_reviews.find_one({
                 "_id": hashlib.sha256(
                     ("bank-review:" + storage_id).encode("utf-8")
