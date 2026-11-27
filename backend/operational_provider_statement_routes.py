@@ -85,14 +85,14 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
 
     @router.post('/provider-statements/mobile/upload')
     async def mobile_upload(response: Response, file: UploadFile = File(...),
-                            provider: Literal['tabby', 'tamara', 'salla', 'emkan', 'paypal'] = Form(...),
+                            provider: Literal['tabby', 'tamara', 'salla', 'emkan', 'paypal'] | None = Form(default=None),
                             request_id: str = Form(..., min_length=8, max_length=160),
                             expected_session_scope: str = Form(..., pattern=r'^[a-f0-9]{64}$'),
                             expected_started_at: str = Form(..., min_length=16, max_length=40),
                             user=Depends(guarded('provider_statements'))):
         from mobile_provider_statements import upload_result
         actor, owner, _ = await scope(db, user, 'provider_statements')
-        if file.filename and file.filename.lower().endswith('.csv') and provider != 'paypal':
+        if file.filename and file.filename.lower().endswith('.csv') and provider not in (None, 'paypal'):
             raise HTTPException(422, detail={'code': 'provider_statement_provider_mismatch', 'not_applied': True})
         try:
             content = await _read_provider_statement_file(file, max_bytes=MAX_FILE_BYTES)
