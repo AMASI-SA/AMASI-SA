@@ -187,3 +187,4 @@ jobs:
             reference-responses.json
             runtime-responses.json
             runtime-responses.calls.json
+# Diagnostic-only CI trigger: exact production J application tree; no oracle, test or command changes.
