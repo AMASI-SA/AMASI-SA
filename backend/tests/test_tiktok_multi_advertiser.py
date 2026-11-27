@@ -195,13 +195,7 @@ def test_operational_catalog_auto_includes_new_tiktok_but_respects_saved_exclusi
 
 @pytest.mark.asyncio
 async def test_dashboard_reports_missing_advertiser_days_without_inventing_zero(monkeypatch):
-    from dashboard_v2_routes import _tiktok_reporting_coverage
-    import dashboard_v2_routes
-
-    async def accounts(*args):
-        return ["100", "200"]
-
-    monkeypatch.setattr(dashboard_v2_routes, "_selected_account_ids", accounts)
+    from dashboard_tiktok_coverage import tiktok_reporting_coverage
     rows = [
         {"ad_account_id": "100", "date": "2026-11-27",
          "spend_native": 10.0, "spend_sar": 37.5,
@@ -210,16 +204,16 @@ async def test_dashboard_reports_missing_advertiser_days_without_inventing_zero(
          "spend_native": 20.0, "spend_sar": 20.0,
          "currency_native": "SAR", "account_timezone": "Asia/Riyadh"},
     ]
-    complete = await _tiktok_reporting_coverage(None, "owner",
+    complete = tiktok_reporting_coverage(["100", "200"],
                                                "2026-11-27", "2026-11-27", rows)
     assert complete["coverage_complete"] is True
     assert complete["accounts_expected"] == 2
-    incomplete = await _tiktok_reporting_coverage(None, "owner",
+    incomplete = tiktok_reporting_coverage(["100", "200"],
                                                  "2026-11-27", "2026-11-27", rows[:1])
     assert incomplete["coverage_complete"] is False
     assert incomplete["missing_account_ids"] == ["200"]
     assert incomplete["missing_account_days"] == 1
-    duplicate = await _tiktok_reporting_coverage(None, "owner",
+    duplicate = tiktok_reporting_coverage(["100", "200"],
                                                 "2026-11-27", "2026-11-27", rows + rows[:1])
     assert duplicate["coverage_complete"] is False
 
