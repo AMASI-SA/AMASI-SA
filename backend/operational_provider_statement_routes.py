@@ -1,5 +1,7 @@
 """Scoped weekly statement upload, read and explicit confirmation."""
 from typing import Literal
+from io import StringIO
+import csv
 
 from fastapi import Depends, File, Form, HTTPException, Path, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,8 +48,12 @@ async def _read_provider_statement_file(file: UploadFile, *, max_bytes: int) -> 
         raise HTTPException(413 if content else 400, detail={
             "code": "provider_statement_size_invalid" if content else "provider_statement_file_empty",
             "message": "ملف الكشف فارغ أو يتجاوز الحد المسموح"})
-    if (b"\x00" in content or not content.lstrip(b"\xef\xbb\xbf").startswith(b"Date,")
-            or b"Transaction ID" not in content[:8192]):
+    try:
+        header = next(csv.reader(StringIO(content[:8192].decode('utf-8-sig').splitlines()), strict=True))
+    except (UnicodeError, ValueError, StopIteration, csv.Error):
+        header = []
+    required = {"Date", "Type", "Status", "Currency", "Gross", "Fee", "Net", "Transaction ID"}
+    if b"\x00" in content or not required.issubset(set(header)):
         raise HTTPException(400, detail={"code": "paypal_activity_csv_required",
             "message": "يرجى رفع ملف PayPal Activity Download CSV الأصلي."})
     return content
