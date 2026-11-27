@@ -1,7 +1,7 @@
 """One durable, redacted bank transfer review case per created Salla order.
 
 The receipt stays in the private Chatwoot message; Mezan stores only its
-scoped image ID, redacted amount and bank ID. Staff must separately compare
+scoped message/optional attachment ID, redacted amount and bank ID. Staff must separately compare
 the actual bank deposit and approve. Neither OCR/vision nor Salla create
 confirms payment. This module never writes paid status or accounting entries.
 """
