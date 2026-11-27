@@ -53,6 +53,8 @@ async def prepare_salla_unpaid_order_intent(
     selected_rate_id: int,
     source_message_id: int | None = None,
     source_contact_id: int | None = None,
+    private_vault_revision: int | None = None,
+    private_vault_ref: str | None = None,
     enabled: bool = False,
     product_reader: Callable[..., Awaitable[dict]] = read_exact_product,
     rate_reader: Callable[..., Awaitable[list[dict]]] = read_shipping_rate_candidates,
@@ -77,6 +79,14 @@ async def prepare_salla_unpaid_order_intent(
         if (type(source_message_id) is not int or source_message_id < 1 or
                 type(source_contact_id) is not int or source_contact_id < 1):
             raise PrepareDenied("invalid_signed_customer_origin", 422)
+    if private_vault_revision is not None or private_vault_ref is not None:
+        if (type(private_vault_revision) is not int or
+                private_vault_revision < 1 or
+                type(private_vault_ref) is not str or
+                not private_vault_ref.startswith("vault.") or
+                len(private_vault_ref) != 38 or
+                source_contact_id is None):
+            raise PrepareDenied("invalid_private_vault_quote_binding", 422)
     # Validate stable ID before doing ANY remote reads or Mongo writes.
     intent_storage_id(user_id, intent_id)
     if (not order.accepted_methods or
@@ -157,6 +167,8 @@ async def prepare_salla_unpaid_order_intent(
         "inbox_id": inbox_id, "conversation_id": conversation_id,
         "source_message_id": source_message_id,
         "source_contact_id": source_contact_id,
+        "private_vault_revision": private_vault_revision,
+        "private_vault_ref": private_vault_ref,
         "quote_ref": "quote." + uuid4().hex,
         "version": 1,
         "payload_digest": digest,
@@ -194,6 +206,8 @@ async def prepare_salla_unpaid_order_intent(
                 previous.get("conversation_id") != conversation_id or
                 previous.get("source_message_id") != source_message_id or
                 previous.get("source_contact_id") != source_contact_id or
+                previous.get("private_vault_revision") != private_vault_revision or
+                previous.get("private_vault_ref") != private_vault_ref or
                 quote_pricing_mode(previous) != "salla_post_create"):
             raise PrepareDenied("quote_intent_reused_with_different_cart")
         old_expiry = previous.get("expires_at")
