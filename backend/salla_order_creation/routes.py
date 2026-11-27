@@ -34,6 +34,7 @@ from .bank_receipt_review import ReceiptReviewDenied
 from .bank_review_queue import BankReviewStateError, enqueue_bank_receipt_review
 from .bank_order_readback import BankOrderNotVerified, read_synced_bank_order_amount
 from .bank_review_status import BankStatusDenied, ensure_bank_order_under_review
+from .bank_review_staff import StaffBankReceiptDecision, StaffBankReviewDenied, record_staff_receipt_triage
 
 from .retention import RetentionNotReady, require_assisted_quote_ttl
 from .reference_reconciliation import ReferenceUnverified, recover_salla_reference
@@ -66,6 +67,79 @@ def make_assisted_salla_order_router(
     db: Any, current_user: Callable,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2/assisted-salla", tags=["assisted-orders"])
+
+    def bank_review_authorized(user: dict) -> str:
+        """Explicit owner/staff allowlist, not a global employee admin token."""
+        owner_id=str(os.environ.get("MEZAN_ASSISTED_SALLA_OWNER_ID") or "").strip()
+        allowed=set(x.strip() for x in
+                    str(os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_STAFF_IDS") or "").split(",")
+                    if x.strip())
+        if (not owner_id or not isinstance(user,dict) or
+                str(user.get("id") or "") not in ({owner_id}|allowed)):
+            raise HTTPException(status_code=403,detail={"code":"bank_review_staff_not_authorized"})
+        return owner_id
+
+    @router.get("/bank-receipt-reviews")
+    async def list_assisted_bank_receipt_reviews(
+        user: dict = Depends(current_user),
+    ) -> dict:
+        """Staff receives only safe review metadata; original image stays in Chatwoot."""
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_UI_ENABLED","0")!="1":
+            raise HTTPException(status_code=503,detail={"code":"bank_review_ui_disabled"})
+        owner_id=bank_review_authorized(user)
+        projection={
+            "_id":1,"salla_order_id":1,"reference_id":1,"inbox_id":1,
+            "conversation_id":1,"source_message_id":1,"attachment_id":1,
+            "appearance":1,"issues":1,"status":1,"created_at":1,
+            "reviewed_by":1,"reviewed_at":1,"order_total_sar":1,
+        }
+        cursor=(db.salla_ai_bank_receipt_reviews.find(
+            {"user_id":owner_id},projection
+        ).sort("created_at",-1).limit(50))
+        items=[]
+        async for row in cursor:
+            items.append({
+                "review_id":str(row["_id"]),
+                "salla_order_id":row.get("salla_order_id"),
+                "order_reference":row.get("reference_id"),
+                "inbox_id":row.get("inbox_id"),
+                "conversation_id":row.get("conversation_id"),
+                "receipt_message_id":row.get("source_message_id"),
+                "receipt_attachment_id":row.get("attachment_id"),
+                "appearance":row.get("appearance"),
+                "issues":row.get("issues") or [],
+                "status":row.get("status"),
+                "order_total_sar":row.get("order_total_sar"),
+                "created_at":(
+                    row["created_at"].isoformat() if isinstance(
+                        row.get("created_at"),datetime
+                    ) else None
+                ),
+                "reviewed_by":row.get("reviewed_by"),
+            })
+        return {"items":items,"count":len(items),
+                "bank_settlement_confirmed":False,
+                "payment_confirmed":False}
+
+    @router.post("/bank-receipt-reviews/{review_id}/triage")
+    async def triage_assisted_bank_receipt(
+        review_id: str,
+        decision: StaffBankReceiptDecision,
+        user: dict = Depends(current_user),
+    ) -> dict:
+        """Human *receipt appearance* review only, never a financial confirmation."""
+        if os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_UI_ENABLED","0")!="1":
+            raise HTTPException(status_code=503,detail={"code":"bank_review_ui_disabled"})
+        owner_id=bank_review_authorized(user)
+        try:
+            return await record_staff_receipt_triage(
+                db,owner_id=owner_id,review_id=review_id,
+                staff_id=str(user["id"]),decision=decision,
+            )
+        except StaffBankReviewDenied as exc:
+            raise HTTPException(
+                status_code=409,detail={"code":str(exc)}
+            ) from None
 
     @router.post("/signed-bank-receipt-review")
     async def signed_bank_receipt_review(request: Request) -> dict:
