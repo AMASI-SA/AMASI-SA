@@ -188,13 +188,19 @@ async def create_confirmed_salla_order(
     )
     pricing_mode = quote_pricing_mode(quote)
     if pricing_mode == "bank_pending_review":
-        from .bank_transfer import bank_order_digest, build_pending_bank_order_payload
-        digest = bank_order_digest(
-            order, store_bank_id=quote["store_bank_id"],
+        from .bank_transfer import (
+            BankSelectionDenied, bank_order_digest,
+            build_pending_bank_order_payload,
         )
-        provider_body = build_pending_bank_order_payload(
-            order, store_bank_id=quote["store_bank_id"],
-        )
+        try:
+            digest = bank_order_digest(
+                order, store_bank_id=quote["store_bank_id"],
+            )
+            provider_body = build_pending_bank_order_payload(
+                order, store_bank_id=quote["store_bank_id"],
+            )
+        except BankSelectionDenied:
+            raise CreationDenied("bank_pending_order_payload_invalid", 409) from None
     else:
         digest = order_digest(order)
         provider_body = build_pending_order_payload(order)
@@ -259,6 +265,36 @@ async def create_confirmed_salla_order(
             raise  # Database error, not a duplicate.
         if prior.get("user_id") != user_id or prior.get("payload_digest") != digest:
             raise CreationDenied("intent_reused_with_different_order", 409)
+        if prior.get("pricing_mode") == "bank_pending_review":
+            review = await db.salla_ai_bank_receipt_reviews.find_one({
+                "_id": hashlib.sha256(
+                    ("bank-review:" + storage_id).encode("utf-8")
+                ).hexdigest(),
+                "owner_id": user_id, "intent_id": intent_id,
+            })
+            if not isinstance(review, dict) or (
+                review.get("salla_order_id") != prior.get("salla_order_id")
+            ):
+                return {
+                    "state": "created_bank_review_unavailable",
+                    "salla_order_id": prior.get("salla_order_id"),
+                    "reference_id": prior.get("reference_id"),
+                    "pricing_mode": "bank_pending_review",
+                    "human_review_required": True,
+                    "bank_credit_confirmed": False,
+                    "needs_reconciliation": True,
+                    "replayed": True,
+                }
+            return {
+                "state": prior.get("state", "unknown"),
+                "salla_order_id": prior.get("salla_order_id"),
+                "reference_id": prior.get("reference_id"),
+                "pricing_mode": "bank_pending_review",
+                "bank_review_state": review.get("state"),
+                "human_review_required": True,
+                "bank_credit_confirmed": False,
+                "replayed": True,
+            }
         return {
             "state": prior.get("state", "unknown"),
             "salla_order_id": prior.get("salla_order_id"),
