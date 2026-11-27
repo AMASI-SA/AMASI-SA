@@ -355,7 +355,8 @@ def test_operational_read_only_tiktok_spend_keeps_financial_binding_separate():
     facts = [fact("100", 35.0), fact("200", 20.0)]
     binds = [{"platform": "tiktok", "integration_account_id": "int-100",
               "platform_account_id": "100", "confirmed_by": "owner",
-              "confirmed_at": "2026-11-01T00:00:00+03:00"}]
+              "confirmed_at": "2026-11-01T00:00:00+03:00",
+              "funding_mode": "prepaid", "status": "active"}]
     result = build_tiktok_reported_account_rows(
         accounts, facts, binds, "2026-11-27", "2026-11-27")
     assert result["accounts"] == 2
