@@ -80,5 +80,34 @@ jobs:
               staged.rename(p/'release_identity-renamed-again.json')
               assert module.tree_hash(live) == module.tree_hash(p/'release_identity-renamed-again.json')
               print('V5_RENAMED_FILE_HASH_REGRESSION_PASS')
+
+              # A previous failed stage may have left one exact, byte-matching
+              # hidden file. Refuse altered or symlinked orphans, and clean only
+              # the verified temporary basename.
+              legacy = p/'.release_identity.json.v5-new-92c617c56b20'
+              shutil.copy2(live, legacy)
+              assert module.remove_verified_orphan_stage(legacy, live) is True
+              assert not legacy.exists()
+              assert module.remove_verified_orphan_stage(legacy, live) is False
+              legacy.write_bytes(b'TAMPERED')
+              try:
+                  module.remove_verified_orphan_stage(legacy, live)
+              except RuntimeError as exc:
+                  assert 'does not match reviewed artifact' in str(exc)
+              else:
+                  raise AssertionError('tampered orphan cleanup must fail')
+              assert legacy.read_bytes() == b'TAMPERED'
+              legacy.unlink()
+              legacy.symlink_to(live)
+              try:
+                  module.remove_verified_orphan_stage(legacy, live)
+              except RuntimeError as exc:
+                  assert 'symlink' in str(exc)
+              else:
+                  raise AssertionError('symlinked orphan cleanup must fail')
+              assert legacy.is_symlink()
+              legacy.unlink()
+              assert source.index('stage[rel] = new') < source.index('shutil.copy2(src, new)')
+              print('V5_VERIFIED_ORPHAN_STAGE_CLEANUP_PASS')
           print('SAFE_V5_OPERATOR_STATIC_AND_HELPER_TESTS_PASS')
           PY
