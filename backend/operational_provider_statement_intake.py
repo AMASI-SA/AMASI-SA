@@ -9,13 +9,14 @@ from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
-from io import BytesIO
+from io import BytesIO, StringIO
 import json
+import csv
 import re
 
 import openpyxl
 
-from settlements_import.parsers import salla, tabby, tamara
+from settlements_import.parsers import salla, tabby, tamara, emkan
 from settlements_import.utils import normalize_payment_method
 
 SCHEMA = 'operational_statement_v1'
@@ -143,6 +144,8 @@ def _sniff(workbook):
                 providers.add('tamara')
             if 'رقم الطلب' in cells and any('إجمالي الطلب' in v for v in cells) and any('الرسوم' in v for v in cells):
                 providers.add('salla')
+            if {'total deduction for emkan', 'order id', 'net bill amount'} <= cells:
+                providers.add('emkan')
         found.extend((provider, sheet) for provider in providers)
     if not found:
         raise ValueError('statement_provider_unknown')
@@ -220,6 +223,24 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
             except (ValueError, InvalidOperation, OverflowError):
                 pass
         deduction = None
+    elif provider == 'emkan':
+        # An original Emkan file can mix a paid sale and its refund within one
+        # source row. Preserve the evidence for human review rather than
+        # fabricating separate capture/refund journals from the net amount.
+        order = _reference(get('provider_order_id'))
+        if not order and get('original_amount') in (None, '') and get('net_bill_amount') in (None, ''):
+            return None
+        kind = 'unsupported'  # no financial effects from this intake pilot
+        principal = _amount(get('net_bill_amount'), blocks)
+        fee, tax, net = (_amount(get(k), blocks) for k in ('total_fee', 'vat_amount', 'settlement_amount'))
+        deduction = _amount(get('total_deduction'), blocks) if get('total_deduction') is not None else None
+        ccy = 'SAR'  # Verified original Emkan merchant XLSX is SAR-denominated.
+        stamp = _day(get('order_date'))
+        provider_order = order
+        event_reference = _reference(get('po_reference'))
+        method, plan, account = 'emkan', None, _text(get('merchant_code'))
+        component_issues.append('statement_fee_components_unavailable')
+        blocks.append('statement_event_unsupported')
     else:
         order = _reference(get('order_number'))
         if order and order.lower() in {'total', 'الإجمالي', 'المجموع'}:
@@ -285,6 +306,18 @@ def normalize_statement(content: bytes) -> dict:
     """Return typed source evidence; row blockers prevent automatic acceptance."""
     if not isinstance(content, bytes) or not content or len(content) > MAX_FILE_BYTES:
         raise ValueError('statement_file_invalid')
+    # PayPal's official Activity Download is UTF-8 CSV, not XLSX. It is
+    # normalized as evidence only, never a synthetic customer capture.
+    if not content.startswith(b'PK'):
+        try:
+            header = next(csv.reader(StringIO(content[:8192].decode('utf-8-sig')), strict=True))
+        except (UnicodeError, ValueError, StopIteration, csv.Error):
+            header = []
+        if {'Date', 'Type', 'Status', 'Currency', 'Gross', 'Fee', 'Net', 'Transaction ID'} <= set(header):
+            from operational_paypal_activity_csv import normalize_paypal_csv
+            return normalize_paypal_csv(content)
+        if {'Date', 'Transaction ID'} <= set(header):
+            raise ValueError('statement_provider_unknown')
     try:
         workbook = openpyxl.load_workbook(BytesIO(content), data_only=True, read_only=True, keep_links=False)
     except Exception:
@@ -304,7 +337,7 @@ def normalize_statement(content: bytes) -> dict:
             money_headers = [str(_cell(raw_rows[header_index], cols, k) or '') for k in ('gross_amount', 'payment_fee', 'net_amount')]
             source_ccy = 'SAR' if all(re.search(r'ر\.?\s*س|\bSAR\b', v, re.IGNORECASE) for v in money_headers) else None
         else:
-            parser = tabby if provider == 'tabby' else tamara
+            parser = tabby if provider == 'tabby' else tamara if provider == 'tamara' else emkan
             header_index, cols = parser._find_header_row(raw_rows)
             if provider == 'tamara':
                 # The native percentage header precedes the money header;
@@ -316,7 +349,7 @@ def normalize_statement(content: bytes) -> dict:
                         cols['variable_fees'] = index
                         break
             preamble = parser._read_preamble(raw_rows, header_index)
-            ref, source_ccy = preamble.get('statement_id') or None, None
+            ref, source_ccy = preamble.get('statement_id') or None, 'SAR' if provider == 'emkan' else None
         _unique_headers(raw_rows[header_index], cols)
         rows = []
         for index, raw in enumerate(raw_rows[header_index + 1:], start=header_index + 2):
@@ -372,7 +405,7 @@ def normalize_statement(content: bytes) -> dict:
                     totals[dest] += Decimal(value)
         result = {'schema_version': SCHEMA, 'provider': provider, 'statement_reference': ref,
                   'merchant_account': merchant, 'currency': currency,
-                  'statement_date': _day(preamble.get('statement_date_raw')),
+                  'statement_date': _day(preamble.get('statement_date_raw') or preamble.get('statement_date')),
                   'rows': rows, 'totals': {k: None if k in unavailable else format(v, '.2f') for k, v in totals.items()}}
         result['fingerprint'] = _digest({**{k: result[k] for k in ('schema_version', 'provider', 'statement_reference', 'merchant_account', 'currency', 'statement_date')},
                                         'rows': sorted(row['row_fingerprint'] for row in rows)})
