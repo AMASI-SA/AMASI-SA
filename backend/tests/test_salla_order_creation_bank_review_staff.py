@@ -27,6 +27,7 @@ def row(**changes):
 def order(total=200.0,method="bank",paid=0.0,reference=301234567):
     return Obj(
         order_id="90001", order_number=str(reference),
+        status="under_review", status_native="بإنتظار المراجعة",
         totals=Obj(total=total,currency="SAR"),
         payment=Obj(method=method,paid_amount=paid,collection_status="unpaid"),
     )
