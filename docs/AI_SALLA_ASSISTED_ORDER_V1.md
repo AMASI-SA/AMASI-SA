@@ -1,5 +1,12 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Source-only read-only staff review UI (Mezan 2)
+
+Added `frontend/src/pages/WhatsAppBankReview.jsx` at `/whatsapp-bank-review`, separate from the existing `BankTransferReview.jsx` (which contains GL-writing bank confirmation actions). The new page calls **GET ONLY**: `/orders-v2/assisted-salla/bank-review/worklist` and owner-scoped per-intent readback. It displays Salla order ID/reference, claimed SAR amount, original Chatwoot conversation/message/attachment identifiers, kind (image/file/text), reconciliation state and warning flags; it contains no payment confirmation, Salla status update, refund, GL/Qoyod/fulfillment action or direct private media URL. The reader must use an independent authorized Chatwoot session to inspect original evidence.
+
+App.js registers the route under ProtectedRoute/Layout; both the legacy Sidebar and Mezan V2 order navigation hide the link without the authenticated `bank_receipts.view` (or owner) permission. Backend applies its own canonical effective RBAC and configured merchant owner scope independent of UI checks. New UI source/Jest tests and no-network Node source contract check were added. **No UI build, runtime/browser test or latest exact-head CI success has been verified**. Server feature flag default OFF; no live customer data/orders or deployment.
+
+
 ## 2026-11-27 — Staff read-only bank review queue (source-only, OFF)
 
 Bank P06 now includes `bank_staff_worklist.py` plus a feature-gated Mezan endpoint `GET /api/orders-v2/assisted-salla/bank-review/worklist` with max 25 results/page and owner-scoped Mongo query. Another feature-gated `GET /bank-review/{intent_id}` provides deterministic same-order reconciliation for an authorized reviewer. These are **READ ONLY** and do not verify settlement, change Salla status, mark paid, post GL/Qoyod or start fulfillment.

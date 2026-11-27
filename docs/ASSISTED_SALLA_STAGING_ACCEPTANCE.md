@@ -1,5 +1,15 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Review UI acceptance (DRAFT)
+
+- [ ] Build and render `/whatsapp-bank-review` in Mezan V2 under authenticated owner, granted admin and explicitly permitted customer-service accounts; verify navigation hidden for users without `bank_receipts.view`.
+- [ ] Check backend 403 for unauthorized direct URL regardless of hidden menu. Confirm wrong configured merchant owner and disabled `MEZAN_ASSISTED_SALLA_BANK_REVIEW_READ_ENABLED` give safe refusal, not an empty misleading queue.
+- [ ] Inspect synthetic image/file/text cases from `GET /bank-review/worklist` and per-intent readback, without PII in page HTML, browser URLs, source links or model calls.
+- [ ] Confirm no transaction-mutating frontend HTTP verbs in the new page, and that existing `BankTransferReview` ledger confirmation UI is completely separate.
+- [ ] Run `frontend/src/pages/WhatsAppBankReview.test.js`, `frontend/src/components/MezanV2NavigationShell.test.jsx`, page build and Mezan API smoke against a secure synthetic preview; **NOT run / passed yet**.
+- [ ] Only after exact source CI, Salla independent OAuth scopes, protected bank document parser, staff credit-check procedure and one Salla staging order may owner consider go-live. No production activation yet.
+
+
 ## 2026-11-27 — Staff authorization, worklist and reconciliation acceptance
 
 - [ ] Source-only staff queue `/bank-review/worklist` and per-intent readback must reject unauthenticated viewer/warehouse roles; grant only explicit `bank_receipts.view` (plus owner/admin defaults via existing role catalogue), not broad `orders.manage`.
