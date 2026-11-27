@@ -102,7 +102,11 @@ async def ensure_bank_order_under_review(
     except Exception:
         prev=await db.salla_ai_bank_status_deliveries.find_one({"_id":key})
         if (not isinstance(prev,dict) or prev.get("user_id")!=owner_id
-                or prev.get("review_id")!=review_id):
+                or prev.get("intent_id")!=intent_id
+                or prev.get("salla_order_id")!=order_id
+                or prev.get("review_id") not in (
+                    review_id,"bank_review_at_create"
+                )):
             raise BankStatusDenied("bank_status_delivery_conflict")
         # Unknown result must be independently reconciled by a GET before
         # calling this again; there is NEVER a second status POST.
