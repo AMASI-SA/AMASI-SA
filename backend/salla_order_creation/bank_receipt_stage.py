@@ -1,7 +1,7 @@
 """Persist a STRICTLY preliminary bank-transfer receipt screening result.
 
-Only a signed, canonically verified Chatwoot current customer image event can
-submit OCR/vision *candidates*. Mezan independently compares candidate
+Only a signed, canonically verified Chatwoot current customer message
+(text, image or file) can submit private extraction *candidates*. Mezan independently compares candidate
 beneficiary IBAN/name to an active Salla store receiving bank. Neither this
 module nor the model verifies money arrived in the merchant's bank.
 
