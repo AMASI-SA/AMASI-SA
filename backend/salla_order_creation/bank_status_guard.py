@@ -139,7 +139,6 @@ async def ensure_bank_review_custom_status(
         raise BankStatusDenied("bank_order_not_in_pre_review_status")
     paid = order.get("paid_amount")
     # Missing/unknown payment is NOT proof of zero received.
-    from decimal import Decimal, InvalidOperation
     try:
         received = Decimal(str(paid))
     except (InvalidOperation, ValueError, TypeError):
@@ -199,6 +198,44 @@ async def ensure_bank_review_custom_status(
         # Never retry an ambiguous status-changing POST.
         return {
             "state": "status_update_previously_attempted",
+            "salla_order_id": salla_order_id,
+            "status_post_performed": False,
+            "bank_credit_confirmed": False,
+        }
+
+    # Last GET before the Salla POST: after the original quote/status read
+    # a human or a webhook may already have advanced this very order. Never
+    # revert a completed or paid order to the pending bank-review status.
+    try:
+        before_write = _data(await request(
+            db, user_id, "GET", f"/orders/{salla_order_id}",
+        ))
+    except Exception:
+        return {
+            "state": "status_prewrite_read_unavailable",
+            "salla_order_id": salla_order_id,
+            "status_post_performed": False,
+            "bank_credit_confirmed": False,
+        }
+    before_status = before_write.get("status")
+    before_id = _customized_id(before_write)
+    before_paid = before_write.get("paid_amount")
+    try:
+        before_zero = (
+            type(before_paid) is not bool
+            and Decimal(str(before_paid)).is_finite()
+            and Decimal(str(before_paid)) == Decimal("0")
+        )
+    except (ValueError, TypeError, InvalidOperation):
+        before_zero = False
+    if (before_write.get("id") != salla_order_id
+            or before_write.get("payment_method") != "bank"
+            or not isinstance(before_status, dict)
+            or before_status.get("slug") != PENDING_PAYMENT_SLUG
+            or before_id != exact_active_pending_payment_status(response["data"])
+            or not before_zero):
+        return {
+            "state": "status_prewrite_order_changed",
             "salla_order_id": salla_order_id,
             "status_post_performed": False,
             "bank_credit_confirmed": False,
