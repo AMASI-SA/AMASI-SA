@@ -34,6 +34,7 @@ from .reference_reconciliation import ReferenceUnverified, recover_salla_referen
 from .bank_receipt_action import verify_bank_receipt_action
 from .bank_receipt_stage import stage_bank_receipt, BankReceiptStageDenied
 from .bank_review_readback import read_synced_bank_review
+from .capabilities import assisted_salla_scope_report
 from .bank_status_guard import (
     BankStatusDenied, ensure_bank_review_custom_status,
     exact_active_review_status,
@@ -351,22 +352,15 @@ def make_assisted_salla_order_router(
         if not user or (role != "owner" and user.get("is_owner") is not True):
             raise HTTPException(status_code=403, detail={"code": "owner_only"})
         doc = await get_integration(db, str(user["id"]))
-        scopes = set(str((doc or {}).get("scope") or "").split())
-        return {
-            "connected": bool(doc and doc.get("status") == "connected"),
-            "orders_create_scope": "orders.read_write" in scopes,
-            "catalog_read_scope": bool(
-                {"products.read", "products.read_write"} & scopes
-            ),
-            "shipping_read_scope": bool(
-                {"shipping.read", "shipping.read_write"} & scopes
-            ),
-            "creation_feature_enabled": (
+        return assisted_salla_scope_report(
+            doc,
+            creation_enabled=(
                 os.environ.get("MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED", "0") == "1"
             ),
-            "proof_writers_integrated": False,
-            "note": "Scope is a stored token claim, not live API authorization proof.",
-        }
+            bank_read_enabled=(
+                os.environ.get("MEZAN_ASSISTED_SALLA_BANK_REVIEW_READ_ENABLED", "0") == "1"
+            ),
+        )
 
     @router.post("/bank-review/{intent_id}/ensure-under-review")
     async def ensure_bank_status_owner_pilot(
