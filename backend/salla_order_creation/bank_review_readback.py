@@ -15,10 +15,11 @@ from .bank_staff_review import assess_bank_order_total
 from .service import intent_storage_id
 
 ReadOrder = Callable[[str, str], Awaitable[Any]]
-REVIEW_STATUS = frozenset({
-    "under_review", "under review", "بانتظار المراجعة",
-    "بإنتظار المراجعة", "بانتظار مراجعة",
-})
+# Real Amasi Salla status listing (read-only, 2026-11-27) confirms that
+# "تم المراجعة" and other merchant statuses share under_review slug.
+# The bank workflow must read back the exact merchant review *name*, never
+# treat a generic slug as proof of the target custom status.
+REVIEW_CUSTOM_NAME = "بإنتظار المراجعة"
 
 
 def _text(value):
@@ -88,9 +89,11 @@ async def read_synced_bank_review(
                 "paid","partial"
             ) or getattr(payment,"paid_amount",None) != 0):
         return _not_ready("payment_not_pending_bank_review")
+    # The canonical mapper preserves Salla's actual customized status name
+    # in status_native, while status is often the ambiguous generic slug.
+    # Fail closed if exact customized name was not synced yet.
     status=_text(getattr(order,"status_native",None))
-    status_fallback=_text(getattr(order,"status",None))
-    pending=status in REVIEW_STATUS or status_fallback in REVIEW_STATUS
+    pending=status == _text(REVIEW_CUSTOM_NAME)
     total=getattr(totals,"total",None)
     currency=str(getattr(totals,"currency","")).upper()
     assessment=assess_bank_order_total(
