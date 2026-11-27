@@ -161,7 +161,7 @@ test("new navigation does not route to legacy Mezan pages", () => {
 
 
 test("Mezan2 WhatsApp bank review link is visible only to authorized staff", () => {
-    const location = { pathname: "/orders-v2", search: "" };
+    const location = { pathname: "/whatsapp-bank-review", search: "" };
     const unauthorized = renderToStaticMarkup(
         <MezanV2NavigationShell
             location={location} onOpenAll={() => {}} bankReviewAllowed={false}
@@ -178,5 +178,6 @@ test("Mezan2 WhatsApp bank review link is visible only to authorized staff", () 
     const orderLinks = MEZAN_V2_NAV_SECTIONS.find((s) => s.id === "orders").items;
     expect(orderLinks[1].requiredPermission).toBe("bank_receipts.view");
     expect(authorized).toContain('data-testid="mezan-v2-primary-orders"');
+    expect(authorized).toContain("مراجعة حوالات واتساب");
     expect(isMezanV2Route("/whatsapp-bank-review")).toBe(true);
 });
