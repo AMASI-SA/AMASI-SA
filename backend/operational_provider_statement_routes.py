@@ -62,7 +62,7 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
 
     @router.post('/provider-statements/mobile/upload')
     async def mobile_upload(response: Response, file: UploadFile = File(...),
-                            provider: Literal['tabby', 'tamara', 'salla'] = Form(...),
+                            provider: Literal['tabby', 'tamara', 'salla', 'emkan'] = Form(...),
                             request_id: str = Form(..., min_length=8, max_length=160),
                             expected_session_scope: str = Form(..., pattern=r'^[a-f0-9]{64}$'),
                             expected_started_at: str = Form(..., min_length=16, max_length=40),

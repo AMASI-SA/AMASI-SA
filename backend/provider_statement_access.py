@@ -13,7 +13,7 @@ from operational_balance_store import digest, fail, now
 
 PROVIDER_STATEMENTS_APP_PERMISSION = "app.page.provider_statements"
 STATEMENT_FIELD = "provider_statements"
-PROVIDER_NAMES = {"tabby": "تابي", "tamara": "تمارا", "salla": "سلة"}
+PROVIDER_NAMES = {"tabby": "تابي", "tamara": "تمارا", "salla": "سلة", "emkan": "إمكان"}
 EMPLOYEES = "mezan_employees_v2"
 
 
@@ -31,7 +31,7 @@ def normalized_statement_grant(value):
     denied = {"mode": "none", "providers": [], "employee_id": ""}
     if (not isinstance(value, dict) or value.get("mode") not in ("none", "read", "write")
             or not isinstance(value.get("employee_id"), str) or not value["employee_id"]
-            or not isinstance(value.get("providers"), list) or len(value["providers"]) > 3
+            or not isinstance(value.get("providers"), list) or len(value["providers"]) > 4
             or any(not isinstance(key, str) or key not in PROVIDER_NAMES for key in value["providers"])
             or len(set(value["providers"])) != len(value["providers"])
             or (value["mode"] == "none") != (not value["providers"])):
@@ -82,7 +82,7 @@ async def shared_statement_grant(db, actor, owner):
 class StatementAccessUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     mode: Literal["none", "read", "write"]
-    providers: list[Literal["tabby", "tamara", "salla"]] = Field(max_length=3)
+    providers: list[Literal["tabby", "tamara", "salla", "emkan"]] = Field(max_length=4)
     expected_policy_version: StrictInt = Field(ge=0)
     expected_page_revision: StrictInt = Field(ge=0)
     expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
