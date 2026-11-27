@@ -58,6 +58,7 @@ const SECTIONS = [
             { to: "/accounting/reconciliation", label: "🔍 تقرير المطابقة", icon: ArrowsLeftRight, testid: "nav-reconciliation" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/bank-transfer-review", label: "🏦 مراجعة التحويلات البنكية", icon: Receipt, testid: "nav-bank-transfer-review" },
+            { to: "/whatsapp-bank-review", label: "📩 حوالات عملاء واتساب (قراءة فقط)", icon: Receipt, testid: "nav-whatsapp-bank-review", requiredPermission: "bank_receipts.view" },
             { to: "/ai/control-center", label: "🧠 مركز الذكاء والتحقق", icon: Lightning, testid: "nav-ai-control-center" },
             { to: "/settlement-engine", label: "🔬 محرّك التسويات (Dry Run)", icon: Receipt, testid: "nav-settlement-engine" },
             { to: "/bnpl-settlements", label: "تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-settlements" },
@@ -428,7 +429,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
     const filteredSections = useMemo(() => {
         // Helper: filter a single bag of items by hidden + (optional) search.
         const filterItems = (items) => {
-            let out = items.filter((it) => !hiddenSet.has(it.testid));
+            // The UI only shows dedicated bank receipt reads to staff
+            // with the explicit permission; the backend independently
+            // enforces the same effective RBAC + merchant owner scope.
+            const granted = Array.isArray(user?.permissions) ? user.permissions : [];
+            let out = items.filter((it) =>
+                !hiddenSet.has(it.testid) &&
+                (!it.requiredPermission || user?.is_owner || granted.includes(it.requiredPermission))
+            );
             if (searchActive) {
                 out = out.filter((it) => normalizeAr(it.label).includes(normalizedQuery));
             }
@@ -450,7 +458,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                 if (Array.isArray(s.subgroups)) return s.subgroups.length > 0;
                 return (s.items || []).length > 0;
             });
-    }, [sections, hiddenSet, searchActive, normalizedQuery]);
+    }, [sections, hiddenSet, searchActive, normalizedQuery, user?.permissions, user?.is_owner]);
 
     const totalMatches = useMemo(
         () => filteredSections.reduce(
