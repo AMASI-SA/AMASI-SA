@@ -225,6 +225,7 @@ async def save_private_order_field(
                 raise
             raise PrivateOrderFieldDenied("concurrent_private_field_insert")
         return {"state": "saved", "revision": 1,
+                "vault_ref": "vault." + key[:32],
                 "fields_present": [field]}
 
     if (current.get("owner_id") != owner_id or
@@ -254,6 +255,7 @@ async def save_private_order_field(
         if fields.get(field) != value:
             raise PrivateOrderFieldDenied("same_message_field_conflict")
         return {"state": "saved", "revision": rev,
+                "vault_ref": "vault." + key[:32],
                 "fields_present": sorted(fields), "replayed": True}
     fields[field] = value
     proofs = {**proofs, field: message_id}
@@ -269,6 +271,7 @@ async def save_private_order_field(
     if getattr(changed, "modified_count", 0) != 1:
         raise PrivateOrderFieldDenied("concurrent_private_field_conflict")
     return {"state": "saved", "revision": rev + 1,
+                "vault_ref": "vault." + key[:32],
             "fields_present": sorted(fields), "replayed": False}
 
 
