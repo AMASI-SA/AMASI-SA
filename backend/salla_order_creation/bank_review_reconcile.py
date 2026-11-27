@@ -43,12 +43,14 @@ def _bank_payment_uncollected(order) -> None:
     payment=getattr(order,"payment",None)
     if payment is None:
         raise BankReviewSyncDenied("missing_mezan_bank_payment")
-    values=(
-        _method(getattr(payment,"method",None)),
-        _method(getattr(payment,"method_native",None)),
-    )
-    if not any(m in ("bank","bank_transfer","تحويل بنكي",
-                      "حوالة بنكية") for m in values):
+    # Provider canonical payment code takes precedence over a human-readable
+    # localized label: "mada" with stale "تحويل بنكي" label is NOT a bank
+    # transfer. Fall back to native label ONLY when the code is absent.
+    canonical=_method(getattr(payment,"method",None))
+    localized=_method(getattr(payment,"method_native",None))
+    recognized=("bank","bank_transfer","تحويل بنكي","حوالة بنكية")
+    if (canonical and canonical not in recognized) or (
+            not canonical and localized not in recognized):
         raise BankReviewSyncDenied("mezan_order_not_bank_transfer")
     if (str(getattr(payment,"status","") or "").lower() in (
             "paid","refunded","cancelled","partially_paid") or
