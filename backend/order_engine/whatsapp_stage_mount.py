@@ -38,16 +38,7 @@ class MongoNonceClaim:
         expiry=datetime.now(timezone.utc)+timedelta(seconds=ttl_seconds)
         try:
             self._collection.insert_one({"_id":digest,"expires_at":expiry})
-            if attested_on:
-        api_router.include_router(make_whatsapp_attested_stage_router(
-            repository=MongoOrderRepository(db),
-            fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
-            active_keys=active_keys,
-            claim_nonce=nonce,
-            rate_limit=limit,
-            source_freshness=_fresh_salla_source,
-        ))
-    return True
+            return True
         except DuplicateKeyError:
             return False
         except PyMongoError:
@@ -157,4 +148,13 @@ def mount_if_enabled(api_router, db):
             source_freshness=_fresh_salla_source,
         )
         api_router.include_router(router)
+    if attested_on:
+        api_router.include_router(make_whatsapp_attested_stage_router(
+            repository=MongoOrderRepository(db),
+            fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
+            active_keys=active_keys,
+            claim_nonce=nonce,
+            rate_limit=limit,
+            source_freshness=_fresh_salla_source,
+        ))
     return True
