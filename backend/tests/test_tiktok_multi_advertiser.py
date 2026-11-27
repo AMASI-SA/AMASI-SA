@@ -15,6 +15,22 @@ def match(row, query):
     return all(row.get(key) == value for key, value in query.items())
 
 
+class Cursor:
+    def __init__(self, rows):
+        self.rows = deepcopy(rows)
+
+    def sort(self, field, direction=1):
+        self.rows.sort(key=lambda row: str(row.get(field) or ""), reverse=direction < 0)
+        return self
+
+    def limit(self, limit):
+        self.rows = self.rows[:limit]
+        return self
+
+    async def to_list(self, length=None):
+        return deepcopy(self.rows[:length] if length is not None else self.rows)
+
+
 class Collection:
     def __init__(self, store, name):
         self.store, self.name = store, name
@@ -29,6 +45,13 @@ class Collection:
     async def find_one(self, query, projection=None):
         row = next((item for item in self.rows if match(item, query)), None)
         return deepcopy(row) if row else None
+
+    def find(self, query, projection=None):
+        return Cursor([item for item in self.rows if match(item, query)])
+
+    async def insert_one(self, doc):
+        self.rows.append(deepcopy(doc))
+        self.store.writes.append(self.name)
 
     async def update_one(self, query, update, upsert=False):
         row = next((item for item in self.rows if match(item, query)), None)
@@ -220,3 +243,74 @@ async def test_reporting_rejects_cross_account_spend():
             Client(), "token", {"ad_account_id": "100"},
             datetime(2026, 11, 27, tzinfo=timezone.utc).date())
     assert exc.value.code == "tiktok_reporting_advertiser_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_reporting_saves_two_accounts_once_and_replay_is_idempotent(monkeypatch):
+    db = DB()
+    db.data["mezan_tiktok_oauth_credentials_v2"] = [{
+        "user_id": "owner", "provider": "tiktok_ads",
+        "access_token_ciphertext": b"encrypted",
+    }]
+    db.data["mezan_integration_accounts_v2"] = [
+        {"user_id": "owner", "provider": "tiktok_ads",
+         "external_account_id": "100", "ad_account_id": "100",
+         "display_name": "USD", "currency": "USD", "timezone": "Asia/Riyadh",
+         "connection_status": "connected", "connection_provenance": "api_connection"},
+        {"user_id": "owner", "provider": "tiktok_ads",
+         "external_account_id": "200", "ad_account_id": "200",
+         "display_name": "SAR", "currency": "SAR", "timezone": "Asia/Riyadh",
+         "connection_status": "connected", "connection_provenance": "api_connection"},
+    ]
+    monkeypatch.setenv("TIKTOK_USD_TO_SAR_RATE", "3.75")
+    monkeypatch.setattr(reporting, "tiktok_oauth_configured", lambda: True)
+    monkeypatch.setattr(reporting, "tiktok_reporting_enabled", lambda: True)
+    monkeypatch.setattr(reporting, "decrypt_tiktok_token", lambda *_: "token")
+
+    async def authorized(*args):
+        return {"status": "complete", "authorized_accounts": 2, "account_ids": ["100", "200"]}
+
+    monkeypatch.setattr(reporting, "refresh_tiktok_authorized_accounts", authorized)
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, account):
+            self.account = account
+
+        def json(self):
+            return {"code": 0, "data": {"list": [{
+                "dimensions": {"advertiser_id": self.account},
+                "metrics": {"spend": "10" if self.account == "100" else "20",
+                            "impressions": "100", "clicks": "10", "conversion": "1"}
+            }]}}
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            return Response(kwargs["params"]["advertiser_id"])
+
+    monkeypatch.setattr(reporting.httpx, "AsyncClient", Client)
+    async def run():
+        return await reporting.run_tiktok_reporting_sync(
+            db, "owner", reporting.TikTokReportingSyncInput(days=1),
+            now=lambda: datetime(2026, 11, 27, 12, 0, tzinfo=timezone.utc),
+        )
+    first = await run()
+    second = await run()
+    assert first["status"] == second["status"] == "complete"
+    assert first["accounts_attempted"] == 2
+    assert first["rows_saved"] == 2
+    rows = db.data[reporting.TIKTOK_REPORTING_COLLECTION]
+    assert len(rows) == 2
+    assert {row["ad_account_id"] for row in rows} == {"100", "200"}
+    assert sum(row["spend_sar"] for row in rows) == pytest.approx(57.5)
+    assert not {"general_ledger", "ad_account_ledger", "qoyod_invoices"}.intersection(db.writes)
