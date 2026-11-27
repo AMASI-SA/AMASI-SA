@@ -2862,7 +2862,7 @@ def make_dashboard_v2_router(
                 status_code=409, detail="tiktok_operational_funding_setup_incomplete"
             ) from None
         result = build_tiktok_reported_account_rows(
-            account_rows, facts, funding_bindings, start, end
+            account_rows, dashboard_basis_facts, funding_bindings, start, end
         )
         result["financial_binding_conflicts"] = len(conflicts)
         return result
