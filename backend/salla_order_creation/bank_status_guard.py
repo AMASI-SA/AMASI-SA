@@ -21,9 +21,11 @@ from .readers import SourceUnavailable
 READ = "بإنتظار المراجعة"
 CANONICAL = "بإنتظار المراجعة"
 REVIEW_SLUG = "under_review"
-ALLOWED_CURRENT = frozenset({
-    "under_review", "payment_pending",
-})
+PENDING_PAYMENT_NAME = "بإنتظار الدفع"
+PENDING_PAYMENT_SLUG = "payment_pending"
+# No generic under_review status is eligible for a transition: other Amasi
+# merchant statuses such as تم المراجعة share exactly that provider slug.
+
 Request = Callable[..., Awaitable[dict]]
 
 
@@ -31,7 +33,7 @@ class BankStatusDenied(ValueError):
     pass
 
 
-def exact_active_review_status(statuses: Any) -> int:
+def _exact_active_status(statuses: Any, *, name: str, slug: str) -> int:
     if not isinstance(statuses, list) or len(statuses) > 250:
         raise BankStatusDenied("salla_bank_review_status_list_invalid")
     matches = []
@@ -39,11 +41,11 @@ def exact_active_review_status(statuses: Any) -> int:
         if not isinstance(row, dict):
             raise BankStatusDenied("salla_bank_status_row_invalid")
         original = row.get("original")
-        if (row.get("name") == READ
-                and row.get("slug") == REVIEW_SLUG
+        if (row.get("name") == name
+                and row.get("slug") == slug
                 and row.get("is_active") is not False
                 and isinstance(original, dict)
-                and original.get("name") == CANONICAL):
+                and original.get("name") == name):
             status_id = row.get("id")
             if type(status_id) is not int or status_id < 1:
                 raise BankStatusDenied("salla_bank_review_status_id_invalid")
@@ -51,6 +53,16 @@ def exact_active_review_status(statuses: Any) -> int:
     if len(matches) != 1:
         raise BankStatusDenied("unique_active_bank_review_status_required")
     return matches[0]
+
+
+def exact_active_review_status(statuses: Any) -> int:
+    return _exact_active_status(statuses, name=READ, slug=REVIEW_SLUG)
+
+
+def exact_active_pending_payment_status(statuses: Any) -> int:
+    return _exact_active_status(
+        statuses, name=PENDING_PAYMENT_NAME, slug=PENDING_PAYMENT_SLUG,
+    )
 
 
 def _data(response: Any) -> dict:
@@ -123,10 +135,17 @@ async def ensure_bank_review_custom_status(
     if not isinstance(current, dict):
         raise BankStatusDenied("salla_order_status_missing")
     current_slug = current.get("slug")
-    if current_slug not in ALLOWED_CURRENT:
+    if current_slug not in (REVIEW_SLUG, PENDING_PAYMENT_SLUG):
         raise BankStatusDenied("bank_order_not_in_pre_review_status")
     paid = order.get("paid_amount")
-    if paid is not None and paid != 0:
+    # Missing/unknown payment is NOT proof of zero received.
+    from decimal import Decimal, InvalidOperation
+    try:
+        received = Decimal(str(paid))
+    except (InvalidOperation, ValueError, TypeError):
+        raise BankStatusDenied("bank_order_payment_amount_unverified") from None
+    if (type(paid) is bool or not received.is_finite()
+            or received != Decimal("0")):
         raise BankStatusDenied("bank_order_must_be_unpaid")
 
     response = await request(
@@ -137,7 +156,12 @@ async def ensure_bank_review_custom_status(
             or not isinstance(response.get("data"), list)):
         raise BankStatusDenied("store_review_statuses_unavailable")
     exact_id = exact_active_review_status(response["data"])
-    if _customized_id(order) == exact_id:
+    current_id = _customized_id(order)
+    if current_slug == REVIEW_SLUG and current_id != exact_id:
+        # Never move a merchant-customized "تم المراجعة" or other shared
+        # under_review status BACKWARDS to the pending review queue.
+        raise BankStatusDenied("bank_review_custom_state_conflict")
+    if current_id == exact_id and current_slug == REVIEW_SLUG:
         return {
             "state": "confirmed_under_review",
             "salla_order_id": salla_order_id,
@@ -145,6 +169,12 @@ async def ensure_bank_review_custom_status(
             "status_post_performed": False,
             "bank_credit_confirmed": False,
         }
+
+    if (current_slug != PENDING_PAYMENT_SLUG or
+            current_id != exact_active_pending_payment_status(response["data"])):
+        # Only exact original payment-pending custom status can advance,
+        # never a generic provider slug, unknown ID, or a completed order.
+        raise BankStatusDenied("exact_bank_pending_payment_status_required")
 
     # Unique Mongo ledger, pre-write. Duplicate/recovery will only read.
     fence_id = hashlib.sha256(
