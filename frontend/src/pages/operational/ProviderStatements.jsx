@@ -395,13 +395,13 @@ function StatementWorkspace({ writable, providerId }) {
                         </form>}
                 </section>}
                 {writable && <form id="upload" tabIndex={-1} ref={revealAnchor} onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
-                    <h2>رفع كشف{providerId ? ` ${providerNames[providerId]}` : ""} للمطابقة</h2>
+                    <h2>رفع كشف{providerId ? ` ${providerNames[providerId]}` : ""}{providerId === "emkan" ? " للمراجعة" : " للمطابقة"}</h2>
                     <label className="op-field">ملف كشف المنصة
                         <input key={fileKey} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             aria-label="ملف كشف المنصة" disabled={disabled || !history.permissions.upload || !history.started_at} onChange={chooseFile} />
                     </label>
-                    <p className="op-muted">ملف Excel أصلي · حتى 10 ميجابايت و10,000 سطر. تُعتمد رسوم العمليات المطابقة من الكشف، وتبقى الفروق للمراجعة.</p>
-                    <button type="submit" className="op-primary" disabled={disabled || !history.permissions.upload || !history.started_at || !file}>رفع الكشف ومطابقته</button>
+                    <p className="op-muted">{providerId === "emkan" ? "إمكان: حفظ دليل الكشف للمراجعة فقط، بلا اعتماد رسوم أو تسجيل دفعات واسترجاعات تلقائيًا." : "ملف Excel أصلي · حتى 10 ميجابايت و10,000 سطر. تُعتمد رسوم العمليات المطابقة من الكشف، وتبقى الفروق للمراجعة."}</p>
+                    <button type="submit" className="op-primary" disabled={disabled || !history.permissions.upload || !history.started_at || !file}>{providerId === "emkan" ? "رفع كشف إمكان للمراجعة" : "رفع الكشف ومطابقته"}</button>
                     <p className="op-muted">رفع الكشف أو اعتماد مطابقته لا يثبت وصول تحويل إلى البنك.</p>
                 </form>}
                 {detail && <section className="op-statement-review" aria-label="مطابقة الكشف" data-testid="provider-statement-review">
