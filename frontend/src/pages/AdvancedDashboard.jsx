@@ -533,12 +533,13 @@ function PlatformPeriodSummary({ ads }) {
     return <div className="col-span-2 grid min-h-[78px] grid-cols-2 overflow-hidden rounded-xl border bg-white shadow-sm min-[1180px]:col-span-1 min-[1180px]:grid-cols-4" data-testid="advanced-platform-period-summary">
         {PLATFORM_META.map(({ key }) => {
             const row = providers[key] || {};
-            const orderCount = row.platform_reported_orders == null ? null : Number(row.platform_reported_orders || 0);
-            const average = row.platform_cost_per_order_sar == null ? null : Number(row.platform_cost_per_order_sar || 0);
+            const unverifiedTikTok = key === "tiktok" && ads?.spend_quality?.tiktok?.coverage_complete === false;
+            const orderCount = unverifiedTikTok || row.platform_reported_orders == null ? null : Number(row.platform_reported_orders || 0);
+            const average = unverifiedTikTok || row.platform_cost_per_order_sar == null ? null : Number(row.platform_cost_per_order_sar || 0);
             const provider = meta[key];
             return <div key={key} className="flex min-w-0 items-center justify-center gap-2 border-l px-2 py-2 last:border-l-0">
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${provider.tone}`}>{provider.mark}</span>
-                <div className="min-w-0 text-[9px] font-bold leading-4 text-slate-500"><p className="truncate text-slate-700">{provider.label}: <b className="num text-[11px] text-slate-950">{orderCount == null ? "—" : integer(orderCount)}</b></p><p className="break-words">متوسط: <b className="num text-[10px] text-slate-950">{average == null ? "—" : `${money(average)} ر.س`}</b></p></div>
+                <div className="min-w-0 text-[9px] font-bold leading-4 text-slate-500"><p className="truncate text-slate-700">{provider.label}: <b className="num text-[11px] text-slate-950">{unverifiedTikTok ? "غير مكتمل" : orderCount == null ? "—" : integer(orderCount)}</b></p><p className="break-words">متوسط: <b className="num text-[10px] text-slate-950">{unverifiedTikTok ? "غير مكتمل" : average == null ? "—" : `${money(average)} ر.س`}</b></p></div>
             </div>;
         })}
     </div>;
