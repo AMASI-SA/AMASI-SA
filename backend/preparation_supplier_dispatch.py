@@ -1273,7 +1273,8 @@ async def _employee_workspace(
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
-            "experiment_archived_at": None,
+            # Read parity with count-only progress: blank is not an archive date.
+            "experiment_archived_at": {"$in": [None, ""]},
             "status": {"$ne": PIECE_STATUS_CANCELLED},
             **({"batch_id": {"$in": batch_ids}} if batch_ids is not None else {}),
             **({"piece_id": {"$in": piece_ids}} if piece_ids is not None else {}),
