@@ -564,3 +564,30 @@ async def test_partial_tiktok_advertiser_info_does_not_create_fake_connected_acc
     assert str(exc.value) == "tiktok_discovery_account_profile_incomplete"
     assert "mezan_integration_accounts_v2" not in db.data
     assert "mezan_tiktok_oauth_credentials_v2" not in db.writes
+
+
+def test_operational_tiktok_source_matches_dashboard_account_fx_not_raw_fx():
+    from operational_tiktok_reporting import build_tiktok_reported_account_rows
+
+    accounts = [{"ad_account_id": "100", "mezan_integration_account_id": "int-100",
+                 "display_name": "USD account", "currency": "USD"}]
+    fact = {
+        "ad_account_id": "100",
+        "date": "2026-11-27",
+        "spend_native": 10.0,
+        "spend_sar": 37.50,
+        "effective_spend_sar": 37.40,
+        "currency_native": "USD",
+        "account_timezone": "Asia/Riyadh",
+        "source_close_proof": {
+            "complete": True, "complete_response": True,
+            "explicit_spend_present": True, "account_id": "100",
+            "business_date": "2026-11-27",
+        },
+    }
+    result = build_tiktok_reported_account_rows(
+        accounts, [fact], [], "2026-11-27", "2026-11-27"
+    )
+    assert result["total_source_spend_sar"] == 37.40
+    assert result["items"][0]["source_spend_sar"] == 37.40
+    assert result["items"][0]["binding_state"] == "setup_required"
