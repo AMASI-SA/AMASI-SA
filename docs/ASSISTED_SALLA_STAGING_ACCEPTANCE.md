@@ -1,5 +1,14 @@
 # Assisted Salla order — staging acceptance / release guard
 
+## 2026-11-27 — Salla 2026 payment-status shape and independent provider scopes
+
+- [ ] New GET Order Details responses can differ from the deprecated expanded schema (Salla documentation last changed 2026-10-08; https://docs.salla.dev/5394147e0). The documented expanded structure includes `payment_actions.remaining_action.paid_amount: {amount, currency}` and `payment_methods[]` with paid portions. The status-changing bank action now accepts **explicit finite zero** from top-level `paid_amount` or the documented nested SAR money object, while rejecting missing, malformed, non-SAR, conflicting or nonzero amounts, paid/refunded status and partial `payment_methods`. Test the **actual Mezan app's current** light-format response in protected staging before enabling this code; examples alone do not prove live field presence.
+- [ ] Official POST `/orders/{order_id}/status` supports `status_id` for custom sub-status and `send_status_sms=false` (https://docs.salla.dev/5394148e0). Our single guarded POST is isolated from payment/GL; no POST unless exact unpaid bank pending source/merchant identity and one-time Mongo intent all agree.
+- [ ] Official GET `/payment/banks/{bank_id}` requires `payments.read`, and its public example omits IBAN entirely (https://docs.salla.dev/payments/bank-details). The current private bank precheck **must fail closed** without an independently verified, active beneficiary IBAN from Salla's authenticated bank source. Do NOT invent or hardcode an unverified receiving IBAN, assume merchant payout-bank is customer receiving bank, or ask the LLM to infer it.
+- [ ] Status readback requires Mezan's current GET `/orders/statuses`, exact merchant customized ID/name and synced order child status; generic `under_review` or canonical `status.name` is not enough.
+- [ ] No production activation before Salla Partners Portal `products.read` and `payments.read` grant/re-authorization (#2149), token-scope readback, current exact-head CI PASS, private receipt processing, human bank-credit confirmation and one staging order evidence.
+
+
 ## 2026-11-27 — Additional non-regression gate for exact merchant bank state
 
 - [ ] Confirm actual Salla statuses from **Mezan's own** OAuth connection, not the separately connected Salla plugin. The currently observed merchant customized IDs are pending «بإنتظار الدفع» **1555791576** and review «بإنتظار المراجعة» **780246489**; if merchant statuses change, re-discover and fail closed until verified.

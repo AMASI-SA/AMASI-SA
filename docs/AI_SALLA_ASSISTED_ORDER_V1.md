@@ -1,5 +1,12 @@
 # Assisted Salla order creation V1 — design + implementation checkpoint
 
+## 2026-11-27 — Verification against current official Salla Merchant API docs
+
+Merchant APIs explicitly support `status_id` for customized sub-statuses (https://docs.salla.dev/5394148e0). Salla's 2026 order-details documentation (https://docs.salla.dev/5394147e0) also documents `status.customized.id/name`, `payment_actions.remaining_action.paid_amount` money objects and potentially paid `payment_methods` portions. The bank status guard is now conservative across those documented shapes: (1) only unique active customized «بإنتظار الدفع» → «بإنتظار المراجعة», (2) no duplicate/unknown POST, (3) strict explicit zero SAR paid amount, no partial method collections, (4) fresh same-order read immediately before and after POST, (5) no success if identity/status/paid changes. `bank_review_readback` separately matches the exact currently active merchant child ID/name from Mezan-authenticated GET statuses plus Salla→Mezan synced child, **not the potentially identical canonical parent**.
+
+Important external blocker: official GET `/payment/banks/{bank_id}` (https://docs.salla.dev/payments/bank-details) requires `payments.read` and its public example includes `account_name` but not the beneficiary IBAN; that example cannot prove actual Amasi bank details availability. The signed receipt triage remains disabled until the protected real Mezan OAuth response confirms a valid active store-receiving bank and its true IBAN. All tests added are source-only / CI queued; no real personal data, order, payment or production operation occurred.
+
+
 ## 2026-11-27 — Exact custom Salla status and non-regressing bank review (source-only)
 
 A safety review found that some merchant statuses, including «تم المراجعة», share the generic `under_review` slug and can also retain the top-level Salla canonical name «بإنتظار المراجعة». Relying on either the slug or `OrderDTO.status_native` alone could therefore falsely classify a completed review as pending or move it **backwards**.
