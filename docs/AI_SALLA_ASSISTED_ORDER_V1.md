@@ -1,0 +1,264 @@
+# Assisted Salla order creation V1 — design + implementation checkpoint
+
+## 2026-11-27 — Exact-HEAD CI failure diagnosed and isolated, OAuth readiness report (unreleased)
+
+GitHub Actions [Salla assisted run 46057491664](https://github.com/AMASI-SA/AMASI-SA/actions/runs/46057491664) on prior source `3356f737034bfb9ee1e392a25624a79e6232aefc` actually started its runner, but failed during test collection with `ModuleNotFoundError: No module named 'fastapi'`. The newly included canonical `test_order_engine_mapper.py` imported `order_engine/__init__.py` which imports the full Mezan FastAPI router/production dependency tree. This was a **test harness/dependency isolation defect**, not evidence that the mapper assertions failed. The paired Mezan MCP Gateway security run 46057491486 PASSED on that older head. CSA's separate PR #104 GitHub Actions still fails before any worker steps even on a no-code runner smoke, tracked under CSA #122.
+
+To fix Mezan synthetic CI without installing production dependencies or changing production imports, the pure mapper tests now run in a **separate Python interpreter** through `backend/tests/run_assisted_salla_mapper_tests.py`. It temporarily creates a test-only `order_engine` namespace package referencing the REAL `order_engine/mapper.py` and `models.py`, executes the existing mapper pytest file, and exits. The main Salla synthetic pytest suite runs separately. This avoids hiding import contamination, app startup or security requirements.
+
+The owner-only `GET /api/orders-v2/assisted-salla/capabilities` now calls pure `assisted_salla_scope_report` and adds explicit `payment_bank_read_scope`, `missing_required_scope_groups`, and the flag `stored_scope_claims_only=true`; `live_provider_permission_verified=false` and `active_bank_beneficiary_iban_verified=false` remain intentionally false. It never includes OAuth access/refresh tokens or real bank details, and does not silently grant Mezan rights from an independent Salla plugin. Dedicated offline synthetic tests in `test_salla_order_creation_capabilities.py` cover malformed scopes, separate integration boundaries and redaction. All features remain draft/disabled, awaiting exact-head CI plus owner Salla Partners Portal scopes (#2149), active beneficiary IBAN, private media, one-order UAT, and approved go-live.
+
+
+## 2026-11-27 — Verification against current official Salla Merchant API docs
+
+Merchant APIs explicitly support `status_id` for customized sub-statuses (https://docs.salla.dev/5394148e0). Salla's 2026 order-details documentation (https://docs.salla.dev/5394147e0) also documents `status.customized.id/name`, `payment_actions.remaining_action.paid_amount` money objects and potentially paid `payment_methods` portions. The bank status guard is now conservative across those documented shapes: (1) only unique active customized «بإنتظار الدفع» → «بإنتظار المراجعة», (2) no duplicate/unknown POST, (3) strict explicit zero SAR paid amount, no partial method collections, (4) fresh same-order read immediately before and after POST, (5) no success if identity/status/paid changes. `bank_review_readback` separately matches the exact currently active merchant child ID/name from Mezan-authenticated GET statuses plus Salla→Mezan synced child, **not the potentially identical canonical parent**.
+
+Important external blocker: official GET `/payment/banks/{bank_id}` (https://docs.salla.dev/payments/bank-details) requires `payments.read` and its public example includes `account_name` but not the beneficiary IBAN; that example cannot prove actual Amasi bank details availability. The signed receipt triage remains disabled until the protected real Mezan OAuth response confirms a valid active store-receiving bank and its true IBAN. All tests added are source-only / CI queued; no real personal data, order, payment or production operation occurred.
+
+
+## 2026-11-27 — Exact custom Salla status and non-regressing bank review (source-only)
+
+A safety review found that some merchant statuses, including «تم المراجعة», share the generic `under_review` slug and can also retain the top-level Salla canonical name «بإنتظار المراجعة». Relying on either the slug or `OrderDTO.status_native` alone could therefore falsely classify a completed review as pending or move it **backwards**.
+
+**Fix in Mezan draft #2140:** `order_engine/mapper.py` and the optional `OrderDTO.status_customized_id/status_customized_name` now preserve the actual `status.customized` child from Salla raw data. `bank_review_readback.py` accepts a pending-review status only when all of the following agree: (1) exact merchant child ID obtained via Mezan's own read-only `GET /orders/statuses` API, (2) the child name is «بإنتظار المراجعة», (3) the generic parent slug remains `under_review`, (4) payment remains explicitly unpaid and order ID/reference/amount match. Missing IDs fail closed.
+
+The one-time guarded bank status setter `bank_status_guard.py` now only moves orders in the **exact customized «بإنتظار الدفع»** state to the exact customized «بإنتظار المراجعة» state. Any already-different `under_review` child (including «تم المراجعة») blocks as a conflict, never gets downgraded. The guard requires a readable explicit zero `paid_amount`, re-reads the same Salla order immediately before POST to catch advanced/paid races, and verifies exact custom ID/slug/unpaid amount after the single attempted POST. All uncertain outcomes are fenced for staff reconciliation without retrying status writes. This narrows but cannot mathematically eliminate a third-party race between final GET and provider POST; staff review remains mandatory.
+
+Added and extended synthetic tests in `test_order_engine_mapper.py`, `test_salla_order_creation_bank_review_readback.py`, and `test_salla_order_creation_bank_status_guard.py`; the isolated Salla-assisted Actions workflow now includes the mapper tests. **No exact-head CI PASS confirmed**, no preview/UAT, no Salla/WhatsApp/GL mutation or production merge. The OAuth scope, sensitive data retention and one-order staging blockers remain.
+
+
+## 2026-11-27 — Source-only read-only staff review UI (Mezan 2)
+
+Added `frontend/src/pages/WhatsAppBankReview.jsx` at `/whatsapp-bank-review`, separate from the existing `BankTransferReview.jsx` (which contains GL-writing bank confirmation actions). The new page calls **GET ONLY**: `/orders-v2/assisted-salla/bank-review/worklist` and owner-scoped per-intent readback. It displays Salla order ID/reference, claimed SAR amount, original Chatwoot conversation/message/attachment identifiers, kind (image/file/text), reconciliation state and warning flags; it contains no payment confirmation, Salla status update, refund, GL/Qoyod/fulfillment action or direct private media URL. The reader must use an independent authorized Chatwoot session to inspect original evidence.
+
+App.js registers the route under ProtectedRoute/Layout; both the legacy Sidebar and Mezan V2 order navigation hide the link without the authenticated `bank_receipts.view` (or owner) permission. Backend applies its own canonical effective RBAC and configured merchant owner scope independent of UI checks. New UI source/Jest tests and no-network Node source contract check were added. **No UI build, runtime/browser test or latest exact-head CI success has been verified**. Server feature flag default OFF; no live customer data/orders or deployment.
+
+
+## 2026-11-27 — Staff read-only bank review queue (source-only, OFF)
+
+Bank P06 now includes `bank_staff_worklist.py` plus a feature-gated Mezan endpoint `GET /api/orders-v2/assisted-salla/bank-review/worklist` with max 25 results/page and owner-scoped Mongo query. Another feature-gated `GET /bank-review/{intent_id}` provides deterministic same-order reconciliation for an authorized reviewer. These are **READ ONLY** and do not verify settlement, change Salla status, mark paid, post GL/Qoyod or start fulfillment.
+
+Permissions are not inferred from WhatsApp: `server.py` passes existing canonical `_effective_perms` to the assisted Salla router, authorizing staff only with the new narrow `bank_receipts.view` permission. Owner and existing admin defaults have this permission; other staff require an explicit owner grant through existing user permissions. The reviewer is scoped to `MEZAN_ASSISTED_SALLA_OWNER_ID`, never their own user ID; missing owner config, disabled feature flag, wrong owner or insufficient permissions fail closed. The response includes only Salla order/reference, claimed amount, source kind and Chatwoot conversation/message/attachment IDs for an authorized staff member to open the original protected Chatwoot record. There are **no raw IBAN, image bytes, transfer refs, private URLs, names or bank credits**. Test coverage: `backend/tests/test_salla_order_creation_bank_staff_worklist.py` (tenant isolation, pagination, redaction, exact case status and RBAC); exact-head CI still unverified.
+
+The store's exact `بإنتظار المراجعة` customized status was read-only verified as 780246489 on 2026-11-27. The staff worklist cannot be activated until Salla product/payment OAuth scopes, approved private media parser, Mongo TTL, controlled one-order E2E, human bank statement procedure and exact-head synthetic/full CI pass. **No actual Salla/WhatsApp/GL operation or deployment.**
+
+
+## 2026-11-27 — Three-format WhatsApp bank evidence and exact status (DRAFT)
+
+Owner-approved customer transfer evidence: image, file (PDF/TXT; local/private processing only), or WhatsApp message text. CSA #104 strictly collects current scoped original source; Mezan #2140 `SignedBankReceiptStage` verifies HMAC, `source_kind`, message/contact IDs and original attachment ID (0 for plain text). Mezan validates the *claimed* amount/date/payee against an active merchant bank and the final Salla order. Staff review case persists redacted metadata; text is explicitly labeled `customer_text_claim_only` and never proves a transfer occurred.
+
+Read-only inspection of actual Salla merchant custom statuses on 2026-11-27 found exact «بإنتظار المراجعة» ID 780246489 and «بإنتظار الدفع» ID 1555791576; multiple other custom statuses such as «تم المراجعة» use the same `under_review` slug. The bank-only Salla status update must resolve this exact active custom status ID and the synced Mezan readback must confirm the exact custom name. Salla connector permissions are **not** Mezan OAuth permissions. Source regressions added; latest Actions queued, NO PASS claim.
+
+Private local PDF text-layer extraction can be added as an *explicitly approved* CSA adapter; scanned/image-only PDFs remain human review. No automated bank credit verification, paid/GL/Qoyod postings or fulfillment release. No actual Salla POST/WhatsApp message, preview UAT, production merge or activation. Blockers: #2149 scope, CSA #122 runner, current CI, owner-approved one-order integration, bank statement attestation and staging rollback.
+
+
+## 2026-11-27 — Protected customer order draft continuity and vault revision (new code DRAFT)
+
+New Mezan encrypted PII field receipts now include `vault_ref` as an opaque SHA256-scoped stable reference, with only safe field names/revision; NEVER raw phone/name/address/engraving. CSA's opt-in private field progress stores these refs and source message IDs to advance a confirmed recipient→address draft across WhatsApp messages without model PII. Customer corrections before quote remain possible in Mezan vault; corrections AFTER quote are blocked and must start a separately confirmed new draft.
+
+`load_private_order_fields(...,with_revision=True)` now provides source revision and vault_ref to private server-only quote builder. `intent_writer.py` writes immutable `private_vault_revision/private_vault_ref` alongside encrypted Salla PendingOrder quote payload and source contact ID. Immediately before the signed Salla create POST, `routes.py` calls `require_unchanged_private_vault` (read-only), which checks exact merchant/account/inbox/conversation/intent/contact, revision and unexpired TTL. An edited/expired/mismatched vault stops the POST with a safe 409. No new Salla checkout generation or accounting mutation.
+
+Tests added/updated in `backend/tests/test_salla_order_creation_private_fields.py`, `test_salla_order_creation_private_order_builder.py`, and CSA `ai/test_private_order_progress.py`/`ai/test_private_order_progress_runtime.py`. New code test outcome currently **UNVERIFIED**: Mezan last older 297-PASS run 45911507595 does NOT cover these commits; CSA Actions runner #122 queued/fails even no-code smoke. This remains a nonproduction preview PR. Do not deploy until owner approves Salla OAuth products/payment read scopes (#2149), independent Fernet/HMAC keys, both dedicated Mongo TTL migrations, a privacy-safe native capture policy, real customer checkout-host validation and one synthetic Salla pending-order E2E. No real orders/messages performed.
+
+
+## 2026-11-27 — Encrypted private customer fields and PII-free catalog/quote bridge (DRAFT)
+
+**Privacy decision:** Keep buyer name/mobile/email, recipient name/mobile, delivery address, map coordinates and personalized engraving text within Mezan only; do NOT pass them to an OpenAI model. The native WhatsApp worker still runs its existing privacy/human-takeover guard by default.
+
+New Mezan modules on draft PR #2140:
+- `private_fields.py`: AES/HMAC authenticated Fernet encryption at rest in `salla_ai_private_order_fields`, scoped by tenant/account/inbox/conversation/intent/contact, immutable source message IDs, CAS revision fencing, seven-day purge_after, and a mandatory, operator-installed Mongo TTL index. Uses a NEW independent `MEZAN_ASSISTED_SALLA_PRIVATE_FIELDS_KEY` (optionally _OLD for rotation), not Salla OAuth key. Missing/expired TTL and wrong contact fail closed.
+- `private_field_action.py` and default-OFF `/orders-v2/assisted-salla/signed-private-field`: narrow purpose-specific HMAC, exact field allowlist plus dynamic `option_text_<Salla option id>`, no payment/card/checkout/paid mutation; response contains only safe field names, revision and state, never value.
+- `quote_cipher.py`: full pending-order payload in temporary `salla_ai_order_quotes` is now **encrypted**, not plain Mongo JSON. Signed order creation decrypts it privately and verifies merchant/intent binding and immutable cart digest. Legacy *preverified* quote source has an isolated transitional plaintext fallback; new post-create quote sources MUST be encrypted.
+- `private_order_builder.py` and `private_vault_action.py`: a distinct signed `/orders-v2/assisted-salla/signed-prepare-private` reads customer private fields server-side, combines only approved Salla country/city/district/carrier/product/option IDs, independently validates catalog/stock/shipping/method with the existing Salla token, and creates an UNPRICED electronic pending-order quote. The Chatwoot action never supplies buyer name, phone, street, email, actual engraved name or link.
+- Personalized text uses opaque `private.option_text_<Salla option id>` in the public selection; Mezan resolves the actual name from the encrypted vault and validates text option visibility, required fields and provider text limits. No raw engraving is echoed to AI.
+- `confirmation.py` and `service.py` now bind the signed customer approval `source_contact_id` to the *same* scoped original Chatwoot contact whose private fields the quote used. Wrong contact cannot authorize Salla POST.
+- Strict source IDs and quote TTL protect edits after confirmation. Protected field updates freeze as soon as a quote/order exists. No real customer PII, OAuth secret, payment URL or card data were put into GitHub files/tests.
+
+**Acceptance:** New synthetic suites added for encrypted field vault and TTL, signed field/purpose, quote encryption & tamper, vault-only order builder, personalized private text and cross-contact consent denial. GitHub Actions at the **LATEST HEAD is QUEUED** as of this note; do not report these new tests as passed. The previously confirmed 297 PASS in run 45911507595 covers older code, not the new vault.
+
+**Not live:** Independent private-field/quote vault keys, TTL index migrations, Salla product/payment read scopes, verified country/cart pricing and real checkout allowed hosts remain unconfigured. No customer PII can flow to the LLM; no live private-field collection, no Salla POST, no WhatsApp send, no production merge/deployment. CSA counterpart draft PR #104 adds a default-OFF native-worker private intake hook and protected field sender; its Actions runner is blocked (#122). See CSA privacy #124 and Mezan OAuth #2149.
+
+
+**Date:** 2026-11-26 Riyadh · **Status:** DRAFT, no production enablement
+
+Owner tasks: [Mezan #2139](https://github.com/AMASI-SA/AMASI-SA/issues/2139), [CSA #96](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/96), discovery [CSA #100](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/100).
+
+## Product decision
+
+The WhatsApp customer-service AI collects: **recipient name and phone → destination and available shipping carrier → payment method → exact Salla products/options/quantities → confirmed total → customer confirmation**. Mezan creates **one** Salla order with `payment.status=pending_payment`. Salla owns checkout and generates the payment link itself; Mezan already syncs/display links. No custom payment-link generator, checkout service or additional gateway. Do not treat a new unpaid order as paid.
+
+## Inspected current Mezan code
+
+- Existing rotating OAuth + Salla Merchant client: `backend/salla_integration/service.py:call_salla(db,user_id,"POST","/orders",json=...)`. The default *requested* scope includes `orders.read_write`; check the connected store's *actual token* scope (and shipping/product scopes) before enabling.
+- Existing order synchronization: `backend/salla_integration/sync.py` persists `payment_checkout_url`. This PR adds documented `urls.checkout` fallback in addition to `payment_actions.remaining_action.checkout_url` and legacy `checkout_url`.
+- Existing canonical mapper: `backend/order_engine/mapper.py` now also reads `urls.checkout` fallback. Mezan's `OrderDetailsV2.js` already shows open/copy checkout buttons; NO new link UI is needed.
+- **Manual Salla pending-payment order** #302076044 from owner's screenshot shows checkout action in Mezan. This does NOT prove every API-created pending order produces an identical sync payload; verify with a controlled approved test, no second order for link fetching.
+- New `salla_order_creation.payload` implements a strict allowlist and only `pending_payment`, with 2026 national-address fields. No price, total, paid status or checkout URL can come from AI.
+- New `salla_order_creation.service` checks **two independent server-persisted proofs**, stores idempotency intent in Mongo using stable unique `_id` BEFORE one provider POST, and NEVER blindly retries timeout/unknown result. No accounting writes.
+- New route: `POST /api/orders-v2/assisted-salla/create-confirmed`, mounted on server and restricted to owner. `MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED=1` required; **defaults OFF**. The endpoint will fail closed unless both proof records exist. The future WhatsApp agent must NOT use owner credentials or write directly; Action Gateway service-to-service scope remains outstanding.
+
+## Trusted proof schema — internal, never client-produced
+
+Before a POST the backend must hold:
+1. `salla_ai_order_quotes` row: user_id, intent_id, inbox_id, conversation_id, payload_digest, version, `state=verified`, `source=mezan_authoritative_quote_v1`, verified_at/expiry UTC, positive two-decimal total_sar, and true flags for products, shipping, pricing and eligible payment methods. Quote writer MUST fetch authoritative Salla/Mezan pricing, inventory, options and carrier availability; the LLM cannot write its own "verified" quote.
+2. `salla_ai_order_confirmations` row: same scoped identifiers and digest, matching quote_version, `source=chatwoot_customer_inbound_v1`, `confirmed=true`, unique customer inbound message_id, confirmed_at after quote verification and within 30 minutes. This must derive from *verified* Chatwoot webhook/tenant/inbox/customer role. AI replies and staff notes do not count.
+3. `salla_ai_order_intents`: stable sha256 tenant+intent as Mongo primary key, one insert before POST. `created` returns Salla order_id/reference_id, `unknown` requires reconciliation; every subsequent replay returns recorded state, NEVER posts again. No raw customer details or URLs in this ledger.
+
+The proof writers are **not implemented** in this checkpoint; therefore this endpoint cannot currently create an order even if the feature flag were accidentally enabled. This is intentional fail-closed delivery.
+
+## Acceptance matrix
+
+| Gate | State | Evidence required |
+|---|---|---|
+| Official Merchant API create endpoint | SOURCE REVIEWED | https://docs.salla.dev/5394145e0 (2026-09-21) |
+| National address fields | SOURCE REVIEWED | https://docs.salla.dev/orders/update (2026-10-08) |
+| Pure pending-payment builder | CODED | synthetic pytest CI |
+| Independent quote + inbound confirmation validation | CODED | synthetic pytest CI, signed event integration still needed |
+| Idempotent POST / unknown outcome | CODED | synthetic pytest CI, Mongo concurrency integration still needed |
+| Existing payment URL read path | CODED | new `urls.checkout` fallback, runtime source provenance still unverified |
+| Live Salla OAuth orders.read_write | NOT CHECKED | owner-scoped non-secret token scope |
+| Catalog/options/stock authoritative quote writer | NOT BUILT | separate Mezan P03 |
+| Chatwoot signed customer confirmation writer | NOT BUILT | CSA integration / Mezan Action Gateway contract |
+| Action Gateway scoped service-to-service auth | NOT BUILT | authenticated tenant+inbox claims, never share owner token |
+| Salla one-order staging E2E and link sync | NOT RUN | explicit approved synthetic test and readback |
+| Production rollout | NOT APPROVED / OFF | owner final approval after acceptance |
+
+## Security, reconciliation and accounting
+
+- Never store secrets, raw customer conversation or contact details in GitHub. Approved privacy controls and customer data handling must be reviewed before sending to AI.
+- Bank transfer receipts and COD must not automatically generate a paid state or cash collection. All new orders start `pending_payment` in this V1 until an explicit verified payment workflow is added.
+- No direct DB write by LLM or chat worker, no bypass of Action Gateway, and no product/stock/price invention. Exact confirmed cart/quote must be immutable.
+- On ambiguous Salla response, mark `unknown`, reconcile manually/safely using Salla order evidence and owner authorization. Do not retry blindly.
+- Existing operational balance/Qoyod/employee workflows remain untouched. This PR adds only a new disabled order creation path and read-only checkout fallback.
+- Tests must cover invalid address/Saudi national address, eligibility, revisions/expired consent, tenant isolation, duplicate messages/concurrent calls, unknown response and provider event replay.
+- Salla's `urls.admin` is for staff, not payment. Do not substitute it for `urls.checkout`.
+
+## Next instructions
+
+1. Run branch-specific synthetic CI and fix until PASS; confirm no global conftest/test dependency contamination.
+2. Create a Mezan authoritative quote adapter, using actual product/variant/option IDs and shipping rates; validate OAuth product/shipping scopes, avoid broad permission requests without need.
+3. Build a signed Chatwoot inbound confirmation writer and Mezan Action Gateway service-to-service authorization; wire quoted state machine with retries/corrections and human takeover.
+4. Test one authorized synthetic creation in a safe environment, confirm Salla order ID and existing Mezan synchronization, check checkout URL if available; no new link generation.
+5. Review CI/PR, merge only with appropriate owner permission, never deploy/live-enable until gates pass. Update #2139 and CSA #96 with each commit/CI/result.
+
+## 2026-11-26 — Additional implementation checkpoint (signed CSA→Mezan channel)
+
+- `backend/salla_order_creation/signature.py`: pure HMAC-SHA256 signature verification over UTC timestamp, canonical UUID delivery and exact raw JSON; 300-second clock skew, strict JSON fields/scope/action type; no Salla credential in signed body.
+- `POST /api/orders-v2/assisted-salla/signed-action`: default-off endpoint restricted by `MEZAN_ASSISTED_SALLA_ORDER_POST_ENABLED`, fixed `MEZAN_ASSISTED_SALLA_OWNER_ID`, `MEZAN_ASSISTED_SALLA_CHATWOOT_ACCOUNT`, `MEZAN_ASSISTED_SALLA_CHATWOOT_INBOX`, `MEZAN_ASSISTED_SALLA_HMAC_SECRET`. All settings required; do not commit values.
+- Signed request contains **only** account/inbox/conversation, intent ID, quote ref/digest/version and customer-inbound confirmation message ID. Mezan loads `order_payload` from its own trusted persisted quote; account/tenant/context binding and both separate proof rows remain mandatory before a single Salla POST.
+- `salla_ai_action_deliveries` stores the signed delivery's unique hash; repeated signed delivery never causes second provider POST. The order intent collection also uses a stable unique Mongo `_id`.
+- Provider response total currency and amount are compared to the verified SAR quote within 0.01. `created_amount_unverified` is NOT eligible for automatic checkout link delivery.
+- `GET /api/orders-v2/assisted-salla/capabilities` provides owner-only readback of stored OAuth scope presence without exposing secrets; it does not prove live API authorization. `GET /intents/{intent_id}` provides owner-only safe creation state for reconciliation.
+- Complementary customer-service pure draft/transport lives in **CSA PR #104**; independent proof writers are still to be built in Mezan **#2141** and CSA **#105**.
+- Synthetic GitHub Actions `Salla assisted order (synthetic only)` run **45882595487** passed **57 tests** at source `45a8a3447e317dc159fb9fe83b934eb69234d4e6`. Separate unrelated `Unified Ads Manager Read Only` job failed because `_fetch_daily_spend` did not match its pre-existing reviewed AST digest; do not alter ad accounting in this Salla PR. Overall PR is **not** a green release.
+- The endpoint is **not live**, shared secret and action-bridge deployment are **not configured**, no genuine quote/confirmation proof rows exist yet and no real Salla create-order call has been run. All production flags remain OFF.
+
+
+## 2026-11-26 — Read-only catalog and carrier-rate source adapters
+
+- `backend/salla_order_creation/readers.py` adds **read-only** `read_exact_product` (`GET /products/{id}`) and `read_shipping_rate_candidates` (`GET /shipping/companies/estimate-rate`) using the EXISTING refreshing Salla client, with lazy runtime import for hermetic tests.
+- Product reader rejects absent `products.read` scope, wrong IDs, hidden/unavailable/out-of-stock products, untrusted quantity, non-SAR price and malformed option/value IDs. It reports base price + option facts only; **`can_use_as_final_quote=False`** until product options, stock and discounts are validated for the exact cart.
+- Carrier reader checks existing `shipping.read_write` scope, takes exact country/city + optional postal code, parses Salla rate `id`, `company_id`, estimate amount and COD service fee separately. **`is_final_cart_quote=False`** because the estimation endpoint can omit new cart weight/options and may not reproduce final shipping charge.
+- Tests: `backend/tests/test_salla_order_creation_readers.py`, including scope-denial, bad identity, non-SAR/zero/unknown stock, malformed price, estimate-vs-final guard, fake provider responses. This code is not an authoritative quote writer and does not satisfy the `salla_ai_order_quotes` record required to POST; work remains in #2141.
+- New provider-failure guard prevents marking `success=false` response as created even if it contains an ID; latest prior isolated [run 45882923892](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45882923892) **59 PASS**. First expanded reader CI attempt [45883296371](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45883296371) failed at import time due missing FastAPI in isolated runner; lazy-import fix commit `8b4e624dc30b90067817fbb966cfbdd4e622e555` requires new exact-head CI result before declaring reader tests passing.
+- Official source documents: https://docs.salla.dev/product/product-details and https://docs.salla.dev/6899590e0 (retrieved 2026-11-26).
+
+## 2026-11-26 — Latest exact-head acceptance
+
+- [GitHub Actions **45883513695**](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45883513695) on commit `326e9cb6f85ebae51675cabc21cf58c00692dcc8`: **80/80 synthetic order creation, HMAC and source-reader tests PASS**. Earlier import failures were fixed by lazy runtime loading in the product and carrier readers; do not count failed attempts as accepted tests.
+- No real Salla API create-order HTTP POST or live customer checkout has been exercised. The readers explicitly tag Salla shipping estimates as **non-final**. This PR is still a draft and feature OFF. Broader unrelated CI may still fail, so this does not authorize merge or deployment.
+
+## 2026-11-26 — Signed consent, returning buyers and exact catalog/carrier preflight
+
+- `backend/salla_order_creation/confirmation.py`: new independent signed Chatwoot customer proof type, quote scope/digest/version/timestamp revalidation, immutable Mongo `_id` dedupe for `salla_ai_order_confirmations`. The `POST /api/orders-v2/assisted-salla/signed-confirmation` endpoint is gated by `MEZAN_ASSISTED_SALLA_CONFIRMATION_ENABLED=1`, **separate from the order POST feature flag**, and only accepts the approved account/inbox via its purpose-bound HMAC.
+- Distinct private keys: `MEZAN_ASSISTED_SALLA_CONFIRMATION_HMAC_SECRET` for consent and `MEZAN_ASSISTED_SALLA_ORDER_HMAC_SECRET` for order creation. The prior unsuffixed HMAC env name is no longer accepted by these draft endpoints. Never share or commit the secrets.
+- The two signed HTTP routes now stream and cap request bodies before allocating, and reject abnormal/missing Content-Length, oversize payloads and malformed signatures. Tests remain hermetic; FastAPI and `server.py` syntax checked in dedicated CI.
+- The pure `customer_identity.py` uses an exact, owner-scoped verified Salla customer ID for repeat buyers, or requires the *real buyer-provided email* for first-time Salla customers; it never substitutes the gift recipient, invents an email or assumes two customers are the same from an approximate name. Salla Create Order schema: https://docs.salla.dev/5394145e0 (name/mobile/email required only when customer ID missing).
+- Product snapshot `readers.py` now records option types and SKU variant IDs/stock; `catalog_validation.py` checks exact canonical value IDs, required options, product/variant quantity, live source/freshness and total quantity across duplicate lines. SKU-only inputs remain unsupported until resolved to an exact catalog ID; price hints are **NOT** final quote evidence.
+- Shipping source records also carry checked country/city, and `shipping_selection.py` validates the customer-selected courier ID/eligibility/COD amount against exact destination and rate. **The shipping estimate is NOT the final cart quote and cannot authorize creation.**
+- The original Mongo UTC-naive timestamp behavior is safely normalized to UTC for *database-backed proof records*, never assuming the local server timezone. The customer provider message time has strict bounds.
+- [CI run 45889071228](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45889071228): **158 synthetic tests PASS** on source `f1eebea9bcbadad0132527210a0f247074d7d83d` (including HMAC limits, proof persistence, catalog options, buyer identity). A later expanded carrier/country rate test suite and syntax check require **their own exact-head CI**; do not automatically add unverified cases to 158.
+- P02 CSA counterparts [PR #104](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/pull/104): protected draft persistence and signed consent/action sending; [CI 45889365933](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/actions/runs/45889365933) **73 tests PASS** on its earlier exact source.
+
+**Still NOT DONE:** full server-owned final cart quote writer, live proof writers hooked into native Chatwoot worker, authorized scope verification, actual one-order Salla creation, provider checkout readback, full backend regression/production deployment approval. Quotes from estimates MUST NOT be persisted as `state=verified`. Signed confirmation proof persistence may be safely tested in isolation before enabling order posting, but both feature flags remain OFF.
+
+## 2026-11-26 — Carrier selection and exact source verification checkpoint
+
+- Added `backend/salla_order_creation/shipping_selection.py` to check a selected Salla carrier/rate against the **same country, city and courier ID** and to disallow COD if the provider estimate does not include a verified COD service. It verifies scope/freshness but returns `can_create_order=False` because estimates do not prove the final amount of a particular cart.
+- Added `backend/tests/test_salla_order_creation_shipping_selection.py` and extended the isolated CI.
+- **Verified GitHub Actions run [45889547290](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45889547290): 171/171 hermetic synthetic tests PASS** on implementation commit `97ad91a122b403a9fc2eb44fcb7ed9620bcbb3a8`. This is a dedicated synthetic workflow, **not** end-to-end external Salla/Chatwoot test or full repository green status. General unrelated CI requires separate review.
+- Branch has documentation-only commits after this tested implementation; feature flags still OFF and no real orders have been created.
+- Outstanding gate remains a **server-controlled, customer-specific final cart quote** incorporating actual option/variant pricing, VAT, discounts, carrier shipping and COD fee, or another authoritative Salla supported final quote. A standalone carrier estimate MUST NEVER be marked as an eligible final order quote.
+
+
+## 2026-11-26 — Honest preview (no premature final cart total)
+
+The buyer-facing flow now has an isolated, source-restricted **read-only estimate** path:
+
+- `backend/salla_order_creation/quote_preview.py` combines validated product option/variant identities with the destination-specific, carrier-specific Salla *estimate*; it returns visible line-price hints and carrier estimate but deliberately returns `verified_grand_total_sar: null`, `is_final_cart_quote: false`, `can_create_order: false`. It never invents a payable amount or creates a checkout/payment URL.
+- `backend/salla_order_creation/readers.py` checks the actual stored merchant OAuth grants for either `products.read`/`products.read_write` and `shipping.read`/`shipping.read_write`; it does not infer installed grants from requested defaults.
+- New read-only `read_checkout_payment_methods` uses Salla's `GET /payment/methods` with `payments.read` and distinguishes store-enabled candidates in the Create Order allowed enum (`mada`, `credit_card`, `bank`, `cod`) from other store gateways (Apple Pay, BNPL, etc.). A payment option's presence does **not** establish COD eligibility for the selected carrier/branch. Actual `payments.read` token scope is **not yet checked**.
+- Official docs checked on 2026-11-26: [Create Order](https://docs.salla.dev/5394145e0), [Product Details](https://docs.salla.dev/product/product-details), [List Estimate Rates](https://docs.salla.dev/6899590e0), [Available Payment Methods](https://docs.salla.dev/payments/available-methods), and [Twilight cart SDK](https://docs.salla.dev/twilight/react/sdk/cart). The merchant Create Order API is confirmed; a supported **merchant server-side final-cart pricing endpoint** with exact shipping/discount/tax rules was **not identified in these sources**. Twilight's cart SDK is a customer/storefront flow, and `priceQuote` asks guests to log in; it is **not** a drop-in backend quote for independent Chatwoot service.
+- New offline tests cover preview uncertainty and method filtering. Exact-head CI for the new tests is **pending**, not yet claimed successful.
+
+**Still blocked:** server-authored, authoritative final price for the exact customer checkout cart. Never label a subtotal of product listings + carrier estimate as final or sign it into `salla_ai_order_quotes`. An owner-reviewed manual pilot quote (if separately authorized in the future) would be an interim mode, not autonomous AI pricing. No feature flags were enabled, no real order placed, no existing financial/accounting entry changed.
+
+## 2026-11-26 — Real Amasi personalized-product option discovery
+
+A read-only authorized Salla catalog inspection found Amasi **service-type personalized name necklaces** with `type=text` options, `required=true`, no enum values and sometimes `characters_limit=null`, plus `type=radio` choices. Some additional required text fields use `visibility=on_condition` with `visibility_condition_type="="`, referencing a selected radio option and value. Therefore a radio/checkbox-only order builder would be **functionally incomplete for real Amasi products**.
+
+- `readers.py` now preserves text limit and conditional visibility metadata from product details, without leaking customer-supplied personalization.
+- `catalog_validation.py` now supports strict Arabic/Unicode text input (control/HTML-ish characters rejected), conservative 120-character cap when provider limit is absent, exact provider cap when present, equality/inequality conditional visibility for text/choice options, required visible personalized fields, hidden conditional option rejection, and exact variant stock checks. Returned evidence contains only selected text **option IDs**, never the actual customer's engraving text; the trusted `PendingOrder` payload retains the confirmed text for Salla submission.
+- Added `backend/tests/test_salla_order_creation_personalization.py` for synthetically generated Arabic engraving, conditional fields, hidden/missing/too-long text, and unchanged pending-payment payload. This **does not yet prove Salla accepts text option values via POST /orders**; staging acceptance remains mandatory.
+- Official docs: [Product Details](https://docs.salla.dev/product/product-details) and [Create Order](https://docs.salla.dev/5394145e0). Full options/conditions in the real catalog vary and must be checked per product; never generalize a rule from product name.
+- Current exact-branch test run after the personalization changes is **pending** as of this documentation checkpoint; do not claim all new tests pass without CI evidence.
+
+
+## 2026-11-26 — Personalization acceptance: 201 synthetic tests PASS
+
+- Amasi's actual connected Salla catalog contains service products with required `type=text` options, radio choices and `on_condition` text fields. Read-only inspection confirmed these must be supported before the customer-service agent can reliably create personalized gift orders.
+- Mezan `readers.py` now projects the source's `characters_limit` and visibility condition IDs. `catalog_validation.py` enforces required visible text, provider/fallback length limits, exact selected conditional values, rejection of hidden fields/unsafe controls, stock and variant matching. It returns only selected text **option IDs** in review evidence; buyer text stays only in the trusted `PendingOrder` when POST is eventually permitted.
+- Synthetic [GitHub Actions run **45890916663**](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45890916663): **201/201 PASS**, implementation commit `24dccd68133926b16c78ef202402464084f07f8a`. The initial run found two tests incorrectly expecting the later catalog validator to reject empty inputs; the strict Pydantic payload schema correctly rejected them earlier. Updated tests explicitly accept rejection at either safety boundary, with no relaxation to production rules.
+- Scope checks and provisional price/payment methods also remained green at this test checkpoint. This is still an isolated unit suite, **not a live Salla POST / chat-to-order acceptance**.
+
+Open: validate that the official Create Order API accepts each required Amasi product text/conditional option representation in a separately approved synthetic integration, match the final Salla total, and verify the existing Mezan checkout URL sync. Do not deploy or enable order creation until final quote source and owner go-live approvals exist.
+
+## 2026-11-27 — Owner decision: verify Mezan total, then reuse its checkout link
+
+After Mezan creates a single pending_payment Salla order, wait for that SAME order in Mezan sync. Verify actual Salla order ID/reference, waiting-payment status, SAR total matching customer-approved value (max difference 0.01 SAR), and an existing checkout URL for the merchant-approved HTTPS host. Then send it to the same WhatsApp conversation. Never generate links or duplicate the Salla POST.
+
+New backend/salla_order_creation/checkout_readback.py resolves only owner+inbox+conversation+intent+quote/approval scoped order references, and reads the current canonical Mezan Order Engine model. The signed-checkout POST is READ-ONLY, independently gated by MEZAN_ASSISTED_SALLA_CHECKOUT_READ_ENABLED=1, secret MEZAN_ASSISTED_SALLA_CHECKOUT_HMAC_SECRET and exact approved hosts MEZAN_ASSISTED_SALLA_CHECKOUT_ALLOWED_HOSTS. All default OFF; no credentials provided in GitHub.
+
+Missing Salla/Mezan sync or link returns waiting with no URL; mismatch/paid/foreign order or untrusted URL returns an exception state with no URL; never manufacture link or retry create.
+
+Verified GitHub Actions run: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45905261993 — 229 synthetic tests PASS at commit bc681d0f389782cb4068935208048c205af6c662. No live Salla create or actual WhatsApp send tested.
+
+CSA draft PR #104 adds ai/mezan_checkout_readback.py and ai/salla_checkout_delivery.py. Uses signed Mezan read first, native guarded Chatwoot send second, durable once-only SQLite send ledger. CSA exact-head run https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/actions/runs/45905528538 FAILED, and job-log retrieval is blocked by GitHub BlobNotFound; split matrix run 45905726267 also FAILED without retrievable logs. THESE TESTS ARE NOT YET ACCEPTED. No live worker hookup or production release.
+
+Remaining: final-price policy and quote writer, verification of current OAuth scopes/real payment host, signed native worker integration, safe staging one-order E2E and explicit go-live approval. No production deployment and no actual customer order.
+
+## 2026-11-27 — Salla owns total AFTER pending-order creation (owner correction)
+
+The user explicitly requires Mezan to POST ONE Salla pending-payment order FIRST, then verify the actual order total in Mezan and copy/read its already-stored customer checkout URL to send on WhatsApp. Prior architecture that required a certified final cart total before POST was unnecessarily blocking this owner workflow. The new mode is constrained to **unpaid electronic Mada/credit card** orders only; COD/bank require separate verified collection policy.
+
+New code on Mezan PR #2140:
+- service.py quote_pricing_mode recognizes a strict separate server-authoritative **mezan_verified_unpaid_order_intent_v1** source, state authorized_for_pending_creation, products/carrier eligibility/payment methods verified, pricing_verified=False, shipping_price_verified=False, total_sar=None and post_create_salla_total=True. All proof scope, expiry, signed customer approval, stable Salla idempotency and one POST remain mandatory.
+- intent_writer.py performs existing Salla product-details, selected options/variant stock, shipping rate *eligibility*, and enabled electronic method reads. An immutable Mongo quote holds the original exact PendingOrder payload and proof digest, never a guessed final amount, has a 10-minute quote expiry and planned seven-day purge_after. Owner-only preview endpoint /api/orders-v2/assisted-salla/prepare-unpaid-intent defaults OFF (MEZAN_ASSISTED_SALLA_QUOTE_WRITE_ENABLED=0). CSA agent does NOT receive owner credentials.
+- On successful Salla POST, intent is created_amount_unverified until Mezan has synced the SAME order, its actual positive SAR total and existing checkout URL. Checkout readback for legacy preverified quotes still checks ±0.01. Post-create mode displays Salla's authoritative amount; the customer decides whether to pay the link, with no automatic charge.
+- reference_reconciliation.py recovers missing Salla reference_id by authenticated GET /orders/{id} only; it stores the reference on the existing idempotent intent and NEVER makes another POST. Missing reference becomes waiting_for_salla_reference in CSA's bounded read queue.
+- New tests: test_salla_order_creation_intent_writer.py, post-create contract cases in service/checkout_readback, test_salla_order_creation_reference_reconciliation.py. Latest verified CI 258 synthetic tests PASS at run 45909237637; newer full suite run 45909332644 had not completed by last check.
+
+Important: quote PII TTL index/retention must be reviewed before activation; current purge_after field alone is NOT automatic deletion. The owner-only pilot endpoint is NOT a signed Chatwoot quote preparation action. No live order, no live WhatsApp send, no production flags or merge. All acceptance gates in ASSISTED_SALLA_STAGING_ACCEPTANCE.md remain mandatory.
+
+## 2026-11-27 — Quote preparation bridge, replay ACK, nullable address and retention (DRAFT)
+
+Additional implementation on PR #2140:
+- service.py returns trusted pricing_mode/amount_confirmed on both initial create and safe idempotent replay. This distinguishes an actually created unpaid Salla order whose total needs Mezan sync (state created_amount_unverified + pricing_mode salla_post_create) from a mismatched legacy prequoted total. The latter remains blocked for checkout.
+- intent_writer.py stores full nullable Salla address fields (previous exclude_none=True silently removed mandatory nullable district/block/postal_code for later PendingOrder.model_validate). It also persists signed source_message_id/source_contact_id when provided, and refuses the same intent with a different source or cart.
+- New prepare_action.py and /orders-v2/assisted-salla/signed-prepare route accept a narrowly scoped HMAC from the trusted Chatwoot native worker, with contact/message IDs and strict pending-order schema. Mezan independently rechecks product/options/stock, carrier and allowed online payment methods. This endpoint cannot create Salla orders or payment links. Requires BOTH MEZAN_ASSISTED_SALLA_SIGNED_PREPARE_ENABLED=1 and MEZAN_ASSISTED_SALLA_QUOTE_WRITE_ENABLED=1, and a separate MEZAN_ASSISTED_SALLA_PREPARE_HMAC_SECRET. Default is OFF. Initial signed path forbids an unverified customer.id; first-time customers need actual name/mobile/email. Returning buyer IDs require trusted tenant lookup first.
+- New retention.py enforces a real Mongo TTL index on temporary assisted quote purge_after, not just a stored timestamp. Both owner-only and signed prepare endpoints fail closed until the index exists; install_assisted_quote_ttl(db) is an explicit approved one-time migration helper, NOT called by live requests. Quotes and customer data are not sent to GitHub or copied into the bot draft.
+- New synthetic tests: test_salla_order_creation_prepare_action.py, test_salla_order_creation_retention.py; extended test_salla_order_creation_service.py and test_salla_order_creation_intent_writer.py for replay + optional address/source IDs. No real Salla POST or customer data used.
+- **Latest test status:** New exact-head Mezan workflow for source 29c77813aab12b33c6e8ef2c769b8c1b65250b46 is QUEUED (run 45911401176) at last check. Latest previously verified 270/270 PASS was run 45909332644 on older implementation. DO NOT report the new quote/retention code as CI passed until the exact-head run succeeds.
+- OAuth audit confirmed current _DEFAULT_SCOPES_FALLBACK excludes products.read and payments.read *intentionally* (see backend/tests/test_salla_oauth_scopes_iter291.py): adding unauthorized permissions to the default scope breaks Salla OAuth with invalid_scope. No default scopes were modified. Owner-side Salla Partners Portal consent + read-only actual-token inspection must precede changes. Tracked in Mezan #2149.
+
+Remaining: CSA secure native PII field capture (CSA #124); staged signed prepare + actual approved Salla test; real checkout host and link source; private data TTL migration, exact-head CI, owner go-live. No production activation.

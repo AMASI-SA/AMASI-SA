@@ -580,8 +580,12 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         remaining_action.get("has_remaining_amount")
         or remaining_amount > 0
     )
+    # Official Salla Order API places checkout under urls.checkout; keep
+    # legacy/remaining-payment fallbacks for older order snapshots.
+    order_urls = salla_order.get("urls") if isinstance(salla_order.get("urls"), dict) else {}
     checkout_url = _str(
         remaining_action.get("checkout_url")
+        or order_urls.get("checkout")
         or salla_order.get("checkout_url")
     )
 

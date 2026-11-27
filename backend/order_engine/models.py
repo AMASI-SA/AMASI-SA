@@ -232,6 +232,11 @@ class OrderDTO(CanonicalDTO):
 
     status: Optional[str] = None
     status_native: Optional[str] = None
+    # Salla merchant-customized status is distinct from its shared canonical
+    # name/slug. Bank-review flows must inspect this EXACT status identity.
+    # No inference from generic "under_review" or top-level "name".
+    status_customized_id: Optional[int] = None
+    status_customized_name: Optional[str] = None
     is_new: bool = False
     is_gift: bool = False
 

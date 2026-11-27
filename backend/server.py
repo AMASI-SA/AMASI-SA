@@ -69,6 +69,7 @@ from order_status_policy import attach_order_status_policy_routes
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
 from order_engine.routes import make_order_engine_router
+from salla_order_creation.routes import make_assisted_salla_order_router
 from order_item_engine.routes import make_order_item_engine_router
 from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
@@ -214,6 +215,7 @@ PERMISSIONS_CATALOGUE: dict[str, str] = {
     "reports.view":           "عرض التقارير",
     "orders.view":            "عرض الطلبات",
     "orders.manage":          "إدارة الطلبات (إعادة معالجة، حذف)",
+    "bank_receipts.view":     "عرض إثباتات التحويل البنكي قيد المراجعة (قراءة فقط)",
     "preparation.view":       "عرض تجهيز المنتجات",
     "preparation.manage":     "إدارة تجهيز المنتجات",
     "product_costs.view":     "عرض تكاليف المنتجات",
@@ -3935,6 +3937,12 @@ api.include_router(
 from order_engine.whatsapp_stage_mount import mount_if_enabled as mount_whatsapp_stage_if_enabled
 mount_whatsapp_stage_if_enabled(api, db)
 api.include_router(make_order_engine_router(db, current_user))
+# Assisted Salla creation is OFF by default and requires independently stored
+# authoritative quote + confirmed inbound customer message before any POST.
+api.include_router(make_assisted_salla_order_router(
+    db, current_user,
+    can_read_bank_review=lambda user: "bank_receipts.view" in _effective_perms(user),
+))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )

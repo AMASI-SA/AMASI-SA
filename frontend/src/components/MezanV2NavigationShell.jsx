@@ -30,6 +30,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         Icon: Package,
         items: [
             { to: "/orders-v2", label: "كل الطلبات", pathPrefix: "/orders-v2" },
+            { to: "/whatsapp-bank-review", label: "مراجعة حوالات واتساب", requiredPermission: "bank_receipts.view" },
         ],
     },
     {
@@ -87,6 +88,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
 const MEZAN_V2_PATHS = [
     "/dashboard-v2",
     "/orders-v2",
+    "/whatsapp-bank-review",
     "/fulfillment-v2",
     "/inventory-receiving-v2",
     "/products-v2",
@@ -181,11 +183,18 @@ export default function MezanV2NavigationShell({
     onOpenAll,
     searchForm = null,
     notificationControl = null,
+    bankReviewAllowed = false,
 }) {
     const [openSectionId, setOpenSectionId] = useState(null);
     const [searchOpen, setSearchOpen] = useState(false);
     const rootRef = useRef(null);
-    const activeSection = useMemo(() => activeNavigationSection(location), [location]);
+    const visibleSections = useMemo(() => MEZAN_V2_NAV_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !item.requiredPermission || bankReviewAllowed),
+    })), [bankReviewAllowed]);
+    const activeSection = useMemo(() => visibleSections.find(
+        (section) => section.items.some((item) => isNavigationItemActive(location, item))
+    ) || null, [visibleSections, location]);
 
     useEffect(() => {
         setOpenSectionId(null);
@@ -240,7 +249,7 @@ export default function MezanV2NavigationShell({
                     data-testid="mezan-v2-primary-scroll"
                 >
                     <div className="flex w-max min-w-full flex-nowrap items-center gap-1 whitespace-nowrap sm:gap-1.5">
-                        {MEZAN_V2_NAV_SECTIONS.map((section) => {
+                        {visibleSections.map((section) => {
                             const active = activeSection?.id === section.id;
                             const open = openSectionId === section.id;
                             return (
