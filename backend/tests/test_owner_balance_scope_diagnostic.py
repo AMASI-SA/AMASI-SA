@@ -56,7 +56,8 @@ def test_no_state_reports_database_context_not_absent_salary(monkeypatch):
     assert result["result"] == "DATABASE_HAS_NO_OPERATIONAL_STATES_VERIFY_ACTIVE_RUNTIME_DB"
     assert result["sources"]["v2_salary_contracts"] == 1
     assert result["sources"]["any_ledger_state_in_this_database"] == 0
-    assert "owner" not in str(result).replace("owner_account_unique", "").replace("owner_reverse_link_field_present", "").replace("owner_direct_v2_links", "").replace("owner_reverse_v2_links", "").replace("owner_ledger_state_exact", "").replace("owner_ledger_by_owner_id", "").replace("owner_general_ledger_entries", "").replace("owner_employee_financial_events", "").replace("SELECTED_OWNER_SCOPE", "")
+    assert set(result) == {"read_only", "counts_are_capped_at", "owner_account_unique",
+                           "owner_reverse_link_field_present", "sources", "result"}
 
 
 def test_other_tenant_state_does_not_prove_owner_ledger(monkeypatch):
