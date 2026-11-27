@@ -22,7 +22,7 @@ class BankWorklistDenied(ValueError):
 
 
 def may_read_bank_review(user: dict | None, staff_permitted: Callable | None) -> bool:
-    """The server supplies its canonical effective orders.manage RBAC check.
+    """The server supplies its canonical effective bank_receipts.view RBAC check.
 
     This function does not trust a caller-supplied permissions JSON field.
     The owner is accepted only when backed by the authenticated dependency.
