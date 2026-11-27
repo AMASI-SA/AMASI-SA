@@ -273,11 +273,14 @@ async def create_confirmed_salla_order(
                 and prior.get("pricing_mode") == "preverified"
             ),
             "replayed": True,
-            "staff_review_required": prior.get("pricing_mode") == "salla_bank_review",
-            "bank_credit_confirmed": False,
-            "needs_reconciliation": prior.get("state") in (
-                "created_bank_review_unqueued", "unknown",
-            ),
+            **({
+                "staff_review_required": True,
+                "bank_credit_confirmed": False,
+                "needs_reconciliation": (
+                    prior.get("state") == "created_bank_review_unqueued"
+                ),
+                "checkout_url": None,
+            } if prior.get("pricing_mode") == "salla_bank_review" else {}),
         }
 
     # One and only one POST. Never retry on network exception or ambiguous
@@ -385,7 +388,9 @@ async def create_confirmed_salla_order(
         "reference_id": int(reference) if reference is not None else None,
         "pricing_mode": pricing_mode,
         "replayed": False, "amount_confirmed": amount_confirmed,
-        "staff_review_required": pricing_mode == "salla_bank_review",
-        "bank_credit_confirmed": False,
-        **({"checkout_url": None} if pricing_mode == "salla_bank_review" else {}),
+        **({
+            "staff_review_required": True,
+            "bank_credit_confirmed": False,
+            "checkout_url": None,
+        } if pricing_mode == "salla_bank_review" else {}),
     }
