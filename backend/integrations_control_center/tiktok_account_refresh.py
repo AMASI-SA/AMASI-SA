@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -134,6 +135,9 @@ async def refresh_tiktok_authorized_accounts(
                     "has_data": False,
                     "health_score": None,
                     "last_sync_at": None,
+                    "tiktok_backfill_next_date": (
+                        datetime.now(timezone.utc).date() - timedelta(days=29)
+                    ).isoformat(),
                     "source_mode": TIKTOK_SOURCE_MODE,
                     "created_at": observed_at,
                 },
