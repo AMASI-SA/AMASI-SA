@@ -105,7 +105,8 @@ class MountTest(unittest.TestCase):
         with patch.dict(os.environ,env,clear=True), \
              patch("backend.order_engine.whatsapp_stage_mount.MongoNonceClaim"), \
              patch("backend.order_engine.whatsapp_stage_mount.MongoAssistantRateLimit"), \
-             patch("backend.order_engine.whatsapp_stage_mount.ChatwootVerifiedSenderReader") as reader:
+             patch("backend.order_engine.whatsapp_stage_mount.ChatwootVerifiedSenderReader") as reader, \
+             patch("backend.order_engine.whatsapp_stage_mount.MongoOrderRepository"):
             router=APIRouter(prefix="/api")
             self.assertTrue(mount_if_enabled(router,object()))
             app=FastAPI()
