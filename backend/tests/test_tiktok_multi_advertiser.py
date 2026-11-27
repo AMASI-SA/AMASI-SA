@@ -1,0 +1,222 @@
+"""Regression tests: new TikTok advertisers appear without code edits or double spend."""
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import datetime, timezone
+
+import pytest
+
+from integrations_control_center import tiktok_account_refresh as discovery
+from integrations_control_center import tiktok_native_reporting as reporting
+from operational_ad_selection import choices
+
+
+def match(row, query):
+    return all(row.get(key) == value for key, value in query.items())
+
+
+class Collection:
+    def __init__(self, store, name):
+        self.store, self.name = store, name
+
+    @property
+    def rows(self):
+        return self.store.data.setdefault(self.name, [])
+
+    async def create_index(self, *args, **kwargs):
+        return kwargs.get("name")
+
+    async def find_one(self, query, projection=None):
+        row = next((item for item in self.rows if match(item, query)), None)
+        return deepcopy(row) if row else None
+
+    async def update_one(self, query, update, upsert=False):
+        row = next((item for item in self.rows if match(item, query)), None)
+        if row is None and upsert:
+            row = {**query, **deepcopy(update.get("$setOnInsert") or {})}
+            self.rows.append(row)
+        if row is not None:
+            row.update(deepcopy(update.get("$set") or {}))
+        self.store.writes.append(self.name)
+
+
+class DB:
+    def __init__(self):
+        self.data = {}
+        self.writes = []
+
+    def __getattr__(self, key):
+        return Collection(self, key)
+
+    def __getitem__(self, key):
+        return Collection(self, key)
+
+
+@pytest.mark.asyncio
+async def test_authorized_account_api_reads_real_app_credentials(monkeypatch):
+    monkeypatch.setenv("TIKTOK_MARKETING_APP_ID", "real-app-id")
+    monkeypatch.setenv("TIKTOK_MARKETING_APP_SECRET", "configured-secret")
+    requests = []
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": {"list": [
+                {"advertiser_id": "100"}, {"advertiser_id": "200"},
+                {"advertiser_id": "100"}]}}
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            requests.append((url, kwargs))
+            return Response()
+
+    monkeypatch.setattr(discovery.httpx, "AsyncClient", Client)
+    assert await discovery.authorized_advertiser_ids("oauth-access-token") == ["100", "200"]
+    assert requests[0][1]["params"] == {
+        "app_id": "real-app-id", "secret": "configured-secret"}
+    assert requests[0][1]["headers"] == {"Access-Token": "oauth-access-token"}
+
+
+@pytest.mark.asyncio
+async def test_refresh_upserts_all_authorized_accounts_without_resetting_existing(monkeypatch):
+    db = DB()
+    db.data["mezan_integration_accounts_v2"] = [{
+        "user_id": "owner", "provider": "tiktok_ads",
+        "external_account_id": "100", "ad_account_id": "100",
+        "mezan_integration_account_id": "original-id",
+        "mezan_selected": False,
+        "connection_status": "connected",
+        "last_sync_at": "2026-11-26T12:00:00+00:00",
+        "currency": "USD", "timezone": "Asia/Riyadh",
+    }]
+    db.data["mezan_tiktok_oauth_credentials_v2"] = [{
+        "user_id": "owner", "provider": "tiktok_ads",
+        "access_token_ciphertext": b"encrypted",
+    }]
+
+    async def authorized(*args):
+        return ["100", "200"]
+
+    async def detail(*args):
+        return [
+            {"external_account_id": "100", "display_name": "Existing",
+             "currency": "USD", "timezone": "Asia/Riyadh"},
+            {"external_account_id": "200", "display_name": "New",
+             "currency": "SAR", "timezone": "Asia/Riyadh"},
+        ]
+
+    monkeypatch.setattr(discovery, "authorized_advertiser_ids", authorized)
+    monkeypatch.setattr(discovery, "discover_tiktok_advertisers", detail)
+
+    first = await discovery.refresh_tiktok_authorized_accounts(
+        db, "owner", "token", "2026-11-27T15:00:00+00:00")
+    second = await discovery.refresh_tiktok_authorized_accounts(
+        db, "owner", "token", "2026-11-27T15:10:00+00:00")
+    assert first["authorized_accounts"] == second["authorized_accounts"] == 2
+    rows = db.data["mezan_integration_accounts_v2"]
+    assert len(rows) == 2
+    previous = next(row for row in rows if row["external_account_id"] == "100")
+    new = next(row for row in rows if row["external_account_id"] == "200")
+    assert previous["mezan_integration_account_id"] == "original-id"
+    assert previous["mezan_selected"] is False
+    assert previous["last_sync_at"] == "2026-11-26T12:00:00+00:00"
+    assert new["mezan_integration_account_id"]
+    assert new["connection_status"] == "connected"
+    assert db.data["mezan_tiktok_oauth_credentials_v2"][0]["access_token_ciphertext"] == b"encrypted"
+    assert not {"general_ledger", "ad_account_ledger", "mz2_ad_account_bindings_v2"}.intersection(db.writes)
+
+
+@pytest.mark.asyncio
+async def test_failed_authorization_does_not_delete_account_or_financial_identity(monkeypatch):
+    db = DB()
+    original = {"user_id": "owner", "provider": "tiktok_ads",
+                "external_account_id": "old", "mezan_integration_account_id": "saved"}
+    db.data["mezan_integration_accounts_v2"] = [deepcopy(original)]
+
+    async def denied(*args):
+        raise discovery.TikTokAccountRefreshError("provider_unavailable")
+
+    monkeypatch.setattr(discovery, "authorized_advertiser_ids", denied)
+    with pytest.raises(discovery.TikTokAccountRefreshError):
+        await discovery.refresh_tiktok_authorized_accounts(db, "owner", "token", "time")
+    assert db.data["mezan_integration_accounts_v2"] == [original]
+    assert not db.writes
+
+
+def test_operational_catalog_auto_includes_new_tiktok_but_respects_saved_exclusions():
+    accounts = [
+        {"provider": "tiktok_ads", "mezan_integration_account_id": "old",
+         "external_account_id": "100", "connection_status": "connected"},
+        {"provider": "tiktok_ads", "mezan_integration_account_id": "new",
+         "external_account_id": "200", "connection_status": "connected"},
+    ]
+    state = {"ad_catalog_selection": {"version": 3, "account_ids": ["old"],
+                                       "known_tiktok_account_ids": ["old"]}}
+    initial = {item["id"]: item for item in choices(accounts, state)}
+    assert initial["old"]["selected"] is True
+    assert initial["new"]["selected"] is True  # newly discovered
+    state["ad_catalog_selection"]["known_tiktok_account_ids"].append("new")
+    later = {item["id"]: item for item in choices(accounts, state)}
+    assert later["new"]["selected"] is False  # explicit owner exclusion
+
+
+@pytest.mark.asyncio
+async def test_dashboard_reports_missing_advertiser_days_without_inventing_zero(monkeypatch):
+    from dashboard_v2_routes import _tiktok_reporting_coverage
+    import dashboard_v2_routes
+
+    async def accounts(*args):
+        return ["100", "200"]
+
+    monkeypatch.setattr(dashboard_v2_routes, "_selected_account_ids", accounts)
+    rows = [
+        {"ad_account_id": "100", "date": "2026-11-27",
+         "spend_native": 10.0, "spend_sar": 37.5,
+         "currency_native": "USD", "account_timezone": "Asia/Riyadh"},
+        {"ad_account_id": "200", "date": "2026-11-27",
+         "spend_native": 20.0, "spend_sar": 20.0,
+         "currency_native": "SAR", "account_timezone": "Asia/Riyadh"},
+    ]
+    complete = await _tiktok_reporting_coverage(None, "owner",
+                                               "2026-11-27", "2026-11-27", rows)
+    assert complete["coverage_complete"] is True
+    assert complete["accounts_expected"] == 2
+    incomplete = await _tiktok_reporting_coverage(None, "owner",
+                                                 "2026-11-27", "2026-11-27", rows[:1])
+    assert incomplete["coverage_complete"] is False
+    assert incomplete["missing_account_ids"] == ["200"]
+    assert incomplete["missing_account_days"] == 1
+    duplicate = await _tiktok_reporting_coverage(None, "owner",
+                                                "2026-11-27", "2026-11-27", rows + rows[:1])
+    assert duplicate["coverage_complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_reporting_rejects_cross_account_spend():
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": {"list": [
+                {"dimensions": {"advertiser_id": "another"},
+                 "metrics": {"spend": "999"}}]}}
+
+    class Client:
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    with pytest.raises(reporting.TikTokReportingError) as exc:
+        await reporting._fetch_day(
+            Client(), "token", {"ad_account_id": "100"},
+            datetime(2026, 11, 27, tzinfo=timezone.utc).date())
+    assert exc.value.code == "tiktok_reporting_advertiser_mismatch"
