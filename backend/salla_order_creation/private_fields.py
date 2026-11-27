@@ -280,6 +280,7 @@ async def load_private_order_fields(
     owner_id: str, account_id: int, inbox_id: int, conversation_id: int,
     intent_id: str, contact_id: int, cipher: Any | None = None,
     now: datetime | None = None,
+    with_revision: bool = False,
 ) -> dict:
     """Private Mezan ONLY. Never expose this return value in an API reply."""
     if type(contact_id) is not int or contact_id < 1:
@@ -300,4 +301,13 @@ async def load_private_order_fields(
     clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None or expiry <= clock.astimezone(timezone.utc):
         raise PrivateOrderFieldDenied("private_customer_fields_expired")
-    return _decode(cipher or _fernet_from_env(), row.get("encrypted_fields"))
+    fields=_decode(cipher or _fernet_from_env(), row.get("encrypted_fields"))
+    if with_revision:
+        revision=row.get("revision")
+        if type(revision) is not int or revision<1:
+            raise PrivateOrderFieldDenied("private_vault_revision_invalid")
+        return {
+            "fields":fields, "revision":revision,
+            "vault_ref":"vault."+key[:32],
+        }
+    return fields
