@@ -134,3 +134,19 @@ def test_bank_order_intent_without_reference_waits_safely():
     db.salla_ai_order_intents.rows[0]["reference_id"]=None
     result=check(db=db)
     assert result["state"]=="waiting_for_salla_reference"
+
+
+
+def test_text_only_bank_claim_readback_exposes_kind_not_customer_text():
+    db=DB()
+    row=db.salla_ai_bank_staff_reviews.rows[0]
+    row["source_kind"]="text"
+    row["source_attachment_id"]=0
+    result=check(db=db)
+    assert result["receipt_source_kind"]=="text"
+    assert result["customer_text_claim_only"] is True
+    assert result["receipt_message_id"]==501
+    assert result["receipt_attachment_id"]==0
+    assert result["paid"] is False
+    assert result["bank_credit_confirmed"] is False
+    assert result["fulfillment_eligible"] is False
