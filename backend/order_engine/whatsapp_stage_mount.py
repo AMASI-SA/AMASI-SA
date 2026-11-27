@@ -82,57 +82,62 @@ async def _fresh_salla_source(dto) -> bool:
 
 
 def mount_if_enabled(api_router, db):
-    """Mount only when all security dependencies are configured.
+    """Register read-only endpoints independently, preserving strict auth.
 
-    Disabled mode imports no secrets, performs no DB access or network I/O.
-    Missing settings in enabled mode are deployment failures, not fallbacks.
+    Catalog-only mode needs signed HMAC and fixed owner but does NOT need
+    Chatwoot buyer lookup credentials. Order-stage requires both. The legacy
+    stage flag continues to mount catalog + stage together.
     """
-    mode=os.environ.get("AMASI_WHATSAPP_ORDER_STAGE_ENABLED","0")
-    if mode=="0":
+    stage_mode=os.environ.get("AMASI_WHATSAPP_ORDER_STAGE_ENABLED","0")
+    catalog_mode=os.environ.get("AMASI_WHATSAPP_CATALOG_ENABLED","0")
+    if stage_mode=="0" and catalog_mode=="0":
         return False
-    if mode!="1":
-        raise RuntimeError("invalid_whatsapp_stage_flag")
-    fields={
-        name:os.environ.get(name,"")
-        for name in (
-            "AMASI_WHATSAPP_STAGE_OWNER_ID",
-            "AMASI_WHATSAPP_STAGE_KEY_ID",
-            "AMASI_WHATSAPP_STAGE_KEY_HEX",
-            "AMASI_CHATWOOT_HOST",
-            "AMASI_CHATWOOT_BOT_TOKEN",
-            "MONGO_URL",
-            "DB_NAME",
-        )
-    }
+    if stage_mode not in ("0","1") or catalog_mode not in ("0","1"):
+        raise RuntimeError("invalid_whatsapp_readonly_flag")
+    stage_on=stage_mode=="1"
+    catalog_on=catalog_mode=="1" or stage_on
+    names=[
+        "AMASI_WHATSAPP_STAGE_OWNER_ID",
+        "AMASI_WHATSAPP_STAGE_KEY_ID",
+        "AMASI_WHATSAPP_STAGE_KEY_HEX",
+        "MONGO_URL",
+        "DB_NAME",
+    ]
+    if stage_on:
+        names.extend(("AMASI_CHATWOOT_HOST","AMASI_CHATWOOT_BOT_TOKEN"))
+    fields={name:os.environ.get(name,"") for name in names}
     if any(not val for val in fields.values()):
-        raise RuntimeError("missing_whatsapp_stage_configuration")
+        raise RuntimeError("missing_whatsapp_readonly_configuration")
     try:
         key=bytes.fromhex(fields["AMASI_WHATSAPP_STAGE_KEY_HEX"])
     except ValueError:
         raise RuntimeError("invalid_whatsapp_stage_key") from None
     if len(key)<32 or len(key)>128:
         raise RuntimeError("invalid_whatsapp_stage_key")
-
-    host=fields["AMASI_CHATWOOT_HOST"]
-    reader=ChatwootVerifiedSenderReader(
-        base_url="https://"+host,approved_hostname=host,
-        agentbot_token=fields["AMASI_CHATWOOT_BOT_TOKEN"])
+    active_keys={fields["AMASI_WHATSAPP_STAGE_KEY_ID"]:key}
     nonce=MongoNonceClaim(fields["MONGO_URL"],fields["DB_NAME"])
     limit=MongoAssistantRateLimit(fields["MONGO_URL"],fields["DB_NAME"])
-    router=make_whatsapp_stage_router(
-        repository=MongoOrderRepository(db),
-        fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
-        active_keys={fields["AMASI_WHATSAPP_STAGE_KEY_ID"]:key},
-        claim_nonce=nonce,
-        rate_limit=limit,
-        resolve_verified_sender=reader,
-        source_freshness=_fresh_salla_source)
-    api_router.include_router(router)
-    api_router.include_router(make_whatsapp_catalog_router(
-        db=db,
-        fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
-        active_keys={fields["AMASI_WHATSAPP_STAGE_KEY_ID"]:key},
-        claim_nonce=nonce,
-        rate_limit=limit,
-    ))
+    if catalog_on:
+        api_router.include_router(make_whatsapp_catalog_router(
+            db=db,
+            fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
+            active_keys=active_keys,
+            claim_nonce=nonce,
+            rate_limit=limit,
+        ))
+    if stage_on:
+        host=fields["AMASI_CHATWOOT_HOST"]
+        reader=ChatwootVerifiedSenderReader(
+            base_url="https://"+host,approved_hostname=host,
+            agentbot_token=fields["AMASI_CHATWOOT_BOT_TOKEN"])
+        router=make_whatsapp_stage_router(
+            repository=MongoOrderRepository(db),
+            fixed_owner_id=fields["AMASI_WHATSAPP_STAGE_OWNER_ID"],
+            active_keys=active_keys,
+            claim_nonce=nonce,
+            rate_limit=limit,
+            resolve_verified_sender=reader,
+            source_freshness=_fresh_salla_source,
+        )
+        api_router.include_router(router)
     return True
