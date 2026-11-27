@@ -10,6 +10,10 @@ from salla_order_creation.bank_receipt_review import ReceiptVisibleFields
 from salla_order_creation.bank_receipt_stage import (
     stage_bank_receipt, BankReceiptStageDenied,
 )
+from salla_order_creation.bank_receipt_retention import (
+    EVIDENCE_TTL_NAME, REF_TTL_NAME, BankReceiptRetentionDenied,
+    require_bank_receipt_retention, install_bank_receipt_retention,
+)
 
 NOW=datetime(2026,11,27,14,0,tzinfo=timezone.utc)
 SECRET=b"synthetic-bank-reference-hmac-key-for-offline-tests-0001"
@@ -17,8 +21,22 @@ IBAN="SA0380000000608010167519"
 
 
 class Rows:
-    def __init__(self):
+    def __init__(self,ttl_name=None):
         self.rows=[]
+        self.created=[]
+        self.indexes=({
+            ttl_name:{"key":[("purge_after",1)],"expireAfterSeconds":0}
+        } if ttl_name else {})
+
+    async def index_information(self):
+        return self.indexes
+
+    async def create_index(self,keys,**kwargs):
+        self.created.append((list(keys),kwargs))
+        self.indexes[kwargs["name"]]={
+            "key":list(keys),"expireAfterSeconds":kwargs["expireAfterSeconds"]
+        }
+        return kwargs["name"]
 
     async def insert_one(self,record):
         if any(item["_id"]==record["_id"] for item in self.rows):
@@ -33,9 +51,13 @@ class Rows:
 
 
 class DB:
-    def __init__(self):
-        self.salla_ai_bank_receipt_refs=Rows()
-        self.salla_ai_bank_receipt_evidence=Rows()
+    def __init__(self,ttl=True):
+        self.salla_ai_bank_receipt_refs=Rows(
+            REF_TTL_NAME if ttl else None
+        )
+        self.salla_ai_bank_receipt_evidence=Rows(
+            EVIDENCE_TTL_NAME if ttl else None
+        )
 
 
 async def bank_reader(db,owner,bank_id):
@@ -149,3 +171,31 @@ def test_no_customer_receipt_credibility_claim_ever_confirms_money():
         assert check.get("paid") is not True
         assert check.get("credit_received") is not True
         assert check.get("bank_credit_confirmed") is not True
+
+
+
+def test_bank_receipt_cannot_stage_without_both_actual_ttl_indexes():
+    db=DB(ttl=False)
+    with pytest.raises(BankReceiptRetentionDenied):
+        stage(db)
+    assert db.salla_ai_bank_receipt_refs.rows==[]
+    assert db.salla_ai_bank_receipt_evidence.rows==[]
+
+
+def test_owner_only_explicit_retention_migration_helper():
+    db=DB(ttl=False)
+    indexes=asyncio.run(install_bank_receipt_retention(db))
+    assert indexes["evidence_index"]==EVIDENCE_TTL_NAME
+    assert indexes["reference_index"]==REF_TTL_NAME
+    _,out=stage(db)
+    assert out["state"]=="appearance_plausible"
+    assert db.salla_ai_bank_receipt_refs.rows[0]["purge_after"]>NOW
+
+
+def test_bank_evidence_and_replay_fence_have_distinct_ttls():
+    db,out=stage()
+    evidence=db.salla_ai_bank_receipt_evidence.rows[0]
+    replay=db.salla_ai_bank_receipt_refs.rows[0]
+    assert evidence["purge_after"]==NOW+timedelta(days=7)
+    assert replay["purge_after"]==NOW+timedelta(days=30)
+    assert replay["purge_after"]>evidence["purge_after"]
