@@ -63,7 +63,10 @@ def tree_hash(path: Path) -> tuple[str, int]:
         paths = sorted(path.rglob("*"), key=lambda p: p.relative_to(path).as_posix())
         base = path
     for item in paths:
-        rel = item.relative_to(base).as_posix()
+        # A standalone artifact is content-addressed, independent of its
+        # temporary basename (e.g. .release_identity.json.v5-new-XXXX).
+        # Directory entries retain their relative paths to detect tree drift.
+        rel = "." if path.is_file() else item.relative_to(base).as_posix()
         mode = item.lstat().st_mode
         if stat.S_ISLNK(mode):
             stop("symlink found inside artifact tree: " + rel)
