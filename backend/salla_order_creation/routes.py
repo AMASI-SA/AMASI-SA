@@ -109,6 +109,7 @@ def make_assisted_salla_order_router(
                 contact_id=action.source_contact_id,
                 message_id=action.source_message_id,
                 attachment_id=action.source_attachment_id,
+                source_kind=action.source_kind,
                 source_id_sha256=action.source_id_sha256,
                 selected_bank_id=action.selected_bank_id,
                 visible=action.visible,reference_secret=reference_secret,
