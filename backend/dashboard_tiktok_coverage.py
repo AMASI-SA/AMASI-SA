@@ -1,5 +1,6 @@
 """Pure TikTok advertiser/day coverage; missing accounts are not zero spend."""
 from __future__ import annotations
+from collections import Counter
 from datetime import date
 from typing import Any
 
@@ -44,9 +45,10 @@ def tiktok_reporting_coverage(
     expected = len(unique_ids) * num_days
     valid_pairs = observed_pairs - invalid_pairs - duplicate_pairs
     covered_accounts = {key[0] for key in valid_pairs}
+    covered_day_counts = Counter(account_id for account_id, _ in valid_pairs)
     complete_accounts = {
         account_id for account_id in unique_ids
-        if sum(key[0] == account_id for key in valid_pairs) == num_days
+        if covered_day_counts[account_id] == num_days
     }
     missing_accounts = sorted(unique_ids - complete_accounts)
     covered = len(valid_pairs)
