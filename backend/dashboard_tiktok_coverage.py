@@ -39,7 +39,11 @@ def tiktok_reporting_coverage(
     expected = len(unique_ids) * num_days
     valid_pairs = observed_pairs - invalid_pairs - duplicate_pairs
     covered_accounts = {key[0] for key in valid_pairs}
-    missing_accounts = sorted(unique_ids - covered_accounts)
+    complete_accounts = {
+        account_id for account_id in unique_ids
+        if sum(key[0] == account_id for key in valid_pairs) == num_days
+    }
+    missing_accounts = sorted(unique_ids - complete_accounts)
     covered = len(valid_pairs)
     complete = (
         len(unique_ids) == len(account_ids)
