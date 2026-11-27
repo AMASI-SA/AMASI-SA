@@ -34,7 +34,10 @@ from .reference_reconciliation import ReferenceUnverified, recover_salla_referen
 from .bank_receipt_action import verify_bank_receipt_action
 from .bank_receipt_stage import stage_bank_receipt, BankReceiptStageDenied
 from .bank_review_readback import read_synced_bank_review
-from .bank_status_guard import BankStatusDenied, ensure_bank_review_custom_status
+from .bank_status_guard import (
+    BankStatusDenied, ensure_bank_review_custom_status,
+    exact_active_review_status,
+)
 from .bank_staff_worklist import (
     BankWorklistDenied, may_read_bank_review, list_pending_bank_reviews,
 )
@@ -447,9 +450,21 @@ def make_assisted_salla_order_router(
                 raise LookupError("mezan_bank_order_not_synced") from exc
 
         try:
+            # A merchant may rename/create custom statuses after deployment:
+            # resolve the current active, unique review ID from Mezan's OWN
+            # authenticated Salla integration on each intentional staff GET.
+            # Never infer an ID from a stored slug or another app's token.
+            source = await call_salla(
+                db, owner_id, "GET", "/orders/statuses",
+            )
+            if (not isinstance(source, dict)
+                    or source.get("success") is False):
+                raise BankStatusDenied("bank_review_status_metadata_unavailable")
+            review_id = exact_active_review_status(source.get("data"))
             return await read_synced_bank_review(
                 db,user_id=owner_id,
                 intent_id=intent_id,load_order=load_current_order,
+                expected_review_customized_id=review_id,
             )
         except Exception:
             # Do not print bank identifiers or private Chatwoot content.
