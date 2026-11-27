@@ -95,6 +95,7 @@ jobs:
           tests/test_mezan_attribution_order_ledger.py
           tests/test_tiktok_hierarchy_mongo_performance.py
           tests/test_tiktok_native_reporting.py
+          tests/test_tiktok_multi_advertiser.py
           tests/test_tiktok_integrations_v2.py
           tests/test_unified_ads_manager_phase1.py
           tests/test_ads_auto_sync_tiktok.py

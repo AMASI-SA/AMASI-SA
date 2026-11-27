@@ -533,12 +533,13 @@ function PlatformPeriodSummary({ ads }) {
     return <div className="col-span-2 grid min-h-[78px] grid-cols-2 overflow-hidden rounded-xl border bg-white shadow-sm min-[1180px]:col-span-1 min-[1180px]:grid-cols-4" data-testid="advanced-platform-period-summary">
         {PLATFORM_META.map(({ key }) => {
             const row = providers[key] || {};
-            const orderCount = row.platform_reported_orders == null ? null : Number(row.platform_reported_orders || 0);
-            const average = row.platform_cost_per_order_sar == null ? null : Number(row.platform_cost_per_order_sar || 0);
+            const unverifiedTikTok = key === "tiktok" && ads?.spend_quality?.tiktok?.coverage_complete === false;
+            const orderCount = unverifiedTikTok || row.platform_reported_orders == null ? null : Number(row.platform_reported_orders || 0);
+            const average = unverifiedTikTok || row.platform_cost_per_order_sar == null ? null : Number(row.platform_cost_per_order_sar || 0);
             const provider = meta[key];
             return <div key={key} className="flex min-w-0 items-center justify-center gap-2 border-l px-2 py-2 last:border-l-0">
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${provider.tone}`}>{provider.mark}</span>
-                <div className="min-w-0 text-[9px] font-bold leading-4 text-slate-500"><p className="truncate text-slate-700">{provider.label}: <b className="num text-[11px] text-slate-950">{orderCount == null ? "—" : integer(orderCount)}</b></p><p className="break-words">متوسط: <b className="num text-[10px] text-slate-950">{average == null ? "—" : `${money(average)} ر.س`}</b></p></div>
+                <div className="min-w-0 text-[9px] font-bold leading-4 text-slate-500"><p className="truncate text-slate-700">{provider.label}: <b className="num text-[11px] text-slate-950">{unverifiedTikTok ? "غير مكتمل" : orderCount == null ? "—" : integer(orderCount)}</b></p><p className="break-words">متوسط: <b className="num text-[10px] text-slate-950">{unverifiedTikTok ? "غير مكتمل" : average == null ? "—" : `${money(average)} ر.س`}</b></p></div>
             </div>;
         })}
     </div>;
@@ -618,6 +619,12 @@ function AdsCard({ ads, unifiedShadow }) {
         </div>
         <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}><LineChart data={plotRows} margin={{ top: 6, right: 6, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 9 }} minTickGap={8} interval="preserveStartEnd" /><YAxis tick={{ fontSize: 9 }} width={38} /><Tooltip formatter={(value, name) => [`${money(value)} ر.س`, name]} labelFormatter={(value) => `الوقت: ${value}`} contentStyle={{ direction: "rtl", borderRadius: 10, fontFamily: "Cairo" }} />{PLATFORM_META.map((p) => <Line key={p.key} type="monotone" dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />)}</LineChart></ResponsiveContainer></div>
         <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => { const value = p.key === "google" ? (breakdown.google ?? breakdown.google_transitional) : breakdown[p.key]; const state = spendQuality?.[p.key]?.data_state; return <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{dashboardSpendDisplay(value, state)}</p></div>; })}</div>
+        {spendQuality?.tiktok?.coverage_complete === false && (
+            <p role="alert" data-testid="advanced-tiktok-multi-account-incomplete"
+               className="border-t border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-900">
+                بيانات تيك توك غير مكتملة: تمت تغطية {integer(spendQuality.tiktok.covered_account_days)} من {integer(spendQuality.tiktok.expected_account_days)} يوم/حساب إعلاني. إجمالي الصرف مؤقت حتى تكتمل مزامنة جميع الحسابات.
+            </p>
+        )}
         <div className="flex h-11 items-center justify-between border-t bg-amber-50 px-4 font-extrabold"><span>إجمالي المصروفات{totalProvisional && <small className="mr-1 text-[9px] text-amber-700">مؤقت حتى آخر مزامنة</small>}</span><span className="num">{chartTotal === null ? "غير مكتمل" : `${optionalMoney(chartTotal)} ر.س`}</span></div>
     </Panel>;
 }
