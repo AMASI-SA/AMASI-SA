@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - "backend/operational_provider_statement_intake.py"
+      - "backend/operational_paypal_activity_csv.py"
+      - "backend/tests/test_operational_paypal_activity_csv.py"
       - "backend/operational_provider_statement_reconciliation.py"
       - "backend/operational_provider_statement_routes.py"
       - "backend/provider_statement_access.py"
@@ -27,6 +29,6 @@ jobs:
       - name: Install parser test dependencies
         run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 python-multipart openpyxl pytest pytest-asyncio pymongo motor PyJWT bcrypt cryptography httpx python-dotenv email-validator
       - name: Compile financial intake
-        run: python -m py_compile operational_provider_statement_intake.py provider_statement_access.py operational_provider_statement_reconciliation.py operational_provider_statement_routes.py
+        run: python -m py_compile operational_paypal_activity_csv.py operational_provider_statement_intake.py provider_statement_access.py operational_provider_statement_reconciliation.py operational_provider_statement_routes.py
       - name: Original providers and Emkan review-only evidence fixtures
-        run: python -m pytest -q tests/test_operational_balance_statement_intake.py --tb=short
+        run: python -m pytest -q tests/test_operational_balance_statement_intake.py tests/test_operational_paypal_activity_csv.py --tb=short
