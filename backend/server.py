@@ -3936,7 +3936,10 @@ api.include_router(
 api.include_router(make_order_engine_router(db, current_user))
 # Assisted Salla creation is OFF by default and requires independently stored
 # authoritative quote + confirmed inbound customer message before any POST.
-api.include_router(make_assisted_salla_order_router(db, current_user))
+api.include_router(make_assisted_salla_order_router(
+    db, current_user,
+    can_read_bank_review=lambda user: "orders.manage" in _effective_perms(user),
+))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )
