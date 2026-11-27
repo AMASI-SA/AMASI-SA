@@ -1,0 +1,122 @@
+name: Freeze reviewed V5 intent from exact merged production source (isolated)
+on:
+  push:
+    branches: [ops/stage-whatsapp-v5-intent-20261128]
+    paths: [.github/workflows/freeze-merged-whatsapp-v5-intent.yml]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  generate-intent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
+      CI: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify exact merged source and previous valid intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          J="19ea1404010b9c5e5135e5dbb4b40657157ff2b1"
+          P="d4a623657fd3cb47c769095e5886b2f52dabaa3c"
+          A="8d8654815751da1eb3f1b91314f418b8f872be09"
+          git fetch --no-tags origin hotfix/prod-snap-meta-final
+          test "$(git rev-parse FETCH_HEAD)" = "$P"
+          git switch --detach "$P"
+          test "$(git rev-parse HEAD)" = "$P"
+          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse "$A^{tree}")"
+          test "$(git rev-list --parents -n 1 "$P")" = "$P 54a655ac88c1f67c280728cc723eddd069ac1741 $A"
+          git merge-base --is-ancestor "$J" "$P"
+          test "$(git show "$J:release/release-intent-v5.json" | git hash-object --stdin)" = \
+               "$(git show "$P:release/release-intent-v5.json" | git hash-object --stdin)"
+          test -z "$(git rev-list --full-history "$J..$P" -- release/release-intent-v5.json)"
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - name: Provision governed release toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Governed frozen frontend dependency install
+        run: >-
+          python scripts/frontend_release_toolchain.py exec --
+          yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Reproducible A/B production build of merged source
+        run: >-
+          MEZAN_RELEASE_BOOTSTRAP_INTENT=1
+          python scripts/frontend_release_toolchain.py exec --
+          yarn --cwd frontend build:release
+      - name: Verify exact source build and freeze reviewed intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          P="d4a623657fd3cb47c769095e5886b2f52dabaa3c"
+          J="19ea1404010b9c5e5135e5dbb4b40657157ff2b1"
+          python scripts/frontend_release_toolchain.py exec -- \
+            python scripts/verify_frontend_build.py --expected-git-sha "$P"
+          python scripts/emergent_deployment_adapter.py freeze-intent \
+            --source-git-sha "$P" \
+            --source-base-git-sha "$J" \
+            --branch hotfix/prod-snap-meta-final \
+            --output "$RUNNER_TEMP/reviewed-intent-v5.json"
+          python - "$RUNNER_TEMP/reviewed-intent-v5.json" "$P" "$J" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1]); d=json.loads(p.read_text())
+          assert d["schema_version"] == 2 and d["protocol_version"] == 5
+          assert d["source_git_sha"] == sys.argv[2]
+          assert d["source_base_git_sha"] == sys.argv[3]
+          assert d["branch"] == "hotfix/prod-snap-meta-final"
+          assert d["backend_runtime_source"]["file_count"] > 0
+          assert d["release_control_source"]["file_count"] > 0
+          assert d["runtime_identity"]["release_id"].startswith("rg5-")
+          print("MERGED_SOURCE_INTENT_VERIFIED", d["runtime_identity"]["release_id"])
+          PY
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - name: Upload exact reviewed immutable JSON blob without pushing branches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          INTENT="$RUNNER_TEMP/reviewed-intent-v5.json"
+          test -s "$INTENT"
+          BLOB="$(git hash-object "$INTENT")"
+          SHA256="$(sha256sum "$INTENT" | cut -d' ' -f1)"
+          python - "$INTENT" "$RUNNER_TEMP/blob-request.json" <<'PY'
+          import base64,json,sys
+          with open(sys.argv[1],"rb") as f: data=base64.b64encode(f.read()).decode("ascii")
+          with open(sys.argv[2],"w") as f:json.dump({"encoding":"base64","content":data},f)
+          PY
+          curl -fLsS --retry 2 -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            --data-binary "@$RUNNER_TEMP/blob-request.json" \
+            "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/blobs" \
+            -o "$RUNNER_TEMP/blob-response.json"
+          python - "$RUNNER_TEMP/blob-response.json" "$BLOB" <<'PY'
+          import json,sys
+          with open(sys.argv[1]) as f: d=json.load(f)
+          assert d.get("sha") == sys.argv[2], "reviewed blob SHA mismatch"
+          PY
+          {
+            echo "Merged source P: d4a623657fd3cb47c769095e5886b2f52dabaa3c"
+            echo "Previous intent J: 19ea1404010b9c5e5135e5dbb4b40657157ff2b1"
+            echo "REVIEWED_BLOB_SHA=$BLOB"
+            echo "REVIEWED_JSON_SHA256=$SHA256"
+            echo "No production branch change, no feature activation, no deployment."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reviewed-v5-merged-source-intent
+          path: ${{ runner.temp }}/reviewed-intent-v5.json
+          retention-days: 3
+          if-no-files-found: error
