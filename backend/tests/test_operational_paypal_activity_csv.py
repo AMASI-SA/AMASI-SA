@@ -66,3 +66,18 @@ def test_paypal_fingerprints_ignore_csv_row_order_but_hash_original_bytes():
     y = normalize_statement(csv_body([b,a]))
     assert x["fingerprint"] == y["fingerprint"]
     assert x["file_hash"] != y["file_hash"]
+
+
+def test_paypal_quoted_header_and_utf8_bom_are_accepted():
+    import csv
+    from io import StringIO
+    output = StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow(HEADER.split(","))
+    writer.writerow(["11/27/2026", "12:00:00", "GMT", "Synthetic", "Payment",
+                     "Completed", "USD", "100.00", "-3.00", "97.00",
+                     "PAYPAL-QUOTE-1", "", "private@example.test"])
+    parsed = normalize_statement(b"\\xef\\xbb\\xbf" + output.getvalue().encode("utf-8"))
+    assert parsed["provider"] == "paypal"
+    assert parsed["rows"][0]["event_reference"] == "PAYPAL-QUOTE-1"
+    assert "private@example.test" not in str(parsed)
