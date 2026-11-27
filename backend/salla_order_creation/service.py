@@ -387,5 +387,5 @@ async def create_confirmed_salla_order(
         "replayed": False, "amount_confirmed": amount_confirmed,
         "staff_review_required": pricing_mode == "salla_bank_review",
         "bank_credit_confirmed": False,
-        "checkout_url": None if pricing_mode == "salla_bank_review" else None,
+        **({"checkout_url": None} if pricing_mode == "salla_bank_review" else {}),
     }
