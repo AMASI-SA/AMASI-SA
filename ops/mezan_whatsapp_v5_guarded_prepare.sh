@@ -3,8 +3,12 @@ set -euo pipefail
 
 cd /app
 BRANCH="hotfix/prod-snap-meta-final"
-EXPECTED_A="8d8654815751da1eb3f1b91314f418b8f872be09"
+EXPECTED_ORIGINAL_A="8d8654815751da1eb3f1b91314f418b8f872be09"
+EXPECTED_SOURCE_P="d4a623657fd3cb47c769095e5886b2f52dabaa3c"
+EXPECTED_B_HEAD="6d2300d43a8a3a4ee856b4740cc514c9506fce71"
+EXPECTED_DEPLOYMENT_M="53e52767a1bf2b4efd4ec796e8c59de9425c8839"
 EXPECTED_J="19ea1404010b9c5e5135e5dbb4b40657157ff2b1"
+EXPECTED_RELEASE_ID="rg5-e039d675b02789f0164e5595e19de3b63e49ab1815970a631edd620f8d239d82"
 
 fail() { echo "RELEASE_STOP: $*" >&2; exit 2; }
 
@@ -16,75 +20,110 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" || fail "local /app
 test "${AMASI_WHATSAPP_CATALOG_ENABLED:-0}" = "0" || fail "catalog feature must be OFF"
 test "${AMASI_WHATSAPP_ORDER_STAGE_ENABLED:-0}" = "0" || fail "order stage feature must be OFF"
 
-export EXPECTED_A EXPECTED_J
+export EXPECTED_ORIGINAL_A EXPECTED_SOURCE_P EXPECTED_B_HEAD EXPECTED_DEPLOYMENT_M EXPECTED_J EXPECTED_RELEASE_ID
 python3 - <<'PY'
 import json, os, subprocess, urllib.request
 from pathlib import Path
 
-def fail(msg):
-    raise SystemExit("RELEASE_STOP: " + msg)
+def fail(message):
+    raise SystemExit("RELEASE_STOP: " + message)
+
+def git(*args):
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+def git_ok(*args):
+    return subprocess.run(["git", *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 repo = "AMASI-SA/AMASI-SA"
-a, j = os.environ["EXPECTED_A"], os.environ["EXPECTED_J"]
+a = os.environ["EXPECTED_ORIGINAL_A"]
+p = os.environ["EXPECTED_SOURCE_P"]
+b = os.environ["EXPECTED_B_HEAD"]
+m = os.environ["EXPECTED_DEPLOYMENT_M"]
+j = os.environ["EXPECTED_J"]
+release_id = os.environ["EXPECTED_RELEASE_ID"]
 
 def gh(path):
     req = urllib.request.Request(
         "https://api.github.com/repos/" + repo + "/" + path,
-        headers={"Accept":"application/vnd.github+json",
-                 "X-GitHub-Api-Version":"2022-11-28",
-                 "User-Agent":"mezan-v5-guarded-operator"})
-    with urllib.request.urlopen(req, timeout=20) as response:
+        headers={
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "mezan-v5-guarded-operator"})
+    with urllib.request.urlopen(req, timeout=25) as response:
         return json.load(response)
 
-pr = gh("pulls/2177")
-if pr.get("merged") is not True or pr.get("head",{}).get("sha") != a:
-    fail("PR #2177 not merged at reviewed A")
-runs = gh("actions/runs?head_sha=" + a + "&per_page=100")
-checks = [r for r in runs.get("workflow_runs", [])
-          if r.get("head_sha") == a and r.get("event") == "pull_request"]
-if len(checks) != 26 or any(r.get("conclusion") != "success" for r in checks):
-    fail("26 exact-head GitHub Actions checks have not all passed")
+if git("rev-parse", "HEAD") != m:
+    fail("worktree is not exact reviewed V5 merge commit")
+if git("rev-list", "--parents", "-n", "1", p).split() != [
+    p, "54a655ac88c1f67c280728cc723eddd069ac1741", a
+]:
+    fail("source P parents changed")
+if git("rev-list", "--parents", "-n", "1", m).split() != [m, p, b]:
+    fail("deployment B merge parents changed")
+if git("rev-parse", p + "^{tree}") != git("rev-parse", a + "^{tree}"):
+    fail("reviewed source A and merged source P differ")
+if not git_ok("merge-base", "--is-ancestor", j, p):
+    fail("previous reviewed intent J is not ancestor of source P")
+if not git_ok("merge-base", "--is-ancestor", b, m):
+    fail("reviewed intent B is not ancestor of deployment M")
+if git("diff", "--name-only", p, m) != "release/release-intent-v5.json":
+    fail("deployment contains changes other than reviewed V5 intent")
 
-intent = json.loads(Path("release/release-intent-v5.json").read_text())
-if not (intent.get("schema_version") == 2
-        and intent.get("protocol_version") == 5
-        and intent.get("source_git_sha") == a
-        and intent.get("source_base_git_sha") == j
-        and intent.get("branch") == "hotfix/prod-snap-meta-final"):
-    fail("production intent-only B is missing or mismatched")
+for number, expected_head in ((2177, a), (2186, b)):
+    pr = gh("pulls/" + str(number))
+    if not pr.get("merged") or pr.get("head", {}).get("sha") != expected_head:
+        fail("PR " + str(number) + " not merged at approved head")
+if gh("pulls/2186").get("merge_commit_sha") != m:
+    fail("PR #2186 merge commit differs from intended V5 deployment")
 
-def git_ok(*args):
-    return subprocess.run(["git", *args], check=False,
-                          stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL).returncode == 0
+def workflow_runs(sha):
+    return [
+        run for run in gh("actions/runs?head_sha=" + sha + "&per_page=100").get("workflow_runs", [])
+        if run.get("head_sha") == sha
+    ]
 
-if not git_ok("merge-base", "--is-ancestor", j, a):
-    fail("reviewed base J is not an ancestor of A")
-if not git_ok("merge-base", "--is-ancestor", a, "HEAD"):
-    fail("reviewed source A is not an ancestor of B")
-if not git_ok("diff", "--quiet", a, "HEAD", "--", ".", ":(exclude)release/release-intent-v5.json"):
-    fail("runtime or release-control changes exist after reviewed source A")
-if git_ok("diff", "--quiet", a, "HEAD", "--", "release/release-intent-v5.json"):
-    fail("intent-only B commit has not been produced")
+source_runs = [r for r in workflow_runs(a) if r.get("event") == "pull_request"]
+if len(source_runs) != 26 or any(r.get("conclusion") != "success" for r in source_runs):
+    fail("original 26 WhatsApp source tests are not all green")
 
-# Deployment commit B also needs full protected release CI and host rehearsals.
-b = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-b_runs = gh("actions/runs?head_sha=" + b + "&per_page=100")
-b_success = {r.get("name"): r for r in b_runs.get("workflow_runs", [])
-             if r.get("head_sha") == b and r.get("conclusion") == "success"}
-required = {"Mezan Release Readiness", "CodeQL", "Security Gate"}
-if not required.issubset(b_success):
-    fail("final protected deployment commit B has not passed Release Readiness, CodeQL and Security Gate")
-release_id = b_success["Mezan Release Readiness"]["id"]
-release_jobs = gh("actions/runs/" + str(release_id) + "/jobs?per_page=100").get("jobs", [])
+b_runs = [r for r in workflow_runs(b) if r.get("event") == "pull_request"]
+if len(b_runs) != 8:
+    fail("reviewed B workflow count differs")
+expected = {
+    "Mezan Release Readiness", "Security Gate", "CodeQL",
+    "Operational Balance Web", "Qoyod Payment Freshness",
+    "Snapchat Direct Active Publication", "Snapchat Settings Management V2",
+}
+for name in expected:
+    if not any(r["name"] == name and r.get("conclusion") == "success" for r in b_runs):
+        fail("required B workflow not green: " + name)
+if not any(r["name"] == "TikTok Creator Release Candidate" and r.get("conclusion") == "skipped" for r in b_runs):
+    fail("unexpected B workflow disposition")
+
+push_runs = [r for r in workflow_runs(m) if r.get("event") == "push"]
+for name in ("Mezan Release Readiness", "Security Gate", "CodeQL"):
+    if not any(r["name"] == name and r.get("conclusion") == "success" for r in push_runs):
+        fail("production merge push gate not green: " + name)
+
+readiness = next(r for r in b_runs if r["name"] == "Mezan Release Readiness")
+jobs = gh("actions/runs/" + str(readiness["id"]) + "/jobs?per_page=100")["jobs"]
 for node in ("20.20.2", "24.19.0"):
-    if not any("Emergent Host Node " + node in job.get("name","")
-               and "clean-clone adapter rehearsal" in job.get("name","")
-               and job.get("conclusion") == "success" for job in release_jobs):
-        fail("reviewed V5 clean-clone host rehearsal " + node + " has not passed")
-print("REVIEWED_A_B_AND_CI_PASS")
-PY
+    name = "Emergent Host Node " + node + " clean-clone adapter rehearsal"
+    if not any(job.get("name") == name and job.get("conclusion") == "success" for job in jobs):
+        fail("reviewed Node rehearsal not green: " + node)
 
+intent = json.loads(Path("release/release-intent-v5.json").read_text(encoding="utf-8"))
+if not (
+    intent.get("schema_version") == 2 and
+    intent.get("protocol_version") == 5 and
+    intent.get("source_git_sha") == p and
+    intent.get("source_base_git_sha") == j and
+    intent.get("branch") == "hotfix/prod-snap-meta-final" and
+    intent.get("runtime_identity", {}).get("release_id") == release_id
+):
+    fail("reviewed V5 release identity or source binding differs")
+print("REVIEWED_V5_SOURCE_INTENT_CI_PASS")
+PY
 STATUS_JSON="$(python3 -B scripts/production_release_guard.py status)"
 export STATUS_JSON
 python3 - <<'PY'
