@@ -1,0 +1,65 @@
+name: Verify V5 artifact handoff operator (no deploy)
+on:
+  push:
+    branches: [ops/whatsapp-v5-guarded-prepare-20261128]
+    paths:
+      - ops/mezan_v5_promote_verified_artifacts.py
+      - .github/workflows/verify-v5-artifact-handoff-operator.yml
+permissions:
+  contents: read
+jobs:
+  verify-operator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile and check isolated backup helpers without touching /app
+        run: |
+          python -B -m py_compile ops/mezan_v5_promote_verified_artifacts.py
+          python -B - <<'PY'
+          import ast
+          import importlib.util
+          from pathlib import Path
+          import tempfile, shutil, os
+
+          file = Path('ops/mezan_v5_promote_verified_artifacts.py')
+          source = file.read_text()
+          tree = ast.parse(source)
+          spec=importlib.util.spec_from_file_location('v5_handoff', str(file))
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          assert module.DEPLOY_SHA == '53e52767a1bf2b4efd4ec796e8c59de9425c8839'
+          assert module.SOURCE_SHA == 'd4a623657fd3cb47c769095e5886b2f52dabaa3c'
+          assert module.RELEASE_ID == 'rg5-e039d675b02789f0164e5595e19de3b63e49ab1815970a631edd620f8d239d82'
+          assert set(dict(module.RECORDS)) == {'frontend/build','frontend/.release','backend/release_identity.json'}
+          assert 'production_release_guard.py", "prepare"' not in source
+          assert 'git reset' not in source and 'git clean' not in source
+          with tempfile.TemporaryDirectory() as d:
+              p=Path(d)
+              original=p/'original'
+              copy=p/'copy'
+              (original/'nested').mkdir(parents=True)
+              (original/'nested'/'a.json').write_text('{"test":1}')
+              (original/'b.txt').write_text('bytes')
+              shutil.copytree(original,copy)
+              assert module.tree_hash(original) == module.tree_hash(copy)
+              (copy/'b.txt').write_text('changed')
+              assert module.tree_hash(original) != module.tree_hash(copy)
+              os.symlink(original/'b.txt', copy/'a-link')
+              try:
+                  module.tree_hash(copy)
+              except RuntimeError as exc:
+                  assert 'symlink' in str(exc).lower()
+              else:
+                  raise AssertionError('symlinks should fail closed')
+              module.safe_remove(copy/'a-link')
+              assert (original/'b.txt').is_file()
+              module.safe_remove(copy)
+              assert original.is_dir() and not copy.exists()
+          print('SAFE_V5_OPERATOR_STATIC_AND_HELPER_TESTS_PASS')
+          PY
