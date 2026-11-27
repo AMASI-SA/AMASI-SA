@@ -117,6 +117,22 @@ def explicitly_unpaid_salla_order(order: Any) -> bool:
         return False
     if order.get("payment_status") in ("paid", "partial", "refunded"):
         return False
+    # The 2026 Salla order detail schema also exposes payment_methods
+    # transactions independently from remaining_action.paid_amount. If any
+    # method has a positive paid portion, the order is NOT fully unpaid.
+    methods = order.get("payment_methods")
+    if methods is not None:
+        if not isinstance(methods, list) or len(methods) > 25:
+            return False
+        for row in methods:
+            if not isinstance(row, dict) or type(row.get("amount")) is bool:
+                return False
+            try:
+                fraction = Decimal(str(row.get("amount")))
+            except (InvalidOperation, TypeError, ValueError):
+                return False
+            if not fraction.is_finite() or fraction != Decimal("0"):
+                return False
     sources = []
     if order.get("paid_amount") is not None:
         sources.append(order["paid_amount"])
