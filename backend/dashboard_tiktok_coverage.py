@@ -27,6 +27,11 @@ def tiktok_reporting_coverage(
             and row.get("spend_sar") is not None
             and bool(row.get("currency_native"))
             and bool(row.get("account_timezone"))
+            and proof.get("complete") is True
+            and proof.get("complete_response") is True
+            and proof.get("explicit_spend_present") is True
+            and proof.get("account_id") == account
+            and proof.get("business_date") == report_day
             and (
                 row.get("spend_native") != 0
                 or proof.get("zero_confirmed") is True
