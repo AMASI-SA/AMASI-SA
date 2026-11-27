@@ -411,3 +411,29 @@ def test_conflicting_explicit_top_and_nested_paid_amount_is_denied():
     }
     with pytest.raises(BankStatusDenied):
         run(source=source)
+
+
+
+@pytest.mark.parametrize("methods", [
+    [{"amount":"1.00","payment_method":"bank"}],
+    [{"amount":"0.00","payment_method":"bank"},
+     {"amount":"5.00","payment_method":"credit_card"}],
+    [{"amount":"NaN","payment_method":"bank"}],
+    [{"amount":None,"payment_method":"bank"}],
+    [{"amount":False,"payment_method":"bank"}],
+    "untrusted",
+])
+def test_any_partial_payment_method_disallows_return_to_bank_review(methods):
+    source=order()
+    source["payment_methods"]=methods
+    with pytest.raises(BankStatusDenied):
+        run(source=source)
+
+
+def test_explicit_zero_payment_methods_and_zero_sar_total_remain_unpaid():
+    source=order()
+    source["payment_methods"]=[{"amount":"0.00","payment_method":"bank"}]
+    db,result,calls=run(source=source)
+    assert result["state"]=="confirmed_under_review"
+    assert result["bank_credit_confirmed"] is False
+    assert [method for method,_,_ in calls].count("POST")==1
