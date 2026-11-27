@@ -49,3 +49,13 @@ Official Salla API docs, reviewed Nov 27:
 - [ ] Define a separately authorized human bank-credit reconciliation workflow; connect Salla payment-state update and accounting ONLY after actual bank statement confirmation and audit evidence. Do not repurpose photo precheck as payment acceptance.
 - [ ] Confirm timing of receipt sent *before* an order exists, human ownership handoff, duplicate webhook/screenshot, partial/wrong amount and abnormal status cases.
 - [ ] Owner go-live approval, exact SHA traceability and rollback verification. All flags OFF until these gates pass.
+
+## 2026-11-27 — Source-backed status/receipt acceptance update
+
+New `bank_order_initial_status.py` is called from the purpose-signed Mezan Salla create endpoint only after an actual, confirmed Salla bank-only pending order ID is saved. This puts **ORDER status** `under_review` immediately, before any receipt, using the same once-only status delivery fence later used by receipt review. If the provider result is uncertain, it is a reconciliation state and cannot be blindly retried or reported as paid.
+
+**Verified final backend synthetic suite: 451/451 PASS** in [run 45917707692](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45917707692), source `5b12d59aa7a0d571c45a38f82a5e5043924f63c0`. Current commits after this source were documentation-only; React/frontend build and real Salla staging remain untested.
+
+**Parallel CSA CI improved:** [run 45918477200](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/actions/runs/45918477200) **242/242 synthetic PASS** (includes 6 new bank-private-receipt native worker tests). An opt-in native receipt handler now prevents early sensitive bank attachment from entering the general multimodal model and stores only its canonical Chatwoot message/attachment reference. If the private inspector is OFF, it must say so honestly; no image authenticity claim. This pre-order attachment is NOT yet automatically linked to the eventual Mezan bank review. See [CSA #127](https://github.com/AMASI-SA/MEZAN-CUSTOMER-SERVICE/issues/127).
+
+**Remaining human bank-credit mechanism:** [Mezan #2155](https://github.com/AMASI-SA/AMASI-SA/issues/2155) — an actual independently verified bank statement credit is required before any paid status/GL, and the old bank_transfer_review_routes.confirm is NOT a safe AI receipt-appearance action. Staff appearance triage remains human-review-only. Both bank PRs remain Draft, all flags OFF, no real customer orders/receipts/payment/WhatsApp messages, no production deploy.
