@@ -4,6 +4,9 @@ on:
     paths:
       - 'backend/order_engine/whatsapp_stage_*.py'
       - 'backend/order_engine/test_whatsapp_stage_*.py'
+      - 'backend/order_engine/whatsapp_stage_mount.py'
+      - 'backend/order_engine/whatsapp_stage_attested_route.py'
+      - 'backend/order_engine/whatsapp_stage_service_auth.py'
       - '.github/workflows/whatsapp-order-stage-boundary.yml'
   workflow_dispatch:
 jobs:
@@ -23,6 +26,7 @@ jobs:
             backend/order_engine/test_whatsapp_stage_service_auth.py \
             backend/order_engine/test_whatsapp_stage_projection.py \
             backend/order_engine/test_whatsapp_stage_route.py \
+            backend/order_engine/test_whatsapp_stage_attested_route.py \
             backend/order_engine/test_whatsapp_sender_reader.py \
             backend/order_engine/test_whatsapp_stage_mount.py \
             backend/order_engine/test_whatsapp_catalog_route.py
