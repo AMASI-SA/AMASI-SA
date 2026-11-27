@@ -1,7 +1,8 @@
 """Purpose-limited signed Chatwoot bank-transfer receipt screening request.
 
-The sender must verify the *current* public customer image message and exact
-attachment with Chatwoot's native guarded API. OCR/vision fields are UNTRUSTED
+The sender must verify the *current* public customer text, image or file
+message with Chatwoot's native guarded API. Image/file attachments have
+original scoped IDs; text-only claims use attachment ID zero. All fields are UNTRUSTED
 candidates only. This action cannot mark paid, verify bank credit, post a
 Salla order or tell an accounting/fulfillment workflow to proceed.
 """
