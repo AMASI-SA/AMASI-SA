@@ -43,6 +43,8 @@ def order(**change):
     obj=Obj(
         order_id="90001",order_number="302076044",
         status="under_review",status_native="بإنتظار المراجعة",
+        status_customized_id=780246489,
+        status_customized_name="بإنتظار المراجعة",
         payment=Obj(method="bank",method_native="bank",
                     status="pending_payment",collection_status="unpaid",
                     paid_amount=0.0),
@@ -61,7 +63,7 @@ def check(db=None,existing=None,missing=False):
         return order() if existing is None else existing
     return asyncio.run(read_synced_bank_review(
         db or DB(),user_id="owner",intent_id="intent-0001",
-        load_order=load,
+        load_order=load,expected_review_customized_id=780246489,
     ))
 
 
@@ -156,9 +158,55 @@ def test_text_only_bank_claim_readback_exposes_kind_not_customer_text():
 def test_same_generic_under_review_slug_does_not_mistake_reviewed_for_waiting():
     # Real Salla merchant statuses "تم المراجعة" and "بإنتظار المراجعة"
     # share the same generic slug. Only the exact bank review name is safe.
-    already_reviewed=order(status="under_review",status_native="تم المراجعة")
+    already_reviewed=order(
+        status="under_review",
+        status_native="بإنتظار المراجعة",  # CANONICAL looks correct!
+        status_customized_id=1539366206,
+        status_customized_name="تم المراجعة",
+    )
     state=check(existing=already_reviewed)
     assert state["state"]=="needs_staff_reconciliation"
     assert "salla_order_not_in_review_status" in state["flags"]
     assert state["bank_credit_confirmed"] is False
     assert state["fulfillment_eligible"] is False
+
+
+
+def test_canonical_top_level_name_never_masks_wrong_customized_id():
+    # Salla may return "بإنتظار المراجعة" as the canonical name while
+    # "تم المراجعة" is the ACTUAL merchant custom child.
+    wrong=order(
+        status="under_review",
+        status_native="بإنتظار المراجعة",
+        status_customized_id=1539366206,
+        status_customized_name="تم المراجعة",
+    )
+    result=check(existing=wrong)
+    assert result["state"]=="needs_staff_reconciliation"
+    assert "salla_order_not_in_review_status" in result["flags"]
+    assert result["paid"] is False
+
+
+def test_missing_synced_customized_status_identity_is_fail_closed():
+    for broken in (
+        order(status_customized_id=None),
+        order(status_customized_name=None),
+        order(status_customized_id=780246489,status_customized_name="تم المراجعة"),
+        order(status_customized_id=1539366206,status_customized_name="بإنتظار المراجعة"),
+    ):
+        result=check(existing=broken)
+        assert result["state"]=="needs_staff_reconciliation"
+        assert "salla_order_not_in_review_status" in result["flags"]
+        assert result["bank_credit_confirmed"] is False
+
+
+def test_no_live_merchant_customized_status_id_cannot_mark_review_ready():
+    async def load(owner,reference):
+        return order()
+    result=asyncio.run(read_synced_bank_review(
+        DB(),user_id="owner",intent_id="intent-0001",load_order=load,
+        expected_review_customized_id=None,
+    ))
+    assert result["state"]=="needs_staff_reconciliation"
+    assert "salla_order_not_in_review_status" in result["flags"]
+    assert result["paid"] is False
