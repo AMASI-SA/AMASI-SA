@@ -100,6 +100,14 @@ async def refresh_tiktok_authorized_accounts(
     }
     if set(profiles) != set(ids):
         raise TikTokAccountRefreshError("tiktok_discovery_account_list_mismatch")
+    if any(
+        not str(profiles[account_id].get("currency") or "").strip()
+        or not str(profiles[account_id].get("timezone") or "").strip()
+        for account_id in ids
+    ):
+        # advertiser/info may omit entries on partial responses. Do not mark
+        # a missing account profile as usable and fabricate its currency/zone.
+        raise TikTokAccountRefreshError("tiktok_discovery_account_profile_incomplete")
     accounts = db.mezan_integration_accounts_v2
     for account_id in ids:
         details_row = profiles[account_id]
