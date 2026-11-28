@@ -84,6 +84,15 @@ RUN_PROJECTION = {
 }
 
 
+def _run_projection(dates):
+    # Project only the requested (maximum seven) ISO dates and safe counters;
+    # never pull arbitrary nested provider data into this owner diagnostic.
+    return {**RUN_PROJECTION,
+            **{f"coverage.{level}.daily_observations.{day}.{field}": 1
+               for level in ("ad_squad", "ad") for day in dates
+               for field in ("report_date", "status", "expected_parents", "completed_parents", "rows_received")}}
+
+
 def _problem(code: str, status: int = 422) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code})
 
@@ -160,6 +169,30 @@ def _public_run(run):
             field: value[:128] if isinstance(value, str) else value
             for field, value in result["coverage"][level].items()
         }
+        observations = coverage.get("daily_observations")
+        if level in ("ad_squad", "ad") and isinstance(observations, dict):
+            clean = []
+            for key, row in list(observations.items())[:MAX_DAYS]:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    day = date.fromisoformat(row.get("report_date", "")).isoformat()
+                except (TypeError, ValueError):
+                    continue
+                if day != key:
+                    continue
+                status = row.get("status")
+                counts = (row.get("expected_parents"), row.get("completed_parents"), row.get("rows_received"))
+                if (status not in {"complete", "partial", "not_started"}
+                        or any(type(value) is not int or value < 0 for value in counts)
+                        or counts[0] == 0 or counts[1] > counts[0]
+                        or (status == "complete" and counts[1] != counts[0])
+                        or (status == "not_started" and (counts[1] != 0 or counts[2] != 0))):
+                    continue
+                clean.append({"report_date": day, "status": status,
+                    "expected_parents": counts[0], "completed_parents": counts[1],
+                    "rows_received": counts[2]})
+            result["coverage"][level]["daily_observations"] = clean
     return result
 
 
@@ -363,12 +396,12 @@ async def _diagnose(db, user_id, account_id, date_from, date_to):
     run_limit = len(run_ids) > MAX_PRODUCING_RUNS
     runs, runs_truncated = await _find_rows(db, SNAPCHAT_SYNC_RUNS_COLLECTION, {
         **scope, "sync_run_id": {"$in": run_ids[:MAX_PRODUCING_RUNS]},
-    }, RUN_PROJECTION, MAX_PRODUCING_RUNS)
+    }, _run_projection(dates), MAX_PRODUCING_RUNS)
     run_map = {row["sync_run_id"]: row for row in runs}
     recent, _ = await _find_rows(db, SNAPCHAT_SYNC_RUNS_COLLECTION, {
         **scope, "request_window.date_from": {"$lte": dates[-1]},
         "request_window.date_to": {"$gte": dates[0]},
-    }, RUN_PROJECTION, MAX_RECENT_RUNS, sort=[("started_at", -1)])
+    }, _run_projection(dates), MAX_RECENT_RUNS, sort=[("started_at", -1)])
     identities, _ = await _aggregate_rows(db, SNAPCHAT_ENTITY_FACTS_COLLECTION, [
         {"$match": {**scope, "active": True, "entity_type": {"$in": list(LEVELS)}}},
         {"$group": {"_id": "$entity_type", "count": {"$sum": 1}}}, {"$limit": len(LEVELS)},
