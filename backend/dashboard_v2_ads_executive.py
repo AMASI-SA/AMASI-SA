@@ -148,13 +148,19 @@ def build_salla_ads_executive_breakdown(
 
     for provider in PROVIDER_ORDER:
         spend_key = "google_transitional" if provider == "google" else provider
-        raw_spend = (ads.get("breakdown") or {}).get(spend_key)
+        provider_metrics = (ads.get("providers") or {}).get(provider) or {}
+        # TikTok breakdown is the verified *known subtotal*, not a full
+        # portfolio amount when an advertiser/day lacks source evidence.
+        # Do not turn missing coverage into zero, CPA or ROAS.
+        tiktok_unknown = (
+            provider == "tiktok" and provider_metrics.get("coverage_complete") is False
+        )
+        raw_spend = None if tiktok_unknown else (ads.get("breakdown") or {}).get(spend_key)
         parsed_spend = _optional_nonnegative(raw_spend)
         spend = round(parsed_spend, 2) if parsed_spend is not None else None
         if spend is None:
             spend_complete = False
             total_cpa_complete = False
-        provider_metrics = (ads.get("providers") or {}).get(provider) or {}
         snapchat_metrics_unknown = (provider == "snapchat"
             and provider_metrics.get("platform_reported_metrics_complete") is False)
         if snapchat_metrics_unknown:
@@ -198,7 +204,7 @@ def build_salla_ads_executive_breakdown(
             "spend_sar": spend,
             "data_state": provider_metrics.get("data_state"),
             "coverage_complete": provider_metrics.get("coverage_complete"),
-            "amount_complete": provider_metrics.get("amount_complete"),
+            "amount_complete": False if tiktok_unknown else provider_metrics.get("amount_complete"),
             "salla_orders": salla_orders,
             "salla_sales_sar": salla_sales,
             "known_salla_sales_sar": known_salla_sales,
@@ -344,13 +350,19 @@ async def build_salla_ads_executive_breakdown_cooperative(
 
     for provider in PROVIDER_ORDER:
         spend_key = "google_transitional" if provider == "google" else provider
-        raw_spend = (ads.get("breakdown") or {}).get(spend_key)
+        provider_metrics = (ads.get("providers") or {}).get(provider) or {}
+        # TikTok breakdown is the verified *known subtotal*, not a full
+        # portfolio amount when an advertiser/day lacks source evidence.
+        # Do not turn missing coverage into zero, CPA or ROAS.
+        tiktok_unknown = (
+            provider == "tiktok" and provider_metrics.get("coverage_complete") is False
+        )
+        raw_spend = None if tiktok_unknown else (ads.get("breakdown") or {}).get(spend_key)
         parsed_spend = _optional_nonnegative(raw_spend)
         spend = round(parsed_spend, 2) if parsed_spend is not None else None
         if spend is None:
             spend_complete = False
             total_cpa_complete = False
-        provider_metrics = (ads.get("providers") or {}).get(provider) or {}
         snapchat_metrics_unknown = (provider == "snapchat"
             and provider_metrics.get("platform_reported_metrics_complete") is False)
         if snapchat_metrics_unknown:
@@ -394,7 +406,7 @@ async def build_salla_ads_executive_breakdown_cooperative(
             "spend_sar": spend,
             "data_state": provider_metrics.get("data_state"),
             "coverage_complete": provider_metrics.get("coverage_complete"),
-            "amount_complete": provider_metrics.get("amount_complete"),
+            "amount_complete": False if tiktok_unknown else provider_metrics.get("amount_complete"),
             "salla_orders": salla_orders,
             "salla_sales_sar": salla_sales,
             "known_salla_sales_sar": known_salla_sales,
