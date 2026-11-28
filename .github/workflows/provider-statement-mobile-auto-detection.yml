@@ -1,0 +1,42 @@
+name: Mobile statement auto-detection (no publish)
+on:
+  pull_request:
+    paths:
+      - "backend/operational_provider_statement_routes.py"
+      - "backend/tests/test_provider_statement_auto_detection.py"
+      - ".github/workflows/provider-statement-mobile-auto-detection.yml"
+permissions:
+  contents: read
+jobs:
+  auto-detect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend:backend/tests
+      PYTHON_DOTENV_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Synthetic HTTP test dependencies
+        run: >-
+          python -m pip install -q
+          pytest==9.1.1 pytest-asyncio==1.3.0
+          fastapi==0.142.2 pydantic==2.13.5 httpx==0.28.1
+          motor==3.7.1 pymongo==4.18.3 python-multipart==0.0.32
+          cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2
+          qrcode==8.2 bcrypt==4.1.3 PyJWT==2.15.0
+          mongomock==4.3.0 mongomock-motor==0.0.36
+          openpyxl==3.1.5 email-validator==2.3.0 python-dotenv==1.2.2
+      - name: Compile mobile statement upload API
+        run: python -m py_compile backend/operational_provider_statement_routes.py
+      - name: Recognize original source bytes, check scope and identical replay
+        run: >-
+          python -B -m pytest --noconftest -q --tb=short
+          backend/tests/test_provider_statement_auto_detection.py
+          backend/tests/test_provider_statement_employee_access.py
+          backend/tests/test_operational_balance_statement_intake.py
+          backend/tests/test_operational_paypal_activity_csv.py
