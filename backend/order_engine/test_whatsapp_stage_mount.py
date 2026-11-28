@@ -90,6 +90,56 @@ class MountTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"missing_whatsapp_readonly_configuration"):
                 mount_if_enabled(APIRouter(),object())
 
+
+    def test_attested_mode_independent_without_chatwoot_outbound(self):
+        env={
+            "AMASI_WHATSAPP_ORDER_STAGE_ENABLED":"0",
+            "AMASI_WHATSAPP_CATALOG_ENABLED":"0",
+            "AMASI_WHATSAPP_ORDER_STAGE_ATTESTED_ENABLED":"1",
+            "AMASI_WHATSAPP_STAGE_OWNER_ID":"owner_test",
+            "AMASI_WHATSAPP_STAGE_KEY_ID":"key1",
+            "AMASI_WHATSAPP_STAGE_KEY_HEX":"ab"*32,
+            "MONGO_URL":"mongodb://example.invalid:27017",
+            "DB_NAME":"test",
+        }
+        with patch.dict(os.environ,env,clear=True), \
+             patch("backend.order_engine.whatsapp_stage_mount.MongoNonceClaim"), \
+             patch("backend.order_engine.whatsapp_stage_mount.MongoAssistantRateLimit"), \
+             patch("backend.order_engine.whatsapp_stage_mount.ChatwootVerifiedSenderReader") as reader, \
+             patch("backend.order_engine.whatsapp_stage_mount.MongoOrderRepository"):
+            router=APIRouter(prefix="/api")
+            self.assertTrue(mount_if_enabled(router,object()))
+            app=FastAPI()
+            app.include_router(router)
+            paths=set(app.openapi()["paths"])
+            self.assertIn("/api/internal/whatsapp/order-stage/attested-read",paths)
+            self.assertNotIn("/api/internal/whatsapp/order-stage/read",paths)
+            self.assertNotIn("/api/internal/whatsapp/catalog/read",paths)
+            with TestClient(app) as client:
+                self.assertEqual(client.post(
+                    "/api/internal/whatsapp/order-stage/attested-read",
+                    json={},
+                ).status_code,401)
+            reader.assert_not_called()
+
+    def test_attested_and_reverse_modes_are_mutually_exclusive(self):
+        with patch.dict(os.environ,{
+            "AMASI_WHATSAPP_ORDER_STAGE_ENABLED":"1",
+            "AMASI_WHATSAPP_CATALOG_ENABLED":"0",
+            "AMASI_WHATSAPP_ORDER_STAGE_ATTESTED_ENABLED":"1",
+        },clear=True):
+            with self.assertRaisesRegex(RuntimeError,"conflicting_whatsapp_stage_modes"):
+                mount_if_enabled(APIRouter(),object())
+
+    def test_attested_flag_invalid_is_fail_closed(self):
+        with patch.dict(os.environ,{
+            "AMASI_WHATSAPP_ORDER_STAGE_ENABLED":"0",
+            "AMASI_WHATSAPP_CATALOG_ENABLED":"0",
+            "AMASI_WHATSAPP_ORDER_STAGE_ATTESTED_ENABLED":"yes",
+        },clear=True):
+            with self.assertRaisesRegex(RuntimeError,"invalid_whatsapp_readonly_flag"):
+                mount_if_enabled(APIRouter(),object())
+
     def test_source_freshness_is_independent_of_local_engine_updated_at(self):
         now=datetime.now(timezone.utc)
         source=lambda ts:SimpleNamespace(source=SimpleNamespace(fetched_at=ts))
