@@ -39,6 +39,12 @@ def fact(amount, *, day=DAY, account_id=ACCOUNT, **extra):
         "spend_native": amount,
         "spend_sar": amount,
         "currency_native": "SAR",
+        "account_timezone": "Asia/Riyadh",
+        "source_close_proof": {
+            "complete": True, "complete_response": True,
+            "explicit_spend_present": True, "account_id": account_id,
+            "business_date": day, "zero_confirmed": amount == 0,
+        },
         **extra,
     }
 
@@ -251,3 +257,72 @@ async def test_direct_tiktok_read_never_reads_make_collections(monkeypatch):
     canonical, shown = await both(db)
 
     assert shown["total_sar"] == canonical["total"] == 35.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("facts", [
+    [fact(25.0, source_close_proof=None)],
+    [fact(25.0), fact(25.0)],
+    [fact(0.0, source_close_proof={"complete": True, "complete_response": True,
+        "explicit_spend_present": True, "account_id": ACCOUNT, "business_date": DAY})],
+])
+async def test_unverified_or_duplicate_tiktok_fact_never_becomes_complete_on_either_surface(facts):
+    canonical, shown = await both(database(facts=facts))
+    assert canonical["total"] is None
+    assert shown["total_sar"] is None
+    assert canonical["spend_quality"]["tiktok"]["coverage_complete"] is False
+    assert shown["providers"]["tiktok"]["known_total_sar"] == 0.0
+    assert canonical["breakdown"]["tiktok"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_multi_advertiser_missing_day_keeps_only_verified_subtotal_on_both_surfaces():
+    db = database(accounts=[account(), account("second-native")],
+                  facts=[fact(25.0), fact(10.0, account_id="second-native"),
+                         fact(30.0, day=NEXT_DAY)])
+    canonical, shown = await both(db, end=NEXT_DAY)
+    assert canonical["total"] is shown["total_sar"] is None
+    assert canonical["breakdown"]["tiktok"] == shown["providers"]["tiktok"]["known_total_sar"] == 65.0
+    assert canonical["spend_quality"]["tiktok"]["missing_account_days"] == 1
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("saved_facts,known", [([], 0.0), ([fact(25.0)], 25.0)])
+async def test_executive_metrics_do_not_present_incomplete_tiktok_subtotal_as_total(saved_facts, known):
+    from dashboard_v2_ads_executive import (
+        build_salla_ads_executive_breakdown,
+        build_salla_ads_executive_breakdown_cooperative,
+    )
+    db = database(facts=saved_facts, accounts=[account(), account("second-native")])
+    canonical, shown = await both(db)
+    assert canonical["breakdown"]["tiktok"] == known
+    assert canonical["total"] is shown["total_sar"] is None
+    assert shown["provider_totals_sar"]["tiktok"] is None
+    sync_result = build_salla_ads_executive_breakdown([], canonical)
+    cooperative_result = await build_salla_ads_executive_breakdown_cooperative([], canonical)
+    assert sync_result == cooperative_result
+    result = sync_result
+    provider = result["providers"]["tiktok"]
+    assert provider["coverage_complete"] is False
+    assert provider["amount_complete"] is False
+    for key in ("spend_sar", "platform_reported_orders", "platform_cost_per_order_sar", "actual_roas"):
+        assert provider[key] is None
+    assert result["total"]["spend_sar"] is None
+    assert result["total"]["actual_roas"] is None
+    assert result["coverage"]["spend_amount_complete"] is False
+    assert result["accounting_write_reached"] is False
+    assert result["qoyod_write_reached"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("amount", [0.0, 25.0])
+async def test_executive_metrics_keep_verified_tiktok_amount_including_explicit_zero(amount):
+    from dashboard_v2_ads_executive import (
+        build_salla_ads_executive_breakdown,
+        build_salla_ads_executive_breakdown_cooperative,
+    )
+    canonical, shown = await both(database(facts=[fact(amount)]))
+    result = build_salla_ads_executive_breakdown([], canonical)
+    assert result == await build_salla_ads_executive_breakdown_cooperative([], canonical)
+    assert result["providers"]["tiktok"]["spend_sar"] == amount
+    assert result["providers"]["tiktok"]["coverage_complete"] is True
+    assert result["total"]["spend_sar"] == canonical["total"] == shown["total_sar"]
