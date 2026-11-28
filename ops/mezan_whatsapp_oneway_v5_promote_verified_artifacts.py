@@ -128,7 +128,8 @@ def ensure_app_and_clone() -> None:
         INTENT_SHA, SOURCE_SHA
     ]:
         stop("intent-only commit has unexpected parent")
-    if git("diff", "--name-only", SOURCE_SHA, DEPLOY_SHA) !=             "release/release-intent-v5.json":
+    if (git("diff", "--name-only", SOURCE_SHA, DEPLOY_SHA)
+            != "release/release-intent-v5.json"):
         stop("deployment differs from source on files other than intent")
     origin = git("remote", "get-url", "origin")
     if origin not in (
@@ -150,7 +151,12 @@ def ensure_app_and_clone() -> None:
 def verify_isolated() -> None:
     intent = json.loads((REHEARSAL / "release/release-intent-v5.json").read_text())
     identity = json.loads((REHEARSAL / "backend/release_identity.json").read_text())
-    if intent.get("schema_version") != 2 or        intent.get("source_git_sha") != SOURCE_SHA or        intent.get("source_base_git_sha") != BASE_SHA or        intent.get("branch") != BRANCH or        intent.get("runtime_identity") != identity or        identity.get("release_id") != RELEASE_ID:
+    if (intent.get("schema_version") != 2
+            or intent.get("source_git_sha") != SOURCE_SHA
+            or intent.get("source_base_git_sha") != BASE_SHA
+            or intent.get("branch") != BRANCH
+            or intent.get("runtime_identity") != identity
+            or identity.get("release_id") != RELEASE_ID):
         stop("isolated artifacts not equal to reviewed V5 intent")
     if json.loads((APP / "release/release-intent-v5.json").read_text()) != intent:
         stop("isolated intent differs from /app exact reviewed intent")
