@@ -23,6 +23,7 @@ INTENT_SHA = "ac5b459ced939e499b963f5296457de168019323"
 BASE_SHA = "53e52767a1bf2b4efd4ec796e8c59de9425c8839"
 SOURCE_SHA = "55995c02c2bdcf4ec63fe37ea3c14983244952c5"
 RELEASE_ID = "rg5-54047ecc26066c6cf00503af8e8097fafc3b22dbb963aaf5fbba8eaee23eec47"
+RECOVERY_ROOT = Path("/root/mezan-v5-recovery")
 RECORDS = (
     ("frontend/build", "directory"),
     ("frontend/.release", "directory"),
@@ -214,7 +215,7 @@ def main() -> None:
         if untracked_count != 433:
             stop(f"untracked path count differs from approved inspection ({untracked_count})")
         marker = uuid.uuid4().hex[:12]
-        recovery_root = Path("/root/mezan-v5-recovery")
+        recovery_root = RECOVERY_ROOT
         if recovery_root.is_symlink():
             stop("unsafe backup root symlink")
         recovery_root.mkdir(mode=0o700, exist_ok=True)
