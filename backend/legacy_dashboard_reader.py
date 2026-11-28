@@ -383,6 +383,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     other_payment_fees = 0.0
     bnpl_sales = other_payment_sales = cod_sales = cod_fees = 0.0
     electronic_cash_basis_complete = True
+    bnpl_cash_basis_complete = True
     # iter-47 — Bank transfer split into its own KPI card.
     bank_sales = bank_fees = 0.0
     for p in matched_all.get("payment_breakdown", []):
@@ -395,11 +396,26 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         if parent == "bank_transfer" or sub_key == "bank_transfer":
             bank_fees += fee; bank_sales += sales
         elif sub_key == "tamara":
-            tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+            tamara_fees += fee; bnpl_fees += fee
+            wallet_paid = p.get("internal_wallet_paid_sar", 0)
+            if wallet_paid is None:
+                bnpl_cash_basis_complete = False
+            else:
+                bnpl_sales += sales - wallet_paid
         elif sub_key == "tabby":
-            tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+            tabby_fees += fee; bnpl_fees += fee
+            wallet_paid = p.get("internal_wallet_paid_sar", 0)
+            if wallet_paid is None:
+                bnpl_cash_basis_complete = False
+            else:
+                bnpl_sales += sales - wallet_paid
         elif sub_key == "emkan":
-            emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+            emkan_fees += fee; bnpl_fees += fee
+            wallet_paid = p.get("internal_wallet_paid_sar", 0)
+            if wallet_paid is None:
+                bnpl_cash_basis_complete = False
+            else:
+                bnpl_sales += sales - wallet_paid
         elif sub_key == "cash_on_delivery":
             cod_fees += fee; cod_sales += sales
         else:
@@ -419,6 +435,10 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     }
     electronic_fees_complete = not (incomplete_fee_buckets - {
         "bank_transfer", "tamara", "tabby", "emkan", "cash_on_delivery"})
+    # A known partial fee is not a completed provider receivable. Preserve the
+    # original sales/cash principal, but do not publish guessed net balances.
+    bnpl_fees_complete = not bool(incomplete_fee_buckets & {"tamara", "tabby", "emkan"})
+    bank_fees_complete = "bank_transfer" not in incomplete_fee_buckets
     electronic_before_filter_complete = electronic_fees_complete
     electronic_cash_before_filter_complete = electronic_cash_basis_complete
 
@@ -1004,10 +1024,16 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "complete": fee_result["payment_fees_complete"],
             "known_payment_fees_sar": fee_result["total_payment_fees"],
             "reason_codes": fee_result["fee_review_reasons"],
+            "review_orders": fee_result.get("fee_review_orders", []),
+            "review_order_count": fee_result.get("fee_review_order_count", 0),
+            "review_rows_truncated": fee_result.get("fee_review_rows_truncated", 0),
             "incomplete_buckets": sorted(incomplete_fee_buckets),
             "electronic_complete": electronic_fees_complete,
             "electronic_before_filter_complete": electronic_before_filter_complete,
             "electronic_cash_basis_complete": electronic_cash_basis_complete,
+            "bnpl_cash_basis_complete": bnpl_cash_basis_complete,
+            "bnpl_fees_complete": bnpl_fees_complete,
+            "bank_fees_complete": bank_fees_complete,
             "electronic_cash_before_filter_complete": electronic_cash_before_filter_complete,
             "legacy_analysis_fees_included": bool(legacy_analyses),
             **({key: fee_result[key] for key in (
@@ -1048,11 +1074,11 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             # iter-56 — electronic_net now subtracts Salla settlements too
             "electronic_net": (
                 round(other_payment_sales - other_payment_fees - salla_adj, 2)
-                if currency_conversion_complete and electronic_cash_basis_complete else None
+                if currency_conversion_complete and electronic_cash_basis_complete and electronic_fees_complete else None
             ),
             "electronic_net_before_settlements": (
                 round(other_payment_sales - other_payment_fees, 2)
-                if currency_conversion_complete and electronic_cash_basis_complete else None
+                if currency_conversion_complete and electronic_cash_basis_complete and electronic_fees_complete else None
             ),
             # iter-45 — visible filtering metadata for the UI
             "electronic_net_breakdown": electronic_net_breakdown,
@@ -1064,7 +1090,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "salla_settlements_outside_14d": round(salla_settle_outside, 2),
             "bnpl_net": (
                 round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2)
-                if currency_conversion_complete else None
+                if currency_conversion_complete and bnpl_cash_basis_complete and bnpl_fees_complete else None
             ),
             # iter-47 — Bank transfer is now a dedicated KPI; the figures
             # below give the UI everything it needs to render the new card.
@@ -1072,7 +1098,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "bank_fees": round(bank_fees, 2) if currency_conversion_complete else None,
             "bank_net": (
                 round(bank_sales - bank_fees - bank_adj, 2)
-                if currency_conversion_complete else None
+                if currency_conversion_complete and bank_fees_complete else None
             ),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
@@ -1084,7 +1110,8 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
                     - (total_shipping - deferred_shipping),
                     2,
                 )
-                if currency_conversion_complete and internal_wallet_paid_sar is not None else None
+                if currency_conversion_complete and internal_wallet_paid_sar is not None
+                and fee_result["payment_fees_complete"] else None
             ),
             "total_ads_cost": round(daily_ads_total, 2),
             "total_product_cost": round(product_cost_effective, 2),

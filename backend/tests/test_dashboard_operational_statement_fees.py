@@ -284,3 +284,79 @@ def test_same_principal_on_a_replaced_capture_keeps_distinct_native_references()
     assert first["fee_total"] == second["fee_total"] == "8.05"
     assert first["capture_references"] == ["receipt"]
     assert second["capture_references"] == ["replacement"]
+
+
+
+def wallet_split_statement_state():
+    state, order = paid_state("tabby")
+    source = state["engine"]
+    proof = {"owner_id": OWNER, "order_id": "one", "order_number": "order-one",
+        "currency": "SAR", "gross": "100.00", "tenders": [
+            {"reference": "receipt", "method": "tabby_installment",
+             "provider": "tabby", "amount": "60.00"},
+            {"reference": "wallet-reference", "method": "customer_wallet",
+             "provider": None, "amount": "40.00"},
+        ]}
+    order["payment"]["split"] = proof
+    order["payment"]["captures"][0]["amount"] = "60.00"
+    source["facts"]["capture:receipt"]["amount"] = "60.00"
+    source["facts"]["provider_split:one"] = {
+        "evidence": deepcopy(proof), "booked_providers": ["tabby"],
+        "observed_at": SNAPSHOT}
+    claim = source["obligations"].pop("provider:one")
+    claim.update(id="provider:one:tabby", confirmed="60.00")
+    source["obligations"]["provider:one:tabby"] = claim
+    accept(state, accepted_event(state, principal="60.00",
+        fee="4.00", vat=".60", total="4.60"))
+    return state
+
+
+def test_native_wallet_split_statement_fee_requires_frozen_external_principal_and_refs():
+    state = wallet_split_statement_state()
+    before = deepcopy(state)
+    result = project(state)["order-one"]
+    assert result["available"] is True, result
+    assert result["tender_scope"] == "single_provider_wallet_split"
+    assert result["principal_amount"] == "60.00"
+    assert result["wallet_principal_amount"] == "40.00"
+    assert result["fee_total"] == "4.60"
+    assert result["capture_references"] == ["receipt"]
+    assert state == before
+
+
+@pytest.mark.parametrize("invalid", [
+    "missing_split_fact", "altered_frozen_split", "foreign_owner", "wallet_provider",
+    "claim_amount", "capture_amount", "duplicate_reference", "another_provider",
+    "missing_capture", "unbooked_provider", "unresolved_refund",
+    "wallet_as_provider_capture",
+])
+def test_wallet_split_statement_rejects_unbound_or_mismatched_principal(invalid):
+    state = wallet_split_statement_state()
+    engine = state["engine"]
+    split = engine["provider_fee_inputs"]["orders"]["one"]["payment"]["split"]
+    if invalid == "missing_split_fact":
+        engine["facts"].pop("provider_split:one")
+    elif invalid == "altered_frozen_split":
+        engine["facts"]["provider_split:one"]["evidence"]["tenders"][1]["amount"] = "39.00"
+    elif invalid == "foreign_owner":
+        split["owner_id"] = "another-merchant"
+    elif invalid == "wallet_provider":
+        split["tenders"][1]["provider"] = "tabby"
+    elif invalid == "claim_amount":
+        engine["obligations"]["provider:one:tabby"]["confirmed"] = "100.00"
+    elif invalid == "capture_amount":
+        engine["facts"]["capture:receipt"]["amount"] = "100.00"
+    elif invalid == "duplicate_reference":
+        split["tenders"][1]["reference"] = "receipt"
+    elif invalid == "another_provider":
+        split["tenders"][1].update(provider="tamara", method="tamara_installment")
+    elif invalid == "missing_capture":
+        engine["facts"].pop("capture:receipt")
+    elif invalid == "unbooked_provider":
+        engine["facts"]["provider_split:one"]["booked_providers"] = []
+    elif invalid == "wallet_as_provider_capture":
+        engine["facts"]["capture:wallet-reference"] = {
+            "order_id": "one", "provider": "tabby", "amount": "40.00"}
+    else:
+        engine["provider_fee_inputs"]["orders"]["one"]["payment"]["refund_allocation_unresolved"] = True
+    assert project(state)["order-one"]["available"] is False

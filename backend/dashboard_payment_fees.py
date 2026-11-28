@@ -5,7 +5,7 @@ the existing operational calculator; untouched legacy cohorts keep their exact
 aggregate rounding. No sales/status selection or financial posting occurs here.
 """
 from copy import deepcopy
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timezone, timedelta
 from decimal import Decimal, InvalidOperation
 import asyncio
 import json
@@ -126,10 +126,106 @@ async def load_dashboard_fee_context(db, owner, orders, *, as_of=None, fee_conte
                     ("weekly", *scope, tuple(currencies)), lambda: load_weekly_statement_averages(
                         db, owner, as_of=context["as_of"], currencies=currencies,
                         source_state=source_state, evidence_as_of=evidence_as_of)))
-            numbers = tuple(sorted({str(order["order_number"]) for order in candidates if order.get("order_number") is not None}))
-            context["operational_statement_fees"] = await read_once(
-                ("actual", *scope, numbers), lambda: load_operational_statement_fee_index(
-                    db, owner, numbers, source_state=source_state, accepted_as_of=evidence_as_of))
+    # Load accepted statement evidence once for the whole BNPL cohort.
+    # Tabby's weekly-average fallback is separate; it cannot replace an
+    # accepted Tamara/Emkan/Tabby actual fee. This shares one immutable owner
+    # snapshot and one request memo instead of reading that snapshot per rail.
+    bnpl_orders = [order for order in orders
+                   if order.get("user_id") == owner
+                   and order.get("payment_fee_status") != "actual"
+                   and _provider(_method(order)) in {"tabby", "tamara", "emkan"}]
+    if context.get("complete") and bnpl_orders:
+        numbers = tuple(sorted({str(order["order_number"]) for order in bnpl_orders
+                                if order.get("order_number") is not None}))
+        if len(numbers) > 20000:
+            context["complete"] = False
+            return context
+        prior = context.get("operational_statement_fees") or {}
+        if not isinstance(prior, dict):
+            context["complete"] = False
+            return context
+        missing = tuple(number for number in numbers if number not in prior)
+        if missing:
+            evidence_as_of = context.setdefault("evidence_as_of", datetime.now(timezone.utc))
+            source_state = None if context.get("weekly_fee_source_error") else context.get("weekly_fee_source_state")
+            scope = (owner, str(context["as_of"]), str(evidence_as_of),
+                     (source_state or {}).get("revision"))
+            accepted = await read_once(
+                ("actual", *scope, missing), lambda: load_operational_statement_fee_index(
+                    db, owner, missing, source_state=source_state, accepted_as_of=evidence_as_of))
+            context["operational_statement_fees"] = {**prior, **accepted}
+    # WIP-04: bounded, read-only historical re-evaluation. Most orders do
+    # not need an extra transaction query: request independent native evidence
+    # only where a split's order-page interval straddles a saved policy change.
+    # The existing canonical transaction reader enforces tenant bindings,
+    # reference collisions and a total-row limit. No backfill or GL write.
+    if context.get("complete") and context.get("policies"):
+        candidates, starts = [], []
+        budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
+        for order in orders:
+            await budget.checkpoint()
+            if (order.get("user_id") != owner or order.get("payment_fee_status") == "actual"
+                    or _provider(_method(order)) not in {"salla", "tabby", "tamara", "emkan"}):
+                continue
+            # Dashboard paths may provide a projected Salla fee source, while
+            # direct/legacy test cohorts carry the same native source under
+            # raw_by_source. Both must follow the identical owner-bound path.
+            raw = order.get("_dashboard_fee_source")
+            if raw is None:
+                raw = (order.get("raw_by_source") or {}).get("salla_direct")
+            if not isinstance(raw, dict):
+                continue
+            methods = raw.get("payment_methods")
+            if not isinstance(methods, list) or not 2 <= len(methods) <= 100:
+                continue
+            try:
+                created = _instant(raw.get("created_at") or raw.get("date"))
+                updated = _instant(raw.get("updated_at") or raw.get("date_updated"))
+                beginning, ending = created.astimezone(RIYADH).date(), updated.astimezone(RIYADH).date()
+                if beginning >= ending:
+                    continue
+                provider = _provider(_method(order))
+                changes = any(
+                    row.get("status") == "active" and row.get("provider") == provider
+                    and row.get("currency") == "SAR"
+                    and (beginning < _policy_day(row["effective_from"]) <= ending
+                         or row.get("effective_to") and beginning <= _policy_day(row["effective_to"]) < ending)
+                    for row in context["policies"] if isinstance(row, dict))
+                if not changes:
+                    continue
+            except (ValueError, TypeError, KeyError, AttributeError):
+                continue
+            candidates.append(raw)
+            starts.append(created)
+            if len(candidates) > 80:
+                break
+        if candidates and len(candidates) <= 80:
+            from dashboard_split_payment_fees import _cutoff
+            from operational_provider_transaction_evidence import load_transaction_rows
+            from fastapi import HTTPException
+            from pymongo.errors import PyMongoError
+            try:
+                # The report day may be historical while the immutable Salla
+                # transaction record was observed later. This source cutoff
+                # is NOT the fee recognition date; _split_basis separately
+                # requires every external capture to precede the report day.
+                # A date-only evidence watermark means "through this day"
+                # and may include hours that have not yet happened. Clamp it
+                # to the actual request instant, never admit future evidence.
+                now_utc = datetime.now(timezone.utc)
+                source_cutoff = min(_cutoff(
+                    context.get("evidence_as_of") or now_utc), now_utc)
+                raw_rows = await load_transaction_rows(db, owner, candidates,
+                    min(starts) - timedelta(microseconds=1), source_cutoff,
+                    to_instant=_instant, max_rows=800)
+                if isinstance(raw_rows, dict):
+                    context["split_fee_transaction_rows"] = raw_rows
+                    context["split_fee_source_as_of"] = source_cutoff
+            except (ValueError, TypeError, KeyError, AttributeError, TimeoutError,
+                    PyMongoError, HTTPException):
+                # Missing evidence leaves the original full-period tariff gate
+                # unchanged. Never fall back to a guessed current tariff.
+                pass
     return context
 
 
@@ -236,6 +332,52 @@ def _check_event_date(stamp, created, as_of, reason):
             raise ValueError(reason)
         if _full_timestamp(created) and instant < _instant(created):
             raise ValueError(reason)
+
+
+def _check_accepted_wallet_split_basis(order, accepted, native_currency, context):
+    """Match an imported actual fee only to the fully verified external share.
+
+    This proof cannot come from the order-page fee estimate: the accepted
+    statement itself must be frozen in the operational owner snapshot and
+    marked as a validated single-provider wallet split by its own reader.
+    """
+    if accepted.get("provider") not in {"tabby", "tamara", "salla"}:
+        raise ValueError("provider_statement_fee_source_unsupported")
+    if (accepted.get("tender_scope") != "single_provider_wallet_split"
+            or native_currency != "SAR"
+            or not accepted.get("capture_references")):
+        raise ValueError("provider_statement_fee_order_conflict")
+    from dashboard_split_payment_fees import _split_basis, _raw
+    raw = _raw(order)
+    payment = raw.get("payment") or {}
+    if (not isinstance(payment, dict) or payment.get("split")
+            or payment.get("merchant_account") and
+            payment["merchant_account"] != accepted.get("merchant_account")):
+        raise ValueError("provider_statement_fee_order_conflict")
+    now = datetime.now(timezone.utc)
+    basis = _split_basis(order, raw, {"owner_id": order.get("user_id"),
+        "as_of": now, "evidence_as_of": now,
+        "split_fee_reference_conflicts": (context or {}).get(
+            "split_fee_reference_conflicts") or ()})
+    if basis is None:
+        raise ValueError("provider_split_payment_review_required")
+    legs = basis[0]
+    provider = accepted["provider"]
+    external = [leg for leg in legs if leg["method"] != "customer_wallet"]
+    wallet = [leg for leg in legs if leg["method"] == "customer_wallet"]
+    if (not external or not wallet or
+            any(leg["provider"] != provider for leg in external) or
+            sorted(leg["reference"] for leg in external) != sorted(accepted["capture_references"])):
+        raise ValueError("provider_statement_fee_capture_basis_changed")
+    principal = sum((Decimal(leg["amount"]) for leg in external), Decimal(0))
+    wallet_total = sum((Decimal(leg["amount"]) for leg in wallet), Decimal(0))
+    if (principal != _decimal(accepted["principal_amount"])
+            or wallet_total != _decimal(accepted["wallet_principal_amount"])
+            or principal + wallet_total != _stored_original_total(order)):
+        raise ValueError("provider_statement_fee_amount_conflict")
+    if _decimal(accepted["refunded_amount"]) != 0:
+        raise ValueError("provider_statement_fee_refund_basis_changed")
+    return wallet_total
 
 
 def _check_accepted_current_basis(order, accepted, native_currency):
@@ -356,9 +498,12 @@ def _override(order, context):
         if accepted.get("provider") != provider or accepted.get("native_currency") != native_currency:
             raise ValueError("provider_statement_fee_order_conflict")
         principal = _decimal(accepted.get("principal_amount"))
-        if principal != _stored_original_total(order):
-            raise ValueError("provider_statement_fee_amount_conflict")
-        _check_accepted_current_basis(order, accepted, native_currency)
+        if accepted.get("tender_scope") == "single_provider_wallet_split":
+            _check_accepted_wallet_split_basis(order, accepted, native_currency, context)
+        else:
+            if principal != _stored_original_total(order):
+                raise ValueError("provider_statement_fee_amount_conflict")
+            _check_accepted_current_basis(order, accepted, native_currency)
         native_net, native_vat = _decimal(accepted.get("fee_net")), _decimal(accepted.get("fee_vat"))
         if native_net + native_vat != _decimal(accepted.get("fee_total")):
             raise ValueError("provider_statement_fee_amount_conflict")
@@ -410,7 +555,9 @@ def _override(order, context):
         methods = []
     if not isinstance(methods, list) or len(methods) > 100 or any(not isinstance(item, dict) for item in methods):
         raise ValueError("provider_payment_shape_invalid")
-    if provider == "salla":
+    if provider in {"salla", "tabby", "tamara", "emkan"}:
+        # First prove every tender and its provider-specific policy; a customer
+        # wallet leg has no new gateway fee. Actual statements won above.
         split_fees = estimate_split_fees(order, raw, context)
         if split_fees is not None:
             return split_fees
@@ -604,6 +751,33 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
             await split_reference_conflicts(priced, context.get("owner_id")))}
     parsed = await orders_to_parsed_cooperative(priced)
     legacy, overrides, errors, term_validity, wallet_principal = [], {}, {}, {}, {}
+    # Bounded read-only diagnostics. The input cohort is already selected for
+    # the authenticated owner; reject other owners and unsafe order references.
+    # No transaction references, customers, payment evidence or fee rates leave
+    # the fee authority through this diagnostic channel.
+    review_rows, review_keys, review_order_numbers = [], set(), set()
+
+    def note_review(item, reason):
+        owner = (context or {}).get("owner_id")
+        if not owner or item.get("user_id") != owner:
+            return
+        number = item.get("order_number")
+        if isinstance(number, bool) or not isinstance(number, (str, int)):
+            return
+        number = str(number).strip()
+        if not (number and len(number) <= 64 and number.isascii()
+                and all(char.isalnum() or char in "-_" for char in number)):
+            return
+        identity = (number, reason)
+        if identity in review_keys:
+            return
+        review_keys.add(identity)
+        review_order_numbers.add(number)
+        if len(review_rows) < 40:
+            review_rows.append({"order_number": number,
+                "payment_method": str(item["payment_method"])[:64],
+                "reason_code": reason, "evidence_state": "review_required"})
+
     budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
     for order in priced:
         await budget.checkpoint()
@@ -618,6 +792,7 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
             reason = str(error)
             reason = reason if isinstance(error, ValueError) and reason.replace("_", "").isalnum() and reason.isascii() else "provider_fee_source_incomplete"
             errors.setdefault(name, set()).add(reason)
+            note_review(order, reason)
             continue
         if result is None:
             if name not in term_validity:
@@ -626,8 +801,12 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
                 legacy.append(order)
             else:
                 errors.setdefault(name, set()).add("payment_method_unconfigured")
+                note_review(order, "payment_method_unconfigured")
         else:
             overrides.setdefault(name, []).append(result)
+    legacy_by_method = {}
+    for item in legacy:
+        legacy_by_method.setdefault(item["payment_method"], []).append(item)
     legacy_parsed = await orders_to_parsed_cooperative(legacy)
     # Invalid unused legacy rows cannot poison a complete actual/dated scope.
     safe_settings = [row for row in settings if isinstance(row, dict) and isinstance(row.get("name"), str)
@@ -645,6 +824,9 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
             sources.add("legacy_settings")
             if row.get("matched") is not True:
                 errors.setdefault(name, set()).add("payment_method_unconfigured")
+                for item in legacy_by_method.get(name, []):
+                    await budget.checkpoint()
+                    note_review(item, "payment_method_unconfigured")
         for override in overrides.get(name, []):
             fee, tax, source = override[:3]
             net += fee
@@ -670,6 +852,9 @@ async def dashboard_fee_breakdown(orders, settings, context=None):
             "internal_wallet_paid_sar": wallet_total,
             "payment_fees_complete": all(row["fees_complete"] for row in output),
             "fee_review_reasons": sorted({reason for reasons in errors.values() for reason in reasons}),
+            "fee_review_orders": review_rows,
+            "fee_review_order_count": len(review_order_numbers),
+            "fee_review_rows_truncated": max(0, len(review_keys) - len(review_rows)),
             "basis": AVERAGE_BASIS if estimates else BASIS,
             **({"payment_fees_estimated": True, "payment_fee_estimate_sources": estimates["fee_estimate_sources"],
                 "estimated_orders_count": estimates["estimated_orders_count"]} if estimates else {})}

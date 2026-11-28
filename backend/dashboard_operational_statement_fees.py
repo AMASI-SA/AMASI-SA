@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from operational_provider_statement_fees import (
-    _check_event, prepare_statement_fee_context,
+    _cash, _positive, _check_event, prepare_statement_fee_context,
 )
 from provider_fee_weekly_average import RIYADH, _instant, _report_boundary
 
@@ -75,16 +75,101 @@ def _plan(checked):
     return (next(iter(values)), None) if values else (None, None)
 
 
+def _verified_wallet_provider_share(state, oid, order, provider, context):
+    """Read-only acceptance of an already booked, fully referenced wallet split.
+
+    This does not create capture facts or accept statement rows. It only
+    recognizes an existing native provider receivable with independent
+    capture facts and a frozen owner-bound split identity. Other split shapes
+    remain unsupported; a partial statement cannot become a full order fee.
+    """
+    payment = order.get("payment") or {}
+    split = payment.get("split")
+    engine = state.get("engine") or {}
+    facts = engine.get("facts") or {}
+    saved = facts.get("provider_split:" + oid)
+    if (not isinstance(split, dict) or not isinstance(saved, dict)
+            or saved.get("evidence") != split
+            or payment.get("refund_allocation_unresolved")
+            or split.get("owner_id") != state.get("owner_id")
+            or split.get("order_id") != oid
+            or split.get("order_number") != order.get("order_number")
+            or split.get("currency") != "SAR"
+            or order.get("currency") != "SAR"):
+        return None
+    tenders = split.get("tenders")
+    if not isinstance(tenders, list) or not 2 <= len(tenders) <= 100:
+        return None
+    refs, external, wallet = set(), {}, ZERO
+    try:
+        for leg in tenders:
+            if not isinstance(leg, dict):
+                return None
+            ref = leg.get("reference")
+            if not isinstance(ref, str) or not ref or ref != ref.strip() or ref in refs:
+                return None
+            refs.add(ref)
+            amount = _positive(leg.get("amount"))
+            if leg.get("method") == "customer_wallet":
+                if leg.get("provider") is not None:
+                    return None
+                wallet += amount
+            elif leg.get("provider") == provider:
+                external[ref] = amount
+            else:
+                return None
+        principal = sum(external.values(), ZERO)
+        if not wallet or not external or wallet + principal != _positive(split.get("gross")):
+            return None
+        claim = (engine.get("obligations") or {}).get("provider:" + oid + ":" + provider)
+        if (not isinstance(claim, dict) or claim.get("incomplete")
+                or claim.get("kind") != "provider"
+                or claim.get("party_type") != "provider"
+                or claim.get("party_id") != provider
+                or claim.get("direction") != "receivable"
+                or (claim.get("native_balance") or claim).get("currency") != "SAR"
+                or _cash((claim.get("native_balance") or claim).get("confirmed")) != principal
+                or set(saved.get("booked_providers") or []) != {provider}):
+            return None
+        # Crucially, the cumulative order page never creates a capture fact.
+        # Only exact transaction-bound provider facts permit actual statement
+        # coverage; a wallet reference must not be a processor capture.
+        captures = context["captures"][oid, provider]
+        if (set(captures) != {"capture:" + ref for ref in external}
+                or any("capture:" + ref in facts for ref in refs - set(external))):
+            return None
+        for ref, amount in external.items():
+            fact = facts.get("capture:" + ref)
+            if (not isinstance(fact, dict)
+                    or str(fact.get("order_id")) != oid
+                    or fact.get("provider") != provider
+                    or fact.get("currency", "SAR") != "SAR"
+                    or _positive(fact.get("amount")) != amount
+                    or captures.get("capture:" + ref) != amount):
+                return None
+        return {"principal_amount": _money(principal),
+                "wallet_principal_amount": _money(wallet),
+                "capture_references": sorted(external)}
+    except (ValueError, TypeError, KeyError, InvalidOperation, OverflowError):
+        return None
+
+
 def _project_order(state, order_id, order, events, context):
     checked, validated, by_key, by_cover = [], [], {}, {}
     try:
         payment = order.get("payment") or {}
-        if payment.get("split"):
-            return _unavailable("provider_split_payment_review_required")
         providers = {event.get("provider") for event in events}
-        if len(providers) != 1 or payment.get("provider") not in providers:
+        if len(providers) != 1:
             return _unavailable("provider_statement_fee_provider_conflict")
         provider = next(iter(providers))
+        wallet_split = None
+        if payment.get("split"):
+            wallet_split = _verified_wallet_provider_share(
+                state, order_id, order, provider, context)
+            if wallet_split is None:
+                return _unavailable("provider_split_payment_review_required")
+        elif payment.get("provider") != provider:
+            return _unavailable("provider_statement_fee_provider_conflict")
         for issue in state.get("engine", {}).get("issues", []):
             if (issue.get("code") == "provider_statement_refund_alias_review"
                     and issue.get("provider") == provider
@@ -131,6 +216,12 @@ def _project_order(state, order_id, order, events, context):
             "source_event_keys": sorted(by_key), "source_event_count": len(checked),
             "evidence_as_of": max((item["event"]["accepted_at"] for item in checked), key=_instant),
             "snapshot_as_of": state["engine"]["as_of"], "started_at": state["started_at"]}
+        if wallet_split is not None:
+            if (captured != Decimal(wallet_split["principal_amount"])
+                    or capture_refs != wallet_split["capture_references"] or refunded):
+                return _unavailable("provider_statement_fee_coverage_incomplete", **details)
+            details["tender_scope"] = "single_provider_wallet_split"
+            details["wallet_principal_amount"] = wallet_split["wallet_principal_amount"]
         if captured <= ZERO or capture_amount != captured or refund_amount != refunded:
             # A proved plan remains useful to the existing dated calculator;
             # a partial actual amount is never presented as the full order fee.

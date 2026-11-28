@@ -309,10 +309,14 @@ async def test_same_request_shares_bounded_statement_reads_and_never_returns_tas
     setup = {"complete": True, "source_mode": "mz2_policies", "policies": tabby_policies(),
         "weekly_fee_source_state": state, "evidence_as_of": "2026-11-22T12:00:00+03:00", "_request_fee_reads": {}}
     one, two = await asyncio.gather(*[
-        load_dashboard_fee_context(db, "owner", [paid_order()], as_of="2026-11-22", fee_context=setup) for _ in range(2)])
+        load_dashboard_fee_context(db, "owner", [paid_order(user_id="owner")], as_of="2026-11-22", fee_context=setup) for _ in range(2)])
     assert counts == {"weekly": 1, "actual": 1}
     assert one == two and "_request_fee_reads" not in one
     assert one["weekly_statement_averages"]["SAR"]["profile"] is not two["weekly_statement_averages"]["SAR"]["profile"]
+    # Foreign or unbound rows must not trigger an owner-scoped actual-fee read.
+    await load_dashboard_fee_context(db, "owner", [paid_order(user_id="foreign"), paid_order()],
+        as_of="2026-11-22", fee_context=setup)
+    assert counts["actual"] == 1
 
 
 @pytest.mark.asyncio
