@@ -35,6 +35,7 @@ export const operationalApi = {
   salaryStartContext: (config = {}) => data(api.get(`${base}/salary-start/context`, config)),
   previewSalaryStart: (body, config = {}) => data(api.post(`${base}/salary-start/preview`, body, config)),
   approveSalaryStart: body => data(api.post(`${base}/salary-start/approve`, body)),
+  tiktokReportedSpend: (config = {}) => data(api.get('/dashboard-v2/tiktok-accounts-reporting-summary', {timeout: 30000, ...config})),
   adFundingSettings: (config = {}) => data(api.get(`${base}/ad-funding-settings`, config)),
   saveAdFundingSettings: body => data(api.post(`${base}/ad-funding-settings`, body)),
   inventoryOpeningContext: (config = {}) => data(api.get(`${base}/inventory-opening/context`, config)),
